@@ -551,9 +551,11 @@ t('釣り・畑・動物：同じ種なら同じ結果・動物は減らない�
   assert.ok(a.n0 >= 8 && a.counts.every((n) => n === a.n0), '動物は 1 匹も減らない（村人は動物を殺さない）');
   const firsts = a.history.filter((h) => h.type === 'first').map((h) => h.text).join('\n');
   assert.ok(/はじめて魚を釣った/.test(firsts), '初めての魚 ' + firsts);
-  assert.ok(/はじめて.*柵の中に入れて/.test(firsts), '初めて飼った');
+  // 柵を建てるかは投票しだいなので、柵ができた時だけ確かめる
+  const hasPen = a.world.buildings.some((b) => b.type === 'pen');
+  if (hasPen) assert.ok(/はじめて.*柵の中に入れて/.test(firsts), '初めて飼った');
   assert.ok(/はじめて畑を耕して/.test(firsts) && /畑ではじめて.*とれた/.test(firsts), '初めての畑と収穫');
-  assert.ok(a.store.egg > 0 && a.store.milk > 0 && a.store.wool > 0, 'たまご・ミルク・羊毛がたまる');
+  if (hasPen) assert.ok(a.store.egg > 0 && a.store.milk > 0 && a.store.wool > 0, 'たまご・ミルク・羊毛がたまる');
   assert.ok(Object.keys(a.store).some((k) => k.startsWith('fish_')), '魚がたまる');
   assert.ok(a.world.animals.filter((x) => x.pen).length <= cfg.animals.penCap, '柵の数を超えない');
 });

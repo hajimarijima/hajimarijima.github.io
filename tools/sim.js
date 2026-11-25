@@ -429,9 +429,12 @@ function stepDay(S) {
     const pref = RES[(P.userHash(v.key).charCodeAt(0)) % 3];
     // プロフィールの「やりたい仕事」を少し優先する（建築は今いちばん足りない材料へ。商いはまだ店がないので影響なし）
     // 最初の道具の仕事（得意な仕事）。プロフィールの「やりたい仕事」があれば、そちらを先にする
-    const want = (v.profile && v.profile.wantJob) || (v._priv && v._priv.wantJob) || startJob(L);
+    // 役割は、選んだ道具で決まる。道具に仕事がない時（見張りなど）だけ、プロフィールの「やりたい仕事」を使う
+    const toolJob = startJob(L);
+    const toolRes = { '伐採': 'wood', '採掘': 'stone', '農業': 'food', '漁業': 'food', '牧場': 'food' }[toolJob];
+    const want = toolRes ? toolJob : ((v.profile && v.profile.wantJob) || (v._priv && v._priv.wantJob) || toolJob);
     const wantRes = { '伐採': 'wood', '採掘': 'stone', '農業': 'food', '漁業': 'food', '牧場': 'food' }[want] || (want === '建築' ? RES.slice().sort((a, b) => need[b] - need[a])[0] : null);
-    const wantK = want && want === startJob(L) && !(v.profile && v.profile.wantJob) ? 4 : 2.2; // 最初の道具の仕事は強めに優先
+    const wantK = toolRes ? 4 : 2.2; // 道具の仕事に決める
     const w = RES.map((r) => [r, (1 + need[r] / 8) * (r === pref ? 1.6 : 1) * (r === wantRes ? wantK : 1)]);
     let job = R.weighted(w);
     // 最初の道具の仕事（得意な仕事）は先にする（乱数の流れは変えない。木や岩がなければ、いつもの順で別の仕事）
@@ -467,7 +470,10 @@ function stepDay(S) {
       if (world.fieldSlots.length || canPlant || world.fields.length) subs.push(['farm', want === '農業' ? 5 : 1.8]);
       if (world.pond && rodOK) subs.push(['fish', want === '漁業' ? 5 : 1.0]);
       if (tamed.length && !ranchTaken) subs.push(['ranch', want === '牧場' ? 5 : 2.5]);
-      const sub = R2.weighted(subs);
+      let sub = R2.weighted(subs);
+      // 釣りざお・くわを選んだ人は、その仕事に決まる（できる時だけ。乱数の流れは変えない）
+      const forced = { '漁業': 'fish', '牧場': 'ranch' }[want];
+      if (forced && subs.some(([s]) => s === forced)) sub = forced;
       if (sub === 'fish') { target = 'pond'; action = 'fish'; place = '池で'; return true; }
       if (sub === 'ranch') { ranchTaken = v.key; target = (world.buildings.find((b) => b.type === 'pen') || {}).id || null; action = 'ranch'; return true; }
       if (sub === 'farm') {
@@ -720,7 +726,7 @@ function stepDay(S) {
         // 苗木はそのマスの決まった所に（保存は地図の文字だけで済む）。同じマスにもう何かあれば置かない
         if (spot) { R3.int(0, 2); R3.range(0.85, 1.2); world.treeSeq++; }
         const nt = spot && TM.treeAt(spot.x, spot.z);
-        if (nt && !world.trees.some((o) => o.id === nt.id) && !IX.trees.any(nt.x, nt.z, 2.6, (o) => !o.gone || o.state === 'removed')) addTree({ ...nt, state: 'sapling', regrow: RS2.saplingDays, born: day });
+        if (nt && !nearBuilding(nt.x, nt.z) && !world.trees.some((o) => o.id === nt.id) && !IX.trees.any(nt.x, nt.z, 2.6, (o) => !o.gone || o.state === 'removed')) addTree({ ...nt, state: 'sapling', regrow: RS2.saplingDays, born: day });
       }
       if (t.cutDay && day - t.cutDay >= (RS2.stumpRotDays || 40)) { t.state = 'removed'; t.gone = 1; t.removedDay = day; }
     } else if (t.state === 'sapling') {
