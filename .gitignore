@@ -9,3 +9,4 @@ video/audio.wav
 
 # 動画は大きいので上げない
 video/*.mp4
+demo/
