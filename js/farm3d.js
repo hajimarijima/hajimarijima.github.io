@@ -208,12 +208,12 @@ export function animateAnimal(g, t, move, graze) {
 // 動物の歩く道：家の位置のまわりをゆっくり回る（時刻だけで決まるので、動画でも同じ）
 export function animalPos(a, t, pen) {
   const ph = (a.id.charCodeAt(1) || 0) * 1.7 + (a.id.length > 2 ? a.id.charCodeAt(2) : 0);
-  const R = pen ? 1.0 : 2.6, sp = a.kind === 'chicken' ? 0.22 : 0.09;
+  const R = pen ? 1.0 : 6.5, sp = a.kind === 'chicken' ? 0.5 : 0.24;
   const u = t * sp + ph;
   // 歩く → 止まって草を食べる、をくり返す
-  const cyc = (u / 6.28) % 1, walking = cyc < 0.55;
-  const w = walking ? cyc / 0.55 : 1;
-  const ang = Math.floor(u / 6.28) * 2.4 + ph + w * 1.8;
+  const cyc = (u / 6.28) % 1, walking = cyc < 0.6;
+  const w = walking ? cyc / 0.6 : 1;
+  const ang = Math.floor(u / 6.28) * 2.4 + ph + w * 2.6;
   const x = a.x + Math.cos(ang) * R * (0.6 + 0.4 * Math.sin(ph)), z = a.z + Math.sin(ang) * R * 0.8;
   // 進む向き（円の接線）。動物の頭は +x 向きなので、+x が接線を向くように回す
   const face = Math.atan2(-Math.cos(ang), -Math.sin(ang));

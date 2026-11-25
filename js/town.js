@@ -1341,6 +1341,8 @@ async function main() {
 
   // ---------- 動物：種や作物を持っている村人（life の lure）には、近くの野の動物がついてくる ----------
   const LURE_R = (((config.animals && config.animals.followRange) || 12) * 1.9);
+  // 動物が入ってよい所か（木・岩・建物・畑・池に重ならない）
+  const animalOk = (x, z) => isFree(x, z, 0.55) && !(world.pond && Math.hypot(x - world.pond.x, z - world.pond.z) < world.pond.r + 0.7);
   function updateAnimals(time, dt) {
     const taken = new Map();
     for (const { a, o } of animals) {
@@ -1364,10 +1366,12 @@ async function main() {
       const dx = goal.x - c.x, dz = goal.z - c.z, d = Math.hypot(dx, dz);
       let face = q.face, move = q.move, graze = q.graze;
       if (tgt ? d > 0.3 : d > 0.4) {
-        const s = Math.min(d, 2.4 * dt); c.x += (dx / d) * s; c.z += (dz / d) * s;
-        face = Math.atan2(-dz, dx); move = 1; graze = 0; // 動物の頭は +x 向き
+        const s = Math.min(d, 3.2 * dt), nx = c.x + (dx / d) * s, nz = c.z + (dz / d) * s;
+        if (animalOk(nx, nz) || !animalOk(c.x, c.z)) { c.x = nx; c.z = nz; face = Math.atan2(-dz, dx); move = 1; graze = 0; } // 動物の頭は +x 向き
+        else { move = 0; graze = tgt ? 0 : 1; face = o.rotation.y; } // 木・岩・池の前では止まって草を食べる
       } else if (tgt) { move = 0; graze = 0; face = o.rotation.y; }
-      else { c.x = q.x; c.z = q.z; }
+      else if (animalOk(q.x, q.z)) { c.x = q.x; c.z = q.z; }
+      else { move = 0; graze = 1; face = o.rotation.y; }
       o.position.set(c.x, 0, c.z); o.rotation.y = face; animateAnimal(o, time, move, graze);
       agrid.set(a, c.x, c.z, { x: c.x, z: c.z, a }); // 動物の位置もマスの一覧に
     }
