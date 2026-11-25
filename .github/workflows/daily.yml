@@ -9,8 +9,8 @@ name: daily
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: "0 21 * * *"   # 毎朝 6 時（日本時間）
+   schedule:
+     - cron: "0 21 * * *"   # 毎朝 6 時（日本時間）
 
 permissions:
   contents: write
