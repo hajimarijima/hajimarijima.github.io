@@ -51,7 +51,7 @@ export function nav(current) {
 }
 
 // 村人が 0 人の時の案内（どの画面でも同じ言葉）
-export const emptyText = (config) => `まだだれもいません。コメントに『${(config && config.joinWord) || '参加したい'}』で最初の村人に`;
+export const emptyText = (config) => `まだだれもいません。コメントに『${(config && config.joinWord) || '参加したい'}』で村人に`;
 export function emptyNote(config) { return `<p class="empty">${esc(emptyText(config))}</p>`; }
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

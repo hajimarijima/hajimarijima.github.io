@@ -471,4 +471,20 @@ export function animate(ch, pose, t) {
   // 盾を持っていて矢が来ている時は、左腕を前に上げて盾で受ける（少し身をかがめる）
   if (P.shield && ch.userData.block) { P.larm.rotation.set(-1.45, 0.25, -0.2); P.body.rotation.x = Math.max(P.body.rotation.x, 0.12); P.head.rotation.x = -0.1; }
   else if (P.shield) P.larm.rotation.set(-1.0, 0.2, -0.15); // 盾を前に構えておく
+  if (ch.userData.smooth) smoothPose(ch, P, t);
+}
+// 動きの切りかわり（待つ→歩く など）を、ゆるやかな曲線でつなぐ：前のコマの角度から、今の角度へ少しずつ寄せる。
+// 寄せる速さは時間で決めるので、コマの数がちがっても同じ。大きく時間がとんだ時（画面の外から戻った時）はそのまま
+const SMOOTH_PARTS = ['rarm', 'larm', 'rleg', 'lleg', 'head', 'body'];
+function smoothPose(ch, P, t) {
+  const S = ch.userData.prevPose || (ch.userData.prevPose = { t: null, r: SMOOTH_PARTS.map(() => [0, 0, 0]), by: 0 });
+  const dt = S.t === null ? 1 : t - S.t; S.t = t;
+  if (!(dt > 0 && dt < 0.25)) { SMOOTH_PARTS.forEach((k, i) => { const r = P[k].rotation; S.r[i][0] = r.x; S.r[i][1] = r.y; S.r[i][2] = r.z; }); S.by = P.body.position.y; return; }
+  const k = 1 - Math.exp(-dt * 16); // 約 0.06 秒で追いつく（振り下ろしの勢いは残す）
+  SMOOTH_PARTS.forEach((name, i) => {
+    const r = P[name].rotation, q = S.r[i];
+    q[0] += (r.x - q[0]) * k; q[1] += (r.y - q[1]) * k; q[2] += (r.z - q[2]) * k;
+    r.set(q[0], q[1], q[2]);
+  });
+  S.by += (P.body.position.y - S.by) * k; P.body.position.y = S.by;
 }

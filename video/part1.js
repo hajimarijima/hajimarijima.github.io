@@ -237,7 +237,7 @@ function nextCard(t) {
 const CAPS = [
   [0.6, 5.9, ['まだ、だれもいない島'], { y: H / 2 + 260, size: 84 }],
   [T.site + 0.3, T.town - 0.1, ['ここが、村のまん中になる所'], {}],
-  [T.town + 0.2, T.join - 0.1, ['ここに町を作ります', '最初の村人は、まだ 0 人'], { y: SAFE_BOTTOM - 260, size: 74, colors: ['#fffdf4', '#ffe08a'] }],
+  [T.town + 0.2, T.join - 0.1, ['ここに町を作ります', '村人は 0 人'], { y: SAFE_BOTTOM - 260, size: 74, colors: ['#fffdf4', '#ffe08a'] }],
 ];
 window.renderFrame = (t) => {
   cameraAt(t);

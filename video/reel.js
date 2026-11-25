@@ -980,7 +980,7 @@ window.renderFrame = (t) => {
   if (ending) {
     const k = ease((t - T.end) / 0.6);
     ctx.fillStyle = `rgba(12, 20, 14, ${0.22 * k})`; ctx.fillRect(0, 0, W, H);
-    caption(['あなたが', '最初の村人に。'], SAFE_TOP + 250, 100, clamp01((t - T.end - 0.2) / 0.35));
+    caption(['あなたも', '村人に。'], SAFE_TOP + 250, 100, clamp01((t - T.end - 0.2) / 0.35));
     caption(['コメントに', '『参加したい』'], SAFE_BOTTOM - 210, 94, clamp01((t - T.end - 0.9) / 0.35), { color: '#ffe08a' });
   }
 };

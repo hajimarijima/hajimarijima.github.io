@@ -66,13 +66,45 @@ async function main() {
   camera.position.set(0, 46 * far, 54 * far);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0, 2);
-  controls.enableDamping = true;
+  // 指を離した後もゆっくり減らして止まる（回す・動かす）。ズームは下の camStep でなめらかに寄せる
+  controls.enableDamping = true; controls.dampingFactor = 0.07;
+  controls.rotateSpeed = 0.8; controls.panSpeed = 0.9;
   controls.zoomSpeed = 1.6;
   controls.minDistance = 8; controls.maxDistance = 190;
   controls.maxPolarAngle = 1.3; controls.minPolarAngle = 0.25;
   controls.screenSpacePanning = false;
   controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
   window.TOWN = { camera, controls, lite: LITE }; // 確かめ用（カメラを動かして撮る）
+  // カメラをなめらかに：
+  //  ・開いた時は、高い所から島へゆっくり寄る（触ったらすぐやめる。?intro=0 でなし）
+  //  ・ホイールやピンチのズームは、その場で飛ばずに、目標の距離へ少しずつ寄せる（指を離しても少し続いて止まる）
+  const CAM_HOME = camera.position.clone();
+  const cam = { intro: new URLSearchParams(location.search).get('intro') !== '0' && !navigator.webdriver ? 0 : -1, introLen: LITE ? 2.4 : 2.8, from: null, want: 0, last: 0, zoomUntil: 0 };
+  if (cam.intro === 0) { cam.from = CAM_HOME.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.55).multiplyScalar(1.9); camera.position.copy(cam.from); }
+  const markZoom = () => { cam.zoomUntil = performance.now() + 450; };
+  renderer.domElement.addEventListener('wheel', markZoom, { passive: true });
+  renderer.domElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) markZoom(); }, { passive: true });
+  controls.addEventListener('start', () => { if (cam.intro >= 0) cam.intro = -1; });
+  const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+  const _off = new THREE.Vector3();
+  function camStep(dt) {
+    if (cam.intro >= 0) {
+      cam.intro += dt;
+      const k = easeInOut(Math.min(1, cam.intro / cam.introLen));
+      camera.position.lerpVectors(cam.from, CAM_HOME, k);
+      if (k >= 1) cam.intro = -1;
+    }
+    controls.update();
+    // ズーム：OrbitControls が一度に動かした距離を「目標」にして、実際の距離はそこへ少しずつ寄せる
+    _off.copy(camera.position).sub(controls.target);
+    const d = _off.length();
+    if (!cam.last || cam.intro >= 0) { cam.last = cam.want = d; return; }
+    if (performance.now() < cam.zoomUntil && Math.abs(d - cam.last) > 1e-4) cam.want = Math.min(controls.maxDistance, Math.max(controls.minDistance, cam.want * d / cam.last));
+    else if (performance.now() >= cam.zoomUntil && Math.abs(cam.want - cam.last) < 0.02) cam.want = d; // ほかの動き（プログラムで動かした時など）はそのまま
+    const nd = cam.last + (cam.want - cam.last) * (1 - Math.exp(-dt * 7));
+    camera.position.copy(controls.target).addScaledVector(_off, nd / d);
+    cam.last = nd;
+  }
 
   const hemi = new THREE.HemisphereLight(0xf2f6ff, 0x6a7a4a, 1.1);
   scene.add(hemi);
@@ -353,15 +385,31 @@ async function main() {
     const v = p.v, m = makeCharacter(skinSrc(v), { scale: 1, slim: skinSlim(v), chibi: chibiOf(v) });
     if (v.profile && v.profile.color) setAccent(m, v.profile.color);
     Object.assign(p.ch.userData, m.userData);
-    p.ch.add(m);
+    p.ch.userData.smooth = true; // 動きの切りかわりをなめらかに（character.js の animate）
+    p.ch.add(m); p.model = m;
     m.traverse((o) => { if (o.isMesh) { o.userData.owner = p.ch; clickables.push(o); } });
+  }
+  // 見た目の位置と向き：毎コマ、決まった位置（p.pos と体の向き）へなめらかに寄せる。
+  // 2 コマに 1 回しか進めない遠くの人も、間を補ってがくつかない。大きく離れた時（家から出る時など）はそのまま移す
+  const _sm = { k: 0, kr: 0 };
+  function smoothPeople(dt) {
+    _sm.k = 1 - Math.exp(-dt * 16); _sm.kr = 1 - Math.exp(-dt * 12);
+    for (const p of people) {
+      if (p.vx === undefined || Math.hypot(p.pos.x - p.vx, p.pos.z - p.vz) > 3) { p.vx = p.pos.x; p.vz = p.pos.z; p.vyaw = p.ch.rotation.y; }
+      p.vx += (p.pos.x - p.vx) * _sm.k; p.vz += (p.pos.z - p.vz) * _sm.k;
+      let d = p.ch.rotation.y - p.vyaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+      p.vyaw += d * _sm.kr;
+      if (p.lod !== 'full') continue;
+      p.ch.position.set(p.vx, 0, p.vz);
+      if (p.model) p.model.rotation.y = p.vyaw - p.ch.rotation.y; // 体の向きの決まりはそのままで、見た目だけ遅れて回る
+    }
   }
   // 遠い人の簡単な形を、今の場所へ
   function placeProxies() {
     let k = 0;
     for (const p of people) {
       if (p.lod !== 'far' || !p.ch.visible) continue;
-      dummy.position.set(p.pos.x, 0, p.pos.z); dummy.rotation.y = p.ch.rotation.y; dummy.scale.setScalar(1);
+      dummy.position.set(p.vx ?? p.pos.x, 0, p.vz ?? p.pos.z); dummy.rotation.y = p.vyaw ?? p.ch.rotation.y; dummy.scale.setScalar(1);
       dummy.updateMatrix();
       proxy.body.setMatrixAt(k, dummy.matrix); proxy.head.setMatrixAt(k, dummy.matrix);
       proxy.body.setColorAt(k, p.cBody); proxy.head.setColorAt(k, p.cHead);
@@ -819,11 +867,12 @@ async function main() {
   function autoRes() {
     if (res.off) return;
     const now = performance.now(); res.t0 = res.t0 || now; res.n++;
-    if (now - res.t0 < 2000) return;
+    if (now - res.t0 < 1500) return;
     const fps = res.n * 1000 / (now - res.t0); res.t0 = now; res.n = 0; res.fps = +fps.toFixed(1);
     let pr = res.pr;
-    if (fps < 28 && pr > PR_MIN) { pr = Math.max(PR_MIN, pr * 0.75); res.good = 0; }
-    else if (fps > 55 && pr < PR_MAX && ++res.good >= 3) { pr = Math.min(PR_MAX, pr / 0.75); res.good = 0; }
+    // 急に変えると画面がぼやけたり くっきりしたりが目立つので、1 回に 0.1 ずつ
+    if (fps < 28 && pr > PR_MIN) { pr = Math.max(PR_MIN, +(pr - 0.1).toFixed(2)); res.good = 0; }
+    else if (fps > 55 && pr < PR_MAX && ++res.good >= 3) { pr = Math.min(PR_MAX, +(pr + 0.1).toFixed(2)); res.good = 1; }
     if (pr !== res.pr) { res.pr = pr; renderer.setPixelRatio(pr); resize(); }
   }
 
@@ -835,7 +884,7 @@ async function main() {
   renderer.setAnimationLoop(() => {
     const dt = Math.min(0.05, clock.getDelta());
     const time = clock.elapsedTime;
-    if ((frame & 15) === 0) {
+    if ((frame & 3) === 0) { // 空と光の色は 4 コマごと（少しずつ変わるので、つぎ目が見えない）
       const h = hourNow();
       sky.set(h, { x: controls.target.x, z: controls.target.z });
       const night = sky.n > 0.6;
@@ -861,6 +910,7 @@ async function main() {
       p.x = p.pos.x; p.z = p.pos.z; pgrid.set(p, p.x, p.z);
     }
     for (const p of people) updateWork(p, time);
+    smoothPeople(dt);
     updateChest(time);
     for (const m of markers) m.userData.flag.rotation.y = Math.sin(time * 0.8) * 0.4;
     fx.end();
@@ -918,11 +968,12 @@ async function main() {
     }
     // 地形はどこまでも続くので、見る場所の左右の制限はなし（高さだけ地面に）
     controls.target.y = 0;
-    controls.update();
+    camStep(dt);
     terrain.update(controls.target);
     sky.follow(camera);
     // 霧：描く距離の上限の手前からかすませる（カメラが離れるほど遠くへ）
-    scene.fog.far = dist * 0.7 + VIEW_UNITS * 0.92; scene.fog.near = scene.fog.far * 0.45;
+    // やわらかく：かすみ始めを手前にして、遠くほど空の色（地平線の色）に溶ける
+    scene.fog.far = dist * 0.7 + VIEW_UNITS * 0.95; scene.fog.near = Math.min(dist * 0.6, scene.fog.far * 0.22);
     // 遠い人・画面の外の人は、ちゃんとした姿を描かない（描く間だけ隠して、すぐ戻す）
     placeProxies();
     renderer.render(scene, camera);
