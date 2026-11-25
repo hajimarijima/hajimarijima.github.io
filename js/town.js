@@ -13,6 +13,9 @@ import { makeField, makePond, animatePond, makeBobber, makeAnimal, animateAnimal
 import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote } from './common.js';
 import { makeSky, jstHour, parseTime, phaseName } from './daynight.js';
 import { hourOf, hourText, isNight } from './hours.js';
+import { tagName } from './search.js';
+// 動画の書き出し（?video=1）で開いた時
+let IS_VIDEO = false;
 import { makeTerrain, BLOCK } from './terrain_gen.js';
 import { makeTerrainView } from './terrain.js';
 import { SpatialHash, TILE } from './tilemap.js';
@@ -51,6 +54,7 @@ async function main() {
   // スマホ（小さい画面・指で操作）は、最初から軽い設定：画素の倍率 1・影なし・描く距離を短く・ふちのなめらかさなし。
   // ?lite=1 で PC でも軽い設定、?lite=0 でスマホでもふつうの設定
   const qLite = new URLSearchParams(location.search).get('lite');
+  IS_VIDEO = new URLSearchParams(location.search).get('video') === '1';
   const LITE = qLite === '1' || (qLite !== '0' && (small || matchMedia('(pointer: coarse)').matches));
   const renderer = new THREE.WebGLRenderer({ antialias: !LITE, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, LITE ? 1 : 2));
@@ -573,7 +577,8 @@ async function main() {
     const home = homeB ? { x: homeB.x + Math.sin(homeB.rot || 0) * (footR(homeB) + 0.6), z: homeB.z + Math.cos(homeB.rot || 0) * (footR(homeB) + 0.6) } : (tentPos[v.key] || { x: camp.x, z: camp.z + 2 });
     const tagEl = document.createElement('div');
     tagEl.className = 'nametag' + (v.hidden ? ' hiddenname' : '');
-    tagEl.textContent = v.display;
+    // 名前札：かくしていない人は @ユーザー名、かくしている人はあだ名（?video=1 の時は config.nameTags.video に従う）
+    tagEl.textContent = tagName(v, { video: IS_VIDEO, cfg: config });
     tagEl.style.pointerEvents = 'auto';
     tagEl.addEventListener('click', (e) => { e.stopPropagation(); openCard(v); });
     const label = new CSS2DObject(tagEl);
@@ -964,7 +969,7 @@ async function main() {
   // 誕生日の人：名札に印、家の前にケーキと旗
   for (const k of (state.today && state.today.birthdays) || []) {
     const p = byKey[k]; if (!p) continue;
-    p.label.classList.add('bday'); p.label.textContent = '誕生日 ' + p.v.display;
+    p.label.classList.add('bday'); p.label.textContent = '誕生日 ' + tagName(p.v, { video: IS_VIDEO, cfg: config });
     const g = new THREE.Group();
     box(0.9, 0.45, 0.9, 0xfaf3e8, 0, 0.6, 0, g); box(0.92, 0.1, 0.92, 0xd9506a, 0, 0.86, 0, g); box(0.08, 0.25, 0.08, 0xfff1a8, 0, 1.03, 0, g);
     box(1.2, 0.55, 1.0, 0x9b6b3d, 0, 0.27, 0, g);
@@ -1336,8 +1341,8 @@ async function main() {
 function renderPanel(D) {
   const { state, history, active, life, config, world } = D;
   const hud = document.getElementById('hud');
+  // 上の帯は 日目・時刻・天気・村人の数 だけ（木材・石・食べ物の数は「町のチェスト」へ）
   hud.innerHTML = `<span class="chip day">${state.day}日目</span><span class="chip" id="clockchip"></span><span class="chip">${esc(state.weather)}</span>` +
-    ['wood', 'stone', 'food'].map((r) => `<span class="chip"><i class="dot" style="background:${RES_COLOR[r]}"></i>${RES[r]} <b>${state.resources[r]}</b></span>`).join('') +
     `<span class="chip">村人 <b>${active.length}</b></span>`;
   document.getElementById('dayline').textContent = `${fmtDate(state.date)}（${state.day}日目）`;
   const t = state.today || { jobs: {}, built: [] };
@@ -1363,9 +1368,10 @@ function renderPanel(D) {
   const ORD = ['log', 'planks', 'stick', 'cobble', 'coal', 'iron', 'gold', 'diamond', 'berry', 'wheat', 'carrot', 'potato', 'apple', 'fish_funa', 'fish_masu', 'fish_koi', 'fish_namazu', 'egg', 'milk', 'wool', 'mushroom', 'seeds', 'sapling', 'stump', 'old_coin', 'pearl', 'driftwood', 'old_boot'];
   const rank = (k) => (ORD.includes(k) ? ORD.indexOf(k) : 99);
   const rows = Object.entries(state.store || {}).filter(([, n]) => n > 0).sort((a, b) => rank(a[0]) - rank(b[0]));
-  document.getElementById('chest').innerHTML = rows.length
+  const totals = '<p class="restot">' + ['wood', 'stone', 'food'].map((r) => `<span class="chip"><i class="dot" style="background:${RES_COLOR[r]}"></i>${RES[r]} <b>${state.resources[r]}</b></span>`).join('') + '</p>';
+  document.getElementById('chest').innerHTML = totals + (rows.length
     ? '<div class="mcslots">' + rows.map(([k, n]) => `<div class="mcslot" title="${esc((IT[k] || {}).name || k)}"><img src="icons/${k}.png" alt="" width="32" height="32" onerror="this.style.visibility='hidden'"><b>${n}</b><span>${esc((IT[k] || {}).name || k)}</span></div>`).join('') + '</div>'
-    : '<p class="muted">まだ空っぽです。</p>';
+    : '<p class="muted">まだ空っぽです。</p>');
   const nt = state.nextTool;
   document.getElementById('nexttool').textContent = nt ? `次に作る道具：${(IT[nt.item] || {}).name || nt.item}（${nt.text}）` : '';
   document.getElementById('join').innerHTML = `インスタの投稿に「<b>${esc(config.joinWord)}</b>」とコメントすると、次の日から村人になります。`;

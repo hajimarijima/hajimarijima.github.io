@@ -324,3 +324,4 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .vinfo{font-size:14px}
 .vlinks{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}
 .vlinks .btn{min-width:140px}
+.restot { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
