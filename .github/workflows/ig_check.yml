@@ -1,0 +1,17 @@
+# インスタの API につながるかだけ確かめる（手で動かす。町は進めない・何も書かない）
+name: ig-check
+on:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: インスタにつながるか
+        run: node tools/instagram.js --check
+        env:
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}

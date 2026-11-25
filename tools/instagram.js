@@ -20,7 +20,8 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const OUT = path.join(ROOT, 'data', 'inbox', 'instagram.json');
-const API = 'https://graph.facebook.com/v21.0';
+// 鍵の種類で窓口を変える：インスタのログインで出した鍵（IG…）は graph.instagram.com、Facebook の鍵は graph.facebook.com
+const API = /^IG/.test(String(process.env.IG_TOKEN || '')) ? 'https://graph.instagram.com/v21.0' : 'https://graph.facebook.com/v21.0';
 const args = process.argv.slice(2);
 
 async function get(url) {
@@ -39,6 +40,22 @@ async function comments(mediaId, token) {
     url = j.paging && j.paging.next;
   }
   return out;
+}
+
+// 最近の投稿の ID（新しい順）。IG_JOIN_MEDIA / IG_VOTE_MEDIA を入れなくても動くように
+async function recentMedia(userId, token, n = 5) {
+  const j = await get(`${API}/${userId}/media?fields=id,timestamp&limit=${n}&access_token=${encodeURIComponent(token)}`);
+  return (j.data || []).map((m) => m.id);
+}
+
+// インスタのログインの鍵は 60 日で切れるので、毎日のばす。新しい文字が返ってきた時だけ Secrets の貼りかえが要る
+async function refreshToken(token) {
+  if (!/^IG/.test(String(token || ''))) return;
+  try {
+    const j = await get(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(token)}`);
+    const days = Math.floor((j.expires_in || 0) / 86400);
+    console.log(j.access_token && j.access_token !== token ? `鍵が新しくなりました。GitHub の Secrets の IG_TOKEN を貼りかえてください（あと ${days} 日）` : `鍵をのばしました（あと ${days} 日）`);
+  } catch (e) { console.log('鍵をのばせませんでした：' + e.message.slice(0, 120)); }
 }
 
 async function followers(userId, token) {
@@ -74,8 +91,19 @@ async function main() {
   }
   const token = process.env.IG_TOKEN, userId = process.env.IG_USER_ID;
   if (!token || !userId) { console.log('IG_TOKEN / IG_USER_ID がないので、インスタは読みません（町は見本のまま進みます）'); return; }
-  const join = (process.env.IG_JOIN_MEDIA || '').split(',').map((s) => s.trim()).filter(Boolean);
-  const vote = (process.env.IG_VOTE_MEDIA || '').trim();
+  if (args.includes('--check')) { // つながるかだけ確かめる（何も書かない・鍵の中身は出さない）
+    const j = await get(`${API}/${userId}?fields=username,followers_count,media_count&access_token=${encodeURIComponent(token)}`);
+    const recent = await recentMedia(userId, token);
+    console.log(`つながりました：@${j.username}・フォロワー ${j.followers_count} 人・投稿 ${j.media_count} 件・窓口 ${API.split('/')[2]}`);
+    for (const m of recent.slice(0, 2)) console.log(`投稿 ${m} のコメント ${(await comments(m, token)).length} 件`);
+    return;
+  }
+  await refreshToken(token);
+  // 投稿の ID を入れていなければ、最近の 5 投稿から「住みたい」を集め、いちばん新しい投稿を投票にする
+  const recent = (process.env.IG_JOIN_MEDIA && process.env.IG_VOTE_MEDIA) ? [] : await recentMedia(userId, token);
+  const joinEnv = (process.env.IG_JOIN_MEDIA || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const join = joinEnv.length ? joinEnv : recent;
+  const vote = (process.env.IG_VOTE_MEDIA || '').trim() || recent[0] || '';
   const data = { fetchedAt: new Date().toISOString() };
   data.followers = await followers(userId, token);
   data.joinComments = [];
