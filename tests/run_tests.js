@@ -711,4 +711,22 @@ t('見た目：同じシードと体の種類なら同じスキン・プロフ�
   assert.strictEqual(PF.rerollAllowed({ used: reopened.used, bodyChanged: true }), false);
 });
 
+t('体型：normal と chibi だけ通す・何度でも変えられる（見た目の引き直しの回数とは別）・villagers の body とプロフィールに入る', () => {
+  const PF = require('../js/profile-fields.js'), PR = require('../tools/profiles.js');
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/config.json'), 'utf8'));
+  const fields = cfg.profileFields.filter((f) => f.id === 'look' || f.id === 'body');
+  const fb = fields.find((f) => f.id === 'body');
+  assert.ok(fb && fb.type === 'shape' && fb.public);
+  assert.strictEqual(PF.check(fb, 'chibi').value, 'chibi');
+  for (const bad of ['big', 'CHIBI', '<b>', 1]) assert.ok(PF.check(fb, bad).error, String(bad));
+  const vs = [{ key: 'k1', joinedDay: 1, skin: 7, lookRerolls: 1, look: { body: 'female', seed: 9 } }];
+  for (const [d, b] of [[2, 'chibi'], [3, 'normal'], [4, 'chibi'], [5, 'chibi']]) {
+    const r = PR.applyProfiles(vs, { k1: { look: 'female:9:1', body: b } }, {}, fields, { day: d });
+    assert.ok(!r.report.rejected.length, JSON.stringify(r.report));
+    assert.strictEqual(vs[0].body, b); assert.strictEqual(vs[0].profile.body, b);
+  }
+  assert.strictEqual(vs[0].lookRerolls, 1); // 引き直しの回数は増えない
+  assert.deepStrictEqual(vs[0].look, { body: 'female', seed: 9 });
+});
+
 console.log(`\nぜんぶ通りました（${ok} 件）`);

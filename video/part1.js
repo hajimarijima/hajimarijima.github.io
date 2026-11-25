@@ -1,7 +1,7 @@
 // リール「パート 1：0 日目」（縦 1080×1920・27 秒）。window.renderFrame(t) で t 秒のコマを描く。
 // tools/render_video.js --page video/part1.html --name part1_day0 で書き出す。
 // 中身は本番の 0 日目（data/world.json をそのまま読む。書きかえない）。村人は 0 人、名前は出さない。
-// 順番：空から島（朝焼け）→ 広場の予定地・チェストの場所・木・岩 → 「ここに町を作ります」→ 参加の仕方と最初の道具 4 つ → 明日の予告（夕焼け）
+// 順番：空から島（朝焼け）→ 広場の予定地・チェストの場所・木・岩 → 「ここに町を作ります」→ 参加の仕方と最初の道具 4 つ → 「参加したい」の呼びかけ＋明日の小さな予告（夕焼け。1 日目の A・B・C の中身はまだ出さない）
 import * as THREE from 'three';
 import { makeSky } from '../js/daynight.js';
 import { makeTerrain, BLOCK } from '../js/terrain_gen.js';
@@ -23,7 +23,6 @@ const world = decodeWorld(world0);
 const SQ = world.square || { x: 0, z: -1, r: 8 };
 const CHEST = world.chest || { x: SQ.x + 6, z: SQ.z + 1.6 };
 const TOOLS = (config.startTools.options || []).filter((o) => !o.needsEnemies).slice(0, 4);
-const CHOICES = (config.firstChoices || []).map((k) => config.buildings[k].name);
 
 // ---------- 時間割 ----------
 const T = { sky: 0, site: 6.5, town: 12.5, join: 16, next: 22.5 };
@@ -213,23 +212,25 @@ function joinCard(t) {
   ctx.restore();
 }
 function nextCard(t) {
+  // しめ：「参加したい」の呼びかけを大きく。下に小さく明日の予告（選ぶ中身は出さない）
   const a = clamp01((t - T.next - 0.4) / 0.4);
   if (a <= 0) return;
-  ctx.fillStyle = `rgba(12, 16, 24, ${0.28 * a})`; ctx.fillRect(0, 0, W, H);
-  caption(['明日、1 日目'], 820, 100, a, { color: '#ffe08a' });
-  const b = clamp01((t - T.next - 1.2) / 0.4);
-  caption(['最初の投票', '何を建てる？'], 1080, 84, b);
-  CHOICES.forEach((name, i) => {
-    const k = clamp01((t - (T.next + 2.0 + i * 0.25)) / 0.3);
-    if (k <= 0) return;
-    const cw = 270, gap = 30, x0 = W / 2 - (cw * CHOICES.length + gap * (CHOICES.length - 1)) / 2 + i * (cw + gap), y = 1330, s = backOut(k);
-    ctx.save(); ctx.translate(x0 + cw / 2, y + 60); ctx.scale(s, s);
-    ctx.fillStyle = ['#d0603e', '#3f78b8', '#4b9a5e'][i % 3]; roundRect(-cw / 2, -60, cw, 120, 30); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `700 40px ${FONT}`; ctx.fillText('ABC'[i], -cw / 2 + 40, 0);
-    ctx.font = `700 54px ${FONT}`; ctx.fillText(name, 20, 0);
-    ctx.restore();
-  });
+  ctx.fillStyle = `rgba(12, 16, 24, ${0.32 * a})`; ctx.fillRect(0, 0, W, H);
+  const s = backOut(a) || 0.01, x = 60, w = W - 120, y = 640, h = 620;
+  ctx.save(); ctx.globalAlpha = clamp01(a * 1.5);
+  ctx.translate(W / 2, y + h / 2); ctx.scale(s, s); ctx.translate(-W / 2, -(y + h / 2));
+  ctx.fillStyle = 'rgba(0,0,0,0.28)'; roundRect(x + 4, y + 10, w, h, 48); ctx.fill();
+  ctx.fillStyle = '#fffdf6'; roundRect(x, y, w, h, 48); ctx.fill();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#2f4a37'; ctx.font = `700 76px ${FONT}`; ctx.fillText('コメントに', W / 2, y + 120);
+  ctx.fillStyle = '#c0392b'; ctx.font = `700 120px ${FONT}`; ctx.fillText('『参加したい』', W / 2, y + 270);
+  ctx.fillStyle = '#2f4a37'; ctx.font = `700 76px ${FONT}`; ctx.fillText('で、あなたも村人に', W / 2, y + 430);
+  // 押したくなる小さな矢印（コメント欄の方＝下）
+  const bob = Math.sin(t * 6) * 8;
+  ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.moveTo(W / 2 - 34, y + 520 + bob); ctx.lineTo(W / 2 + 34, y + 520 + bob); ctx.lineTo(W / 2, y + 566 + bob); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  const b = clamp01((t - T.next - 1.6) / 0.4);
+  caption(['明日 1 日目、みんなで A・B・C から選ぶ'], y + h + 130, 46, b, { color: '#ffe08a' });
 }
 
 // ---------- 1 コマ ----------
@@ -283,7 +284,7 @@ SFX.push({ t: T.town + 1.2, type: 'chime', gain: 0.8 });
 [T.join + 0.4, T.join + 1.6].forEach((t) => SFX.push({ t, type: 'pop', gain: 0.8 }));
 TOOLS.forEach((_, i) => SFX.push({ t: T.join + 2.8 + i * 0.3, type: 'pop', gain: 1 }));
 SFX.push({ t: T.next + 0.4, type: 'chime', gain: 1 });
-CHOICES.forEach((_, i) => SFX.push({ t: T.next + 2.0 + i * 0.25, type: 'pop', gain: 0.8 }));
+SFX.push({ t: T.next + 1.6, type: 'pop', gain: 0.8 });
 window.SFX = SFX;
 
 for (let i = 0; i < 200; i++) { if (Object.values(ICON).every((im) => im.complete)) break; await new Promise((r) => setTimeout(r, 50)); }

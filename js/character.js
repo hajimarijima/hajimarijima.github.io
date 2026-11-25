@@ -14,6 +14,33 @@ export function skinTexture(url) {
   }
   return texCache[url];
 }
+// 2 頭身の顔：目を 2 マスの高さにして、1 マス下げる（まゆ→目→目→口。ほおの段をぬく）。帽子の層のめがねも同じだけ下げる
+const chibiTexCache = {};
+function chibiTexture(url) {
+  if (chibiTexCache[url]) return chibiTexCache[url];
+  if (typeof document === 'undefined') return skinTexture(url);
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.colorSpace = THREE.SRGBColorSpace;
+  const img = new Image();
+  img.onload = () => {
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(img, 0, 0);
+    // 顔の正面は (8,8)〜(15,15)、帽子の層の正面は (40,8)〜(47,15)。v は顔の中の行
+    for (const ox of [8, 40]) {
+      const row = (v) => g.getImageData(ox, 8 + v, 8, 1);
+      const r4 = row(4), r6 = row(6), r7 = row(7);
+      g.clearRect(ox, 8 + 5, 8, 3);
+      g.putImageData(r4, ox, 8 + 5); // 目をもう 1 段（大きく・下に）
+      g.putImageData(r6, ox, 8 + 6); g.putImageData(r7, ox, 8 + 7);
+    }
+    t.needsUpdate = true;
+  };
+  img.src = url;
+  return (chibiTexCache[url] = t);
+}
+// その村人を 2 頭身で描くか（村人ごとの体型 body: "chibi"。?chibi=1 なら全員を 2 頭身で試せる）
+const CHIBI_ALL = typeof location !== 'undefined' && new URLSearchParams(location.search).get('chibi') === '1';
+export const chibiOf = (v) => CHIBI_ALL || !!(v && v.body === 'chibi');
 
 // 箱の面ごとにスキンの場所を割り当てる（three の面の順: +x, -x, +y, -y, +z, -z）
 function boxGeo(ox, oy, w, h, d, grow = 0) {
@@ -44,7 +71,7 @@ let charCount = 0;
 function geos() {
   if (GEO) return GEO;
   GEO = {
-    head: boxGeo(0, 0, 8, 8, 8), hat: boxGeo(32, 0, 8, 8, 8, 1),
+    head: boxGeo(0, 0, 8, 8, 8), hat: boxGeo(32, 0, 8, 8, 8, 1), hatS: boxGeo(32, 0, 8, 8, 8, 0.4), // hatS：2 頭身用（頭が大きいので、帽子のはみ出し＝つばを短く）
     body: boxGeo(16, 16, 8, 12, 4), jacket: boxGeo(16, 32, 8, 12, 4, 0.5),
     rarm: boxGeo(40, 16, 4, 12, 4), rsleeve: boxGeo(40, 32, 4, 12, 4, 0.5),
     larm: boxGeo(32, 48, 4, 12, 4), lsleeve: boxGeo(48, 48, 4, 12, 4, 0.5),
@@ -205,7 +232,7 @@ function makeCarry(kind) {
 export const CHIBI = { head: 1.7, torso: [1.1, 0.55, 1.1], arm: [1.2, 0.55, 1.2], leg: [1.2, 0.5, 1.2] };
 export function makeCharacter(url, { scale = 1, oneHand = null, slim = false, chibi = false } = {}) {
   const G = geos();
-  const tex = skinTexture(url);
+  const tex = chibi ? chibiTexture(url) : skinTexture(url);
   const base = new THREE.MeshLambertMaterial({ map: tex });
   const over = new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide });
   const root = new THREE.Group();
@@ -215,7 +242,7 @@ export function makeCharacter(url, { scale = 1, oneHand = null, slim = false, ch
 
   const head = new THREE.Group(); head.position.y = 24 * PX;
   const h1 = mk(G.head, base); h1.position.y = 4 * PX; head.add(h1);
-  const h2 = mk(G.hat, over); h2.position.y = 4 * PX; head.add(h2);
+  const h2 = mk(chibi ? G.hatS : G.hat, over); h2.position.y = 4 * PX; head.add(h2);
 
   const torso = new THREE.Group(); torso.position.y = 18 * PX;
   torso.add(mk(G.body, base)); torso.add(mk(G.jacket, over));
@@ -246,7 +273,7 @@ export function makeCharacter(url, { scale = 1, oneHand = null, slim = false, ch
 
   const hand = new THREE.Group(); hand.position.set(0, -11 * PX, 0.5 * PX); rarm.add(hand);
   // 2 頭身は腕を縮めているので、手の中の道具がゆがまないように逆に戻す（道具は少しだけ小さく）
-  if (C) hand.scale.set(0.9 / C.arm[0], 0.9 / C.arm[1], 0.9 / C.arm[2]);
+  if (C) hand.scale.set(0.72 / C.arm[0], 0.72 / C.arm[1], 0.72 / C.arm[2]);
   const front = new THREE.Group(); front.position.set(0, (C ? hip + 5 : 17) * PX, (C ? 5 : 4.5) * PX); body.add(front);
   root.scale.setScalar(scale);
   root.userData.seed = (charCount++ * 0.6180339) % 1;
@@ -430,7 +457,17 @@ export function animate(ch, pose, t) {
     }
   }
   // 2 頭身は頭が重く大きいので、体の前かがみと首の傾きを小さくする（大きく傾けると頭が地面に付いて見える）
-  if (ch.userData.chibi) { P.body.rotation.x *= 0.35; P.head.rotation.x *= 0.5; P.body.position.y *= 0.5; }
+  if (ch.userData.chibi) {
+    P.body.rotation.x *= 0.35; P.head.rotation.x *= 0.5; P.body.position.y *= 0.5;
+    // 道具を持って立つ・歩く時は、腕を前に出して体の前で持つ（大きな頭のかげや体の後ろに隠れないように）
+    if (P.tool && (pose === 'idle' || pose === 'walk' || pose === 'talk') && P.toolKind !== 'basket') {
+      P.rarm.rotation.set(-0.85 + P.rarm.rotation.x * 0.2, 0, 0.65);
+      P.tool.rotation.x = Math.PI / 2 - 0.2;
+      P.tool.rotation.y = 1.2; // 道具の絵の面を前へ向ける（正面から形が分かる。真横向きのままだと棒にしか見えない）
+    } else if (P.tool) P.tool.rotation.y = 0;
+    // 振る時も、手を体のまん中へ寄せて、道具が体の前を通るようにする
+    if (P.tool && (pose === 'dig' || pose === 'chop') && ch.userData.oneHand) P.rarm.rotation.z = 0.5;
+  }
   // 盾を持っていて矢が来ている時は、左腕を前に上げて盾で受ける（少し身をかがめる）
   if (P.shield && ch.userData.block) { P.larm.rotation.set(-1.45, 0.25, -0.2); P.body.rotation.x = Math.max(P.body.rotation.x, 0.12); P.head.rotation.x = -0.1; }
   else if (P.shield) P.larm.rotation.set(-1.0, 0.2, -0.15); // 盾を前に構えておく

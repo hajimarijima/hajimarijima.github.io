@@ -163,6 +163,7 @@ export function createWorldGen(seed = 'town') {
       for (let z = 0; z < P; z++) for (let x = 0; x < P; x++) {
         const col = cols[z * P + x], h = col.h;
         const lake = fbm2(nL, (X0 + x) / 90, (Z0 + z) / 90, 2) > 0.06; // この辺りの深い空洞は地底湖になる
+        const lavaPool = fbm2(nL, (X0 + x) / 36 + 50, (Z0 + z) / 36 - 50, 2) > 0.12; // 溶岩だまりは所々だけ（一面の溶岩にしない）
         const wet = h < SEA + 2; // 海や川の底はくり抜かない（水が入るので）
         for (let y = 1; y < h + 1; y++) {
           const ch = tri(cheese, x, y, z), sp = tri(spa, x, y, z);
@@ -172,7 +173,7 @@ export function createWorldGen(seed = 'town') {
           if (!isCheese && !isSpa) continue;
           let id = B.AIR;
           if (lake && y <= 30 && isCheese) id = B.WATER; // 地底湖（この辺りは溶岩の代わりに水がたまる）
-          else if (y <= 9) id = B.LAVA;                 // 深い所は溶岩だまり
+          else if (y <= 8 && lavaPool) id = B.LAVA;     // 深い所の、所々に溶岩だまり
           vol[idx(x, y, z)] = id;
         }
       }

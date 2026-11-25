@@ -145,22 +145,28 @@ const ICONS = {
     put(px, 6, 4, [255, 255, 255]); put(px, 7, 4, [230, 255, 255]);
   },
   planks(px) {
-    // 板：木目の板が 4 枚、横に並んだブロック（正面から少し上を見た形）。板ごとに色を少し変え、すき間は濃く、木目のすじと継ぎ目・釘
-    const P = [hex('#c48c50'), hex('#ae7840'), hex('#bc844a'), hex('#a46e3a')], gap = hex('#4e3218'), grain = hex('#80552a'), topC = hex('#d8a468'), nail = hex('#3a2a1a');
-    const x0 = 1, x1 = 14, y0 = 3, y1 = 14;
-    for (let x = x0 + 1; x <= x1; x++) put(px, x, y0 - 1, tone(topC, 1.05)); // 上の面（細い明るい帯）
-    put(px, x0, y0 - 1, tone(topC, 0.6));
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-      const r = y - y0, k = Math.floor(r / 3), w = r % 3; // 板 1 枚 = 2 マス＋すき間 1
-      let c = w === 2 && k < 3 ? gap : P[Math.min(3, k)];
-      const joint = k % 2 ? 9 : 5;
-      if (w !== 2 && x === joint) c = gap; // 継ぎ目（板ごとにずらす）
-      else if (w === 1 && ((x * 7 + k * 3) % 5 === 0)) c = grain; // 木目
-      else if (w === 0 && c !== gap) c = tone(c, 1.1); // 板の上の縁は少し明るい
-      if (x === x0 || y === y1 || x === x1) c = tone(c === gap ? P[0] : c, x === x0 ? 0.75 : 0.5); // 外の縁
+    // 板：横に長い板 4 枚を、上から下へ積んだ面（正面）。板と板の境目は濃い線 1 本、板の中は長い木目のすじ。
+    // 継ぎ目をずらすとレンガに見えるので、板は端から端まで 1 枚でつなげる
+    const P = [hex('#c79254'), hex('#b47e44'), hex('#c08a4e'), hex('#ab763e')], gap = hex('#5a3a1c'), grain = hex('#8e602f');
+    const x0 = 1, x1 = 14, y0 = 1; // 板 1 枚 = 3 マス、境目 1 マス → 4 枚で 15 マス
+    // 木目：板ごとに、長さ 3〜5 マスのすじを 2 本（位置は板ごとに変える）
+    const STREAK = [[[2, 6, 1], [8, 12, 2]], [[4, 9, 1], [10, 13, 2]], [[2, 5, 2], [7, 12, 1]], [[3, 8, 2], [9, 13, 1]]];
+    for (let y = y0; y < y0 + 15; y++) for (let x = x0; x <= x1; x++) {
+      const r = y - y0, k = Math.floor(r / 4), w = r % 4;
+      let c;
+      if (w === 3) c = gap;
+      else {
+        c = P[k];
+        if (w === 0) c = tone(c, 1.12);       // 板の上の縁は明るい
+        if (w === 2) c = tone(c, 0.9);        // 下の縁は少し暗い
+        for (const [sx, ex, row] of STREAK[k]) if (w === row && x >= sx && x <= ex) c = tone(grain, w === 1 ? 1 : 0.92);
+      }
+      if (x === x0) c = tone(c, 0.82);         // 左の縁
+      if (x === x1) c = tone(c, 0.62);         // 右の縁（かげ）
+      if (y === y0 + 14) c = tone(c, 0.55);
       put(px, x, y, c);
     }
-    for (const [x, y] of [[3, 3], [12, 6], [3, 9], [12, 12]]) put(px, x, y, nail);
+    for (let y = y0; y < y0 + 15; y++) put(px, x1 + 1, y, tone(gap, 0.75)); // 右の厚み（立体に見せる）
   },
   stick(px) {
     const g = shapeGrid();

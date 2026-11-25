@@ -2,10 +2,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { makeCharacter, animate, setTool as setTool0, setCarry as setCarry0, setAccent, setShield as setShield0, fishCycle } from './character.js';
+import { makeCharacter, animate, setTool as setTool0, setCarry as setCarry0, setAccent, setShield as setShield0, fishCycle, chibiOf } from './character.js';
 // 姿をまだ作っていない人（遠くの人）には、道具や荷物を持たせない（作った時に、その時の物を持たせる）
 // ?chibi=1：2 頭身の見本の体型で試す（採用前。ふだんは今の体型）
-const CHIBI_Q = new URLSearchParams(location.search).get('chibi') === '1';
 const setTool = (ch, k) => { if (ch.userData.parts) setTool0(ch, k); };
 const setCarry = (ch, k) => { if (ch.userData.parts) setCarry0(ch, k); };
 const setShield = (ch, on) => { if (ch.userData.parts) setShield0(ch, on); };
@@ -351,7 +350,7 @@ async function main() {
   }
   // 姿を作って入れ物に入れる。クリックで村人カードが開くようにする
   function buildModel(p) {
-    const v = p.v, m = makeCharacter(skinSrc(v), { scale: 1, slim: skinSlim(v), chibi: CHIBI_Q });
+    const v = p.v, m = makeCharacter(skinSrc(v), { scale: 1, slim: skinSlim(v), chibi: chibiOf(v) });
     if (v.profile && v.profile.color) setAccent(m, v.profile.color);
     Object.assign(p.ch.userData, m.userData);
     p.ch.add(m);

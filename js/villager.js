@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { makeCharacter, animate, setTool, setAccent } from './character.js';
+import { makeCharacter, animate, setTool, setAccent, chibiOf } from './character.js';
 import { initAuth } from './auth.js';
 import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, JOB, ACTION, RES, fmtDate, homeName, buildingLabel, showError, KIND, KIND_COLOR, MBTI, LETTER, mdText, villagerUrl, faceCanvas, emptyNote, lookDataUrl, loadImage, drawFigure, gaugeHtml, loadDiary } from './common.js';
 import { BODIES, BODY_LABEL } from './skingen.js';
@@ -23,6 +23,7 @@ async function main() {
     ['体力', gaugeHtml('heart', L.hp, (D.config.needs || {}).max || 20) + (L.restWhy === 'weak' ? ' <small class="muted">休んで戻している</small>' : '')],
     ['おなか', gaugeHtml('food', L.hunger, (D.config.needs || {}).max || 20)],
     ['スキン', v.look ? `${esc(BODY_LABEL[v.look.body] || '')}・${v.look.seed} 番（プロフィールで選んだ見た目）` : `${v.skin} 番 <a href="skins.html#s${v.skin}">一覧で見る</a>`],
+    ['体型', v.body === 'chibi' ? '2 頭身' : '通常'],
   ].map(([k, val]) => `<dt>${k}</dt><dd>${k === 'スキン' || k === '体力' || k === 'おなか' ? val : esc(val)}</dd>`).join('') + (v.hidden ? '<dt>表示</dt><dd>名前をかくしてあだ名で出しています</dd>' : '');
   document.getElementById('stats').innerHTML = ['wood', 'stone', 'food'].map((r) => `<div class="stat"><b>${Math.floor(L.gathered[r])}</b><small>${RES[r]}</small></div>`).join('');
   const built = L.built.map((id) => D.world.buildings.find((b) => b.id === id)).filter(Boolean);
@@ -52,7 +53,7 @@ async function main() {
   const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(2, 4, 3); scene.add(sun);
   const ground = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.1, 24), new THREE.MeshLambertMaterial({ color: 0x86b85a }));
   ground.position.y = -0.05; scene.add(ground);
-  const ch = makeCharacter(skinSrc(v), { scale: 1, slim: skinSlim(v), chibi: new URLSearchParams(location.search).get('chibi') === '1' });
+  const ch = makeCharacter(skinSrc(v), { scale: 1, slim: skinSlim(v), chibi: chibiOf(v) });
   scene.add(ch);
   if (v.profile && v.profile.color) setAccent(ch, v.profile.color);
   let tool = { level: 'hoe', chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', tend: 'hoe', berry: 'basket', harvest: 'basket', forage: 'basket', fish: 'rod', ranch: 'basket' }[L.action];
@@ -93,7 +94,7 @@ function renderSocial(v, D) {
 
 // MBTI と誕生日の入力（ここでは保存しない。コメント用の文を作るだけ）
 // 公開しているプロフィールの表示（項目の定義から作る。文字は必ずエスケープ）
-function profileValues(v) { return { ...(v.profile || {}), ...(v.look ? { look: v.look.body + ':' + v.look.seed + ':' + (v.lookRerolls || 0) } : {}), ...(v.mbti ? { mbti: v.mbti } : {}), ...(v.birthday ? { birthday: v.birthday } : {}) }; }
+function profileValues(v) { return { ...(v.profile || {}), ...(v.look ? { look: v.look.body + ':' + v.look.seed + ':' + (v.lookRerolls || 0) } : {}), ...(v.body ? { body: v.body } : {}), ...(v.mbti ? { mbti: v.mbti } : {}), ...(v.birthday ? { birthday: v.birthday } : {}) }; }
 // 最初の道具（参加した時に選ぶ。選ばなかった人は、人が少ない仕事の道具）
 const startOpt = (config, id) => ((config.startTools && config.startTools.options) || []).find((o) => o.id === id);
 function startToolText(v, L, config) {
@@ -107,6 +108,7 @@ function showValue(f, val) {
   if (f.type === 'monthday') return esc(mdText(val));
   if (f.type === 'color') return `<span class="swatch" style="background:${/^#[0-9a-f]{6}$/i.test(val) ? val : '#ccc'}"></span>`;
   if (f.type === 'skin') { const [b, s] = String(val).split(':'); return esc((BODY_LABEL[b] || '') + '・' + s + ' 番'); }
+  if (f.type === 'shape') return esc((f.labels || {})[val] || val);
   if (f.id === 'mbti') return `${esc(val)}（${esc(String(val).split('').map((c) => LETTER[c] || '').join('・'))}）`;
   return esc(val);
 }
@@ -168,6 +170,7 @@ function buildForm(form, fields, vals, onSave, locked = new Set(), { lookUsed = 
     const id = 'f_' + f.id, val = vals[f.id] ?? '';
     let input;
     if (f.type === 'select') input = `<select id="${id}"${locked.has(f.id) ? ' disabled' : ''}><option value="">えらばない</option>${f.options.map((o) => `<option${o === val ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+    else if (f.type === 'shape') input = `<select id="${id}">${(f.options || []).map((o) => `<option value="${esc(o)}"${o === (val || 'normal') ? ' selected' : ''}>${esc((f.labels || {})[o] || o)}</option>`).join('')}</select>`;
     else if (f.type === 'monthday') { const [m, d] = String(val).split('-'); input = `<span class="md"><select id="${id}_m"><option value="">--</option>${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}"${+m === i + 1 ? ' selected' : ''}>${i + 1}月</option>`).join('')}</select><select id="${id}_d"><option value="">--</option>${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}"${+d === i + 1 ? ' selected' : ''}>${i + 1}日</option>`).join('')}</select></span>`; }
     else if (f.type === 'color') input = `<input type="color" id="${id}" value="${/^#[0-9a-f]{6}$/i.test(val) ? val : '#7cb342'}"><label class="nocolor"><input type="checkbox" id="${id}_none"${val ? '' : ' checked'}>えらばない</label>`;
     else if (f.type === 'number') input = `<input type="number" id="${id}" value="${esc(val)}"${f.min !== undefined ? ` min="${f.min}"` : ''}${f.max !== undefined ? ` max="${f.max}"` : ''}>`;

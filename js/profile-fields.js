@@ -45,6 +45,8 @@
       // 見た目：「体の種類:シード」（例 female:123）
       // 3 つ目は引き直しを使った回数（0 か 1）。例 female:123:1
       case 'skin': return /^(none|male|female):\d{1,10}(:[01])?$/.test(raw) && +raw.split(':')[1] <= 4294967295 ? { value: raw } : { error: '見た目を選び直してください' };
+      // 体型：normal（通常）か chibi（2 頭身）。何度でも変えられる
+      case 'shape': return (f.options || ['normal', 'chibi']).includes(raw) ? { value: raw } : { error: '体型を選んでください' };
       default: return { error: '知らない種類の項目です' };
     }
   }

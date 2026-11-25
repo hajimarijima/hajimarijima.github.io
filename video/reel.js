@@ -7,7 +7,7 @@
 // 投票の結果・場所・チェストの中身・作った道具は、どれも tools/video_days.js が記録した sim.js の結果のまま。
 // 見本の村人の名前は出さない（顔と「村人」だけ）。敵は出さない（config.enemies.enabled=false）。
 import * as THREE from 'three';
-import { makeCharacter, animate, setTool, setCarry, setAccent, fishCycle } from '../js/character.js';
+import { makeCharacter, animate, setTool, setCarry, setAccent, fishCycle, chibiOf } from '../js/character.js';
 import { makePond, animatePond, makeBobber, makeAnimal, animateAnimal, animalPos, makeField, makeFarm, makeCanal, makePen } from '../js/farm3d.js';
 import { mat, box, hash, rnd, makeBush, makeTree, makeRock } from '../js/world3d.js';
 import { makeSky } from '../js/daynight.js';
@@ -231,7 +231,7 @@ const CREW = [KJ, ...D1.active.filter((k) => k !== KJ)].slice(0, 5); // 先頭�
 const chars = {};
 for (const key of new Set([...CREW, ...D2.active])) {  // 釣りをした人も D2.active に入っている
   const v = VIL[key];
-  const ch = makeCharacter('../skins/skin_' + String(v.skin).padStart(3, '0') + '.png', { scale: 1.9 });
+  const ch = makeCharacter('../skins/skin_' + String(v.skin).padStart(3, '0') + '.png', { scale: 1.9, chibi: chibiOf(v) });
   if (v.profile && v.profile.color) setAccent(ch, v.profile.color);
   ch.visible = false; scene.add(ch); chars[key] = ch;
 }

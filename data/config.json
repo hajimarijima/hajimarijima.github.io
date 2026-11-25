@@ -1142,6 +1142,21 @@
       "note": "体の種類を変えた時に 1 回だけ「別のを引く」で引き直せます"
     },
     {
+      "id": "body",
+      "label": "体型",
+      "type": "shape",
+      "options": [
+        "normal",
+        "chibi"
+      ],
+      "labels": {
+        "normal": "通常",
+        "chibi": "2 頭身"
+      },
+      "public": true,
+      "note": "何度でも変えられます（見た目の引き直しの回数とは別）"
+    },
+    {
       "id": "mbti",
       "label": "MBTI",
       "type": "select",

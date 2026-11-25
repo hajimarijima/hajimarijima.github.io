@@ -49,6 +49,7 @@ function applyProfiles(villagers, pubDocs, privDocs, fields, { day = null, start
         }
         v.look = { body: nw.body, seed: nw.seed };
       }
+      else if (f.type === 'shape') { v.body = ok[f.id]; prof[f.id] = ok[f.id]; } // 体型：いつでも変えられる（引き直しの回数とは別）
       else if (f.id === 'startTool') {
         const o = P.startToolByLabel(startTools, ok.startTool);
         if (!o || o.id === v.startTool) continue;
