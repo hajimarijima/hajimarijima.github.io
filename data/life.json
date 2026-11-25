@@ -1,1 +1,3 @@
-{}
+{
+"20e77ecfc5":{"job":"level","target":"square","home":null,"gathered":{"wood":0,"stone":0,"food":0},"built":[],"contrib":{"wood":0,"stone":0,"food":0},"hp":20,"hunger":13,"inv":[{"item":"wood_pickaxe","dur":30,"max":30},null,null],"xp":17,"trips":0,"items":{},"debt":0,"level":1,"slots":3,"startTool":"pickaxe","startAuto":true,"targets":[],"chrono":"朝型","sleepy":68,"awakeH":16,"stamina":20,"zz":"ground","held":[{"item":"wood_pickaxe","dur":30,"max":30}],"hours":"sg*5,l:square*7,sv*2,sp*2,sv*2,sp*2,w,sg*3","action":"level","tool":null,"toolTier":"hand","amount":0,"today":{"got":{},"trips":0,"actions":7},"lure":null,"xpNext":20,"xpBase":0,"next":"次の枠：Lv3 まであと 40 経験値","badges":{"founder":0},"diaryLast":{"day":1,"date":"2026-11-01","text":"今日から村に住むことになった。よろしく。木のつるはしを持ってきた。5時から、村のまん中の草をぬいて、石をどけて、地面をならした。16時ごろ、池のそばに座って、海をながめた。21時、地面にごろんと横になって眠った。「はじまりの住人」のバッジをもらった。"},"diaryN":1}
+}

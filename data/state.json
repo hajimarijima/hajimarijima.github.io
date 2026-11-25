@@ -2,8 +2,8 @@
  "title": "はじまり島",
  "seed": "machi-12",
  "startDate": "2026-11-01",
- "day": 0,
- "date": "2026-10-31",
+ "day": 1,
+ "date": "2026-11-01",
  "demo": false,
  "resources": {
   "wood": 0,
@@ -16,13 +16,211 @@
   "food": 0
  },
  "followers": 0,
- "followerLog": [],
+ "followerLog": [
+  {
+   "day": 1,
+   "followers": 0
+  }
+ ],
  "reached": [],
- "vote": null,
- "votes": [],
+ "vote": {
+  "kind": "what",
+  "question": "何を建てる？",
+  "openedDay": 1,
+  "closesDay": 2,
+  "opensAt": "2026-11-01T09:00:00+09:00",
+  "closesAt": "2026-11-01T15:00:00+09:00",
+  "options": [
+   {
+    "key": "A",
+    "build": "hut",
+    "name": "小屋"
+   },
+   {
+    "key": "B",
+    "build": "storehouse",
+    "name": "倉庫"
+   },
+   {
+    "key": "C",
+    "build": "workbench",
+    "name": "作業台"
+   }
+  ],
+  "votes": {
+   "A": 0,
+   "B": 0,
+   "C": 0
+  },
+  "manual": {
+   "A": 0,
+   "B": 0,
+   "C": 0
+  },
+  "voters": 0,
+  "timeline": [
+   {
+    "t": "2026-11-01T00:00:00.000Z",
+    "A": 0,
+    "B": 0,
+    "C": 0
+   },
+   {
+    "t": "2026-11-01T03:00:00.000Z",
+    "A": 0,
+    "B": 0,
+    "C": 0
+   }
+  ],
+  "counted": {
+   "A": 0,
+   "B": 0,
+   "C": 0
+  },
+  "commentCount": 0
+ },
+ "votes": [
+  {
+   "kind": "what",
+   "question": "何を建てる？",
+   "openedDay": 1,
+   "closesDay": 2,
+   "opensAt": "2026-11-01T09:00:00+09:00",
+   "closesAt": "2026-11-01T15:00:00+09:00",
+   "options": [
+    {
+     "key": "A",
+     "build": "hut",
+     "name": "小屋"
+    },
+    {
+     "key": "B",
+     "build": "storehouse",
+     "name": "倉庫"
+    },
+    {
+     "key": "C",
+     "build": "workbench",
+     "name": "作業台"
+    }
+   ],
+   "votes": {
+    "A": 0,
+    "B": 0,
+    "C": 0
+   },
+   "manual": {
+    "A": 0,
+    "B": 0,
+    "C": 0
+   },
+   "voters": 0,
+   "timeline": [
+    {
+     "t": "2026-11-01T00:00:00.000Z",
+     "A": 0,
+     "B": 0,
+     "C": 0
+    },
+    {
+     "t": "2026-11-01T03:00:00.000Z",
+     "A": 0,
+     "B": 0,
+     "C": 0
+    }
+   ],
+   "counted": {
+    "A": 0,
+    "B": 0,
+    "C": 0
+   },
+   "commentCount": 0
+  },
+  {
+   "kind": "where",
+   "question": "どこに建てる？",
+   "openedDay": 1,
+   "closesDay": 2,
+   "opensAt": "2026-11-01T15:00:00+09:00",
+   "closesAt": "2026-11-02T00:00:00+09:00",
+   "options": [
+    {
+     "key": "A",
+     "name": "海のそば",
+     "x": 2.41,
+     "z": 22.82,
+     "plot": 23
+    },
+    {
+     "key": "B",
+     "name": "東の森の入口",
+     "x": 25.89,
+     "z": -3.21,
+     "plot": 33
+    },
+    {
+     "key": "C",
+     "name": "広場の近く",
+     "x": -2.38,
+     "z": 9.82,
+     "plot": 2
+    }
+   ],
+   "votes": {
+    "A": 0,
+    "B": 0,
+    "C": 0
+   },
+   "manual": {
+    "A": 0,
+    "B": 0,
+    "C": 0
+   },
+   "voters": 0,
+   "timeline": [
+    {
+     "t": "2026-11-01T06:00:00.000Z",
+     "A": 0,
+     "B": 0,
+     "C": 0
+    },
+    {
+     "t": "2026-11-01T09:00:00.000Z",
+     "A": 0,
+     "B": 0,
+     "C": 0
+    }
+   ],
+   "counted": {
+    "A": 0,
+    "B": 0,
+    "C": 0
+   },
+   "commentCount": 0
+  }
+ ],
  "decisions": [],
  "plan": null,
- "pool": null,
+ "pool": [
+  "hut",
+  "storehouse",
+  "workbench",
+  "farm",
+  "house",
+  "pen",
+  "well",
+  "canal",
+  "fence",
+  "workshop",
+  "watch",
+  "garden",
+  "shop",
+  "plaza",
+  "lamps",
+  "house",
+  "wall",
+  "inn"
+ ],
  "toolGoal": null,
  "store": {
   "berry": 30
@@ -33,5 +231,36 @@
   "food": 0
  },
  "weather": "晴れ",
- "updated": null
+ "updated": "2026-11-25T21:50:22.992Z",
+ "firsts": {},
+ "res": {
+  "wood": 0,
+  "stone": 0,
+  "food": 10.200000000000001
+ },
+ "nextTool": {
+  "item": "stone_pickaxe",
+  "ok": false,
+  "text": "作業台がいる"
+ },
+ "night": null,
+ "today": {
+  "weather": "晴れ",
+  "jobs": {
+   "wood": 0,
+   "stone": 0,
+   "food": 0
+  },
+  "gained": {
+   "wood": 0,
+   "stone": 0,
+   "food": 0
+  },
+  "built": [],
+  "trips": 0,
+  "crafted": [],
+  "leveled": [],
+  "birthdays": [],
+  "talks": 0
+ }
 }
