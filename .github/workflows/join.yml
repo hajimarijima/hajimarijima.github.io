@@ -1,0 +1,42 @@
+# 15 分ごとに「住みたい」コメントだけを読んで、村人の受付をする（町は進めない。進めるのは daily.yml）。
+# GitHub の混み具合で、実際には 15〜30 分おきくらいになることがある。
+name: join
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: town
+  cancel-in-progress: false
+
+jobs:
+  join:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: インスタを読む
+        run: node tools/instagram.js
+        env:
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_JOIN_MEDIA: ${{ secrets.IG_JOIN_MEDIA }}
+          IG_VOTE_MEDIA: ${{ secrets.IG_VOTE_MEDIA }}
+      - name: 住む人の受付
+        run: node tools/join.js
+        env:
+          TOWN_SALT: ${{ secrets.TOWN_SALT }}
+          TOWN_HIDDEN: ${{ secrets.TOWN_HIDDEN }}
+      - name: 結果をコミット
+        run: |
+          git config user.name "town-bot"
+          git config user.email "town-bot@users.noreply.github.com"
+          git add data/villagers.json
+          git diff --cached --quiet || (git commit -m "住む人の受付" && git push)

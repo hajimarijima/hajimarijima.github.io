@@ -69,7 +69,11 @@ function setupSearch(D) {
     res.textContent = '';
     if (!n) { msg.textContent = ''; return; }
     const hits = exact ? [findExact(D.active, text)].filter(Boolean) : searchVillagers(D.active, text, 8);
-    msg.textContent = hits.length ? (hits.length === 1 ? '見つかりました。' : `${hits.length} 人見つかりました。`) : '見つかりませんでした。名前を少し短くして、もう一度さがしてください。';
+    // 15 分ごとの受付（tools/join.js）で登録されて、まだ町に来ていない人
+    const waiting = D.villagers.filter((v) => v.joinedDay > D.state.day);
+    const wait = hits.length ? null : (exact ? findExact(waiting, text) : searchVillagers(waiting, text, 1)[0]);
+    if (wait) { msg.textContent = `${wait.display} さん、受付ずみです。次の朝 6 時に町へ引っ越してきます。`; return; }
+    msg.textContent = hits.length ? (hits.length === 1 ? '見つかりました。' : `${hits.length} 人見つかりました。`) : '見つかりませんでした。名前を少し短くして、もう一度さがしてください。（コメントしてから 15 分ほどで受付されます）';
     for (const v of hits) res.append(await card(v));
   }
   form.addEventListener('submit', (e) => {

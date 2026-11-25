@@ -16,7 +16,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: daily
+  group: town
   cancel-in-progress: false
 
 jobs:
