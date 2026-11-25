@@ -329,6 +329,14 @@ export function animateMob(g, mode, t, k = 0) {
       setBow(g, P, 0);
     }
   }
+  // 倒れる（k 0→1）：横へどさっと倒れる（クモはひっくり返る）。消えるのは呼ぶ側の fadeMob で、少しずつ薄く
+  if (mode === 'die') {
+    const f = Math.min(1, k * 2.8), e = f < 1 ? 1 - (1 - f) * (1 - f) : 1, bounce = f >= 1 ? Math.max(0, Math.sin(Math.min(1, (k * 2.8 - 1) * 3) * Math.PI)) * 0.08 : 0;
+    const side = g.id % 2 ? 1 : -1;
+    P.body.rotation.z = side * ((type === 'spider' ? 2.75 : 1.5) * e - bounce);
+    P.body.position.y = (type === 'spider' ? 0.235 + 0.12 * e : 0.14 * e);
+    if (type === 'spider') for (const L of P.legs) { L.up.rotation.z = L.s * (0.2 + Math.sin(t * 22 + L.k) * 0.25 * (1 - f)); L.low.rotation.z = -L.s * 2.3; } // 脚を縮めてばたつかせる
+  } else if (type !== 'zombie') P.body.rotation.z = 0;
   g.visible = true;
   if (mode === 'burn') {
     g.scale.setScalar(MOB_SCALE * (1 - Math.max(0, k - 0.5) * 1.6)); // 燃えてから、最後に小さくなって消える
@@ -361,9 +369,11 @@ export function flashMob(g, a) {
     g.userData.flash = { list, a: -1 };
   }
   const F = g.userData.flash;
-  if (Math.abs(F.a - a) < 0.02) return;
+  // 呼ぶ側は 0.4 秒ほどかけて 1→0 を渡す。赤く光るのは最初の 0.1 秒だけ、ほんのり（全身ピンクにならないよう弱く）
+  a = Math.max(0, (a - 0.76) / 0.24);
+  if (Math.abs(F.a - a) < 0.02 && !(a === 0 && F.a !== 0)) return;
   F.a = a;
-  for (const { m, base } of F.list) m.emissive.setRGB(base.r + 0.3 * a, base.g + 0.02 * a, base.b + 0.01 * a);
+  for (const { m, base } of F.list) m.emissive.setRGB(base.r + 0.1 * a, base.g, base.b);
 }
 
 // 当たった所に飛ぶ火花（黄・白）と、小さな煙。ドット絵らしく小さな四角で。p: 0..1（1 で消える）

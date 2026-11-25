@@ -413,6 +413,53 @@ t('夜：sim.js で履歴に残り、ケガをした人は次の日「休み」�
   assert.strictEqual(rd('villagers.json').length, 20);
   const life = rd('life.json');
   for (const k in life) for (const d of life[k].diary) if (/ケガで、今日は家で休んだ/.test(d.text)) assert.ok(life[k].diary.some((e) => e.day === d.day - 1 && /ケガをした/.test(e.text)), 'ケガの次の日だけ休む');
+  // 戦い：倒した数・経験値・落とし物・記録
+  const killers = Object.values(life).filter((l) => l.kills && l.kills.total > 0);
+  assert.ok(killers.length > 0, '敵を倒した見張りがいる');
+  assert.ok(killers.every((l) => l.kills.total === ['zombie', 'skeleton', 'spider'].reduce((a, t) => a + (l.kills[t] || 0), 0)), '倒した数の合計が合う');
+  assert.ok(h.some((x) => /を \d+ 体倒した/.test(x.text)), '町の歴史に「〇〇を n 体倒した」');
+  assert.ok(Object.values(life).some((l) => l.diary.some((d) => /倒した。/.test(d.text))), '日記に倒した数');
+  const st = rd('state.json');
+  assert.ok(st.night === null || st.night.quiet || (st.night.fight && Array.isArray(st.night.fight.log)), '夜の戦いの記録（町の画面で数字を出す元）');
+  assert.ok(rd('history.json').some((x) => /落とし物/.test(x.text)), '落とし物をチェストに入れた記録');
+  // 同じ種なら同じ結果
+  const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'town-night2-'));
+  fs.writeFileSync(path.join(dir2, 'config.json'), JSON.stringify(cfgN));
+  const env2 = { ...process.env, TOWN_DATA: dir2 };
+  for (const a of [['tools/init.js', '--demo'], ['tools/sim.js', '--demo', '--days', '30']]) execFileSync(process.execPath, [path.join(ROOT, a[0]), ...a.slice(1)], { env: env2, encoding: 'utf8' });
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(dir2, 'state.json'), 'utf8')).night, st.night, '同じ種で同じ夜の戦い');
+});
+t('戦い：攻撃力は装備で決まる・クリティカルは良い装備ほど少し出やすい・同じ乱数で同じ結果・落とし物・バッジの段', () => {
+  const CB = require('../js/combat.js');
+  const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8')), C = config.combat;
+  const ws = [null, 'stone_pickaxe', 'wood_sword', 'stone_sword', 'iron_sword'];
+  for (let i = 1; i < ws.length; i++) {
+    assert.ok(CB.attackOf(ws[i], C) > CB.attackOf(ws[i - 1], C), `攻撃力 ${ws[i - 1]} < ${ws[i]}`);
+    assert.ok(CB.critChance(ws[i], C) > CB.critChance(ws[i - 1], C), `クリティカル ${ws[i - 1]} < ${ws[i]}`);
+  }
+  assert.strictEqual(CB.weaponKind('torch'), 'tool');
+  const mobs = [{ type: 'zombie' }, { type: 'skeleton' }, { type: 'spider' }];
+  const run = (w, seed) => CB.fightNight({ mobs, guards: [{ key: 'a', weapon: w, shield: true }, { key: 'b', weapon: w, shield: false }], C, rng: CB.seededRng(seed) });
+  assert.deepStrictEqual(run('stone_sword', 's1'), run('stone_sword', 's1'), '同じ乱数なら同じ結果');
+  let kHand = 0, kIron = 0, crit = 0, hits = 0;
+  for (let i = 0; i < 300; i++) {
+    kHand += run(null, 'k' + i).mobs.filter((m) => m.fate === 'killed').length;
+    const F = run('iron_sword', 'k' + i); kIron += F.mobs.filter((m) => m.fate === 'killed').length;
+    for (const e of F.log) if (e.dmg) { hits++; if (e.crit) crit++; }
+    for (const m of F.mobs) assert.ok(['killed', 'fled', 'dawn'].includes(m.fate));
+    for (const e of F.log) if (e.kill) assert.strictEqual(F.mobs[e.m].fate, 'killed');
+  }
+  assert.ok(kIron > kHand * 2, `鉄の剣の方がたくさん倒す（素手 ${kHand} / 鉄 ${kIron}）`);
+  const cr = crit / hits; assert.ok(Math.abs(cr - CB.critChance('iron_sword', C)) < 0.04, `クリティカルの割合 ${cr.toFixed(3)}`);
+  const d = CB.rollDrops('skeleton', C, CB.seededRng('d'));
+  assert.ok(Object.keys(d).every((k) => ['bone', 'arrow'].includes(k)), 'スケルトンは骨と矢');
+  for (const k of ['rotten_flesh', 'bone', 'arrow', 'string', 'bone_meal', 'bow']) {
+    assert.ok(config.items[k] && config.items[k].name, `${k} の名前`);
+    assert.ok(fs.existsSync(path.join(ROOT, 'icons', k + '.png')), `${k} のアイコン`);
+  }
+  const T = config.badges.list.guard.tiers;
+  assert.deepStrictEqual([9, 10, 99, 100, 500, 999, 1000].map((n) => CB.badgeTier(n, T)), [-1, 0, 0, 1, 2, 2, 3], '見張り番バッジの段（銅・銀・金・ダイヤ）');
+  for (const k of ['guard', 'repel', 'kill_zombie', 'kill_skeleton', 'kill_spider']) assert.ok(config.inventory.xp[k] > 0, `経験値 ${k}`);
 });
 t('鉱石：岩の中身は種と岩の id で毎回同じ・確率は config.json・まれな物ほど少ない', () => {
   const O = require('../tools/ores');

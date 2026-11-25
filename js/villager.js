@@ -312,6 +312,20 @@ function renderInventory(L, config) {
   const more = IC.max - slots - showLocked;
   if (more > 0) { const p = document.createElement('p'); p.className = 'invmore'; p.textContent = `ほかに あと ${more} 枠。レベルや住んだ日数で開きます。`; box.after(p); }
   info.textContent = held.label + '。枠を押すと中身が出ます。点線の枠は次に開く条件です。';
+  // 夜の見張りで倒した敵と、バッジ（見張り番：銅・銀・金・ダイヤ。絵はあとで）
+  if (L.kills && L.kills.total) {
+    const BG = config.badges, NM = { zombie: 'ゾンビ', skeleton: 'スケルトン', spider: 'クモ' };
+    const parts = Object.keys(NM).filter((k) => L.kills[k]).map((k) => `${NM[k]} ${L.kills[k]}`).join('・');
+    let b = '';
+    if (BG) for (const [id, B] of Object.entries(BG.list)) {
+      const t = (L.badges || {})[id] ?? -1;
+      b += t >= 0 ? `「${B.name}」${BG.tierNames[t]}バッジ` : `「${B.name}」の銅バッジまで あと ${B.tiers[0] - L.kills.total} 体`;
+      if (t >= 0 && t < B.tiers.length - 1) b += `（次の${BG.tierNames[t + 1]}まで あと ${B.tiers[t + 1] - L.kills.total} 体）`;
+    }
+    const p = document.createElement('p'); p.className = 'invmore';
+    p.textContent = `夜の見張りで倒した敵 ${L.kills.total} 体（${parts}）。${b}`;
+    info.after(p);
+  }
 }
 
 main().catch(showError);

@@ -16,7 +16,8 @@ const I = require('./inventory');
 const N = require('./night');
 const O = require('./ores');
 const CR = require('./craft');
-const HR = require('../js/hours.js'); // 1 日 24 時間の行動の記号と数の決まり
+const HR = require('../js/hours.js');
+const CB = require('../js/combat.js'); // 夜の戦い・バッジの段 // 1 日 24 時間の行動の記号と数の決まり
 
 const ROOT = path.join(__dirname, '..');
 const DATA = process.env.TOWN_DATA || path.join(ROOT, 'data');
@@ -534,6 +535,17 @@ function stepDay(S) {
         today.crafted.push({ who: c.v.key, item: 'shield' });
         first('shield', 'はじめて盾を作った。見張りが矢やこぶしを盾で受けられる。', { item: 'shield' });
         return done('cr:shield');
+      }
+    }
+    // 弓：クモの糸と棒で作る（チェストに入れておく）
+    if (GG.bow && (state.store.string || 0) > 0 && (state.store.bow || 0) < GG.bow.keep) {
+      const p = CR.plan(state.store, { from: GG.bow.from }, CC);
+      if (p.ok) {
+        p.store.bow = (p.store.bow || 0) + 1; replaceStore(p.store);
+        c.ev.push({ h, text: `${tm(h)}、クモの糸で弓を作った。` });
+        today.crafted.push({ who: c.v.key, item: 'bow' });
+        first('bow', 'はじめて弓を作った。クモの糸を弦にした。', { item: 'bow' });
+        return done('cr:bow');
       }
     }
     return null;
@@ -1211,6 +1223,19 @@ function stepDay(S) {
       if (canal && Math.hypot(f.x - canal.x, f.z - canal.z) < FA.canalRange && R2.chance(FA.canalBoost)) { g++; f.water = 1; }
       f.stage = Math.min(max, f.stage + g);
     }
+    // 骨粉：骨を砕いて作り、毎朝 perDay 個まで、まだ育ちきっていない畑にまく（もう 1 段育つ）。畑は id の順
+    const BM = config.guardGear && config.guardGear.boneMeal;
+    if (BM && world.fields.length) {
+      while ((state.store.bone_meal || 0) < BM.perDay && (state.store.bone || 0) >= (BM.from.bone || 1)) {
+        state.store.bone -= BM.from.bone || 1; if (!state.store.bone) delete state.store.bone;
+        state.store.bone_meal = (state.store.bone_meal || 0) + BM.makes;
+      }
+      const grow = world.fields.filter((f) => f.stage < (f.max || 3) && !(f.day === day && f.stage === 0)).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      let used = 0;
+      for (const f of grow) { if (used >= BM.perDay || !(state.store.bone_meal > 0)) break; f.stage++; f.meal = day; state.store.bone_meal--; used++; }
+      if (!state.store.bone_meal) delete state.store.bone_meal;
+      if (used) { today.boneMeal = used; first('bone_meal', `はじめて骨粉を畑にまいた。スケルトンの骨を砕いた肥料で、作物が早く育つ。`, { item: 'bone_meal' }); }
+    }
   }
   // 種や作物を持っている村人には、近くの動物がついてくる。柵があれば、その人が柵まで連れて入れる（動物は減らない）
   const LURE = ['seeds', 'wheat', 'carrot', 'potato'];
@@ -1377,9 +1402,39 @@ function stepDay(S) {
   for (const c of ctxs) if (c.tail && c.entry) c.entry.text += c.tail;
 
   // ---- 12. 夜（敵が来る・見張りが追い払う）。別の乱数なので、ここまでの結果は変わらない ----
-  state.night = config.enemies && config.enemies.enabled ? N.stepNight({ day, seed: state.seed, active, life, world, state, config, hist, guards: ctxs.filter((c) => c.awakeNight && !c.off).map((c) => c.v.key), outside: ctxs.filter((c) => c.outNight && R4.chance(H.outsideHurtP)).map((c) => c.v.key) }) : null;
+  // 見張りの装備：剣（いちばん良い物）、なければ持っている道具、なければたいまつ、なければ素手。盾はチェストの数だけ、先の見張りから
+  let shieldLeft = state.store.shield || 0;
+  const nightGear = (k) => {
+    const L = life[k] || {}, inv = (L.inv || []).filter(Boolean);
+    const sw = I.getTool(inv, 'sword'), tool = inv.find((x) => I.isTool(x.item));
+    const weapon = sw ? sw.item : tool ? tool.item : (state.store.torch || 0) > 0 ? 'torch' : null;
+    const shield = shieldLeft > 0; if (shield) shieldLeft--;
+    return { weapon, shield };
+  };
+  state.night = config.enemies && config.enemies.enabled ? N.stepNight({ day, seed: state.seed, active, life, world, state, config, hist, gear: nightGear, guards: ctxs.filter((c) => c.awakeNight && !c.off).map((c) => c.v.key), outside: ctxs.filter((c) => c.outNight && R4.chance(H.outsideHurtP)).map((c) => c.v.key) }) : null;
   syncRes();
   if (state.night) {
+    const NT = state.night, XP = IC.xp, BG = config.badges;
+    const nameOf = (k) => (active.find((v) => v.key === k) || { display: k }).display;
+    for (const k of NT.guards || []) {
+      const L = life[k]; if (!L) continue;
+      let gain = XP.guard || 0;
+      const kl = (NT.kills || {})[k] || {};
+      for (const t of Object.keys(kl)) { gain += (XP['kill_' + t] || 0) * kl[t]; L.kills = L.kills || { total: 0 }; L.kills[t] = (L.kills[t] || 0) + kl[t]; L.kills.total += kl[t]; }
+      gain += (XP.repel || 0) * (((NT.stats || {})[k] || {}).fled || 0);
+      L.xp += gain; L.nightXp = { day, xp: gain };
+      // バッジ（見張り番など）：数が段に届いたら、町の歴史に残す
+      if (BG) for (const [id, B] of Object.entries(BG.list)) {
+        const n = (L[B.stat] && L[B.stat].total) || 0, tier = CB.badgeTier(n, B.tiers);
+        L.badges = L.badges || {};
+        if (tier > (L.badges[id] ?? -1)) { L.badges[id] = tier; hist('badge', `${nameOf(k)}が「${B.name}」の${BG.tierNames[tier]}バッジをもらった（${B.note} ${n}）。`, { who: [k], badge: id, tier }); }
+      }
+    }
+    if (NT.drops && Object.keys(NT.drops).length) {
+      deposit(NT.drops);
+      const txt = Object.entries(NT.drops).map(([it, n]) => `${ITEMS[it] ? ITEMS[it].name : it} ${n}`).join('、');
+      hist('night', `${day}日目の夜、倒した敵の落とし物（${txt}）をチェストに入れた。`, { night: day, drops: NT.drops });
+    }
     state.nightLog = (state.nightLog || []).concat({ day, count: state.night.count, result: state.night.result, defense: state.night.defense }).slice(-60);
     today.night = { count: state.night.count, result: state.night.result };
   }

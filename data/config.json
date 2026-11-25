@@ -139,7 +139,12 @@
       "carry": 5,
       "build": 15,
       "vote": 5,
-      "comment": 3
+      "comment": 3,
+      "guard": 10,
+      "repel": 4,
+      "kill_zombie": 12,
+      "kill_skeleton": 15,
+      "kill_spider": 12
     }
   },
   "items": {
@@ -438,6 +443,30 @@
     },
     "shield": {
       "name": "盾",
+      "value": {}
+    },
+    "rotten_flesh": {
+      "name": "腐った肉",
+      "value": {}
+    },
+    "bone": {
+      "name": "骨",
+      "value": {}
+    },
+    "arrow": {
+      "name": "矢",
+      "value": {}
+    },
+    "string": {
+      "name": "糸",
+      "value": {}
+    },
+    "bone_meal": {
+      "name": "骨粉",
+      "value": {}
+    },
+    "bow": {
+      "name": "弓",
       "value": {}
     }
   },
@@ -1909,7 +1938,7 @@
     "profileSection": false
   },
   "guardGear": {
-    "note": "見張りの装備。夜の見張りの時間に、作業台（workbench）があれば作る。はじめは道具か素手。たいまつは棒＋石炭で makes 本できて、チェストに keep 本より少なければ作る。作ったたいまつは村のまわりに posts 本まで立てる（立てるまで夜は暗いまま）。剣は crafting.recipes の剣（木→石→…）を、持っていない見張りが作る。盾は板＋丸石で、keep 枚まで作る。1 晩に作るのは perNight 個まで。剣を持つのは見張り役の swordMax 人まで（持っている人は良い剣に作り直す）。立てたたいまつは 1 晩に burnPerNight 本ずつ燃えつきる",
+    "note": "見張りの装備。夜の見張りの時間に、作業台（workbench）があれば作る。はじめは道具か素手。たいまつは棒＋石炭で makes 本できて、チェストに keep 本より少なければ作る。作ったたいまつは村のまわりに posts 本まで立てる（立てるまで夜は暗いまま）。剣は crafting.recipes の剣（木→石→…）を、持っていない見張りが作る。盾は板＋丸石で、keep 枚まで作る。1 晩に作るのは perNight 個まで。剣を持つのは見張り役の swordMax 人まで（持っている人は良い剣に作り直す）。立てたたいまつは 1 晩に burnPerNight 本ずつ燃えつきる。弓は棒 3＋糸 3 で keep 張りまで作る。骨は骨粉（bone 1 → makes 個）にして、毎朝 perDay 個まで畑にまく（まいた畑はもう 1 段育つ）",
     "torch": {
       "from": {
         "stick": 1,
@@ -1929,6 +1958,99 @@
     "posts": 8,
     "perNight": 1,
     "swordMax": 3,
-    "burnPerNight": 1
+    "burnPerNight": 1,
+    "bow": {
+      "from": {
+        "stick": 3,
+        "string": 3
+      },
+      "keep": 2
+    },
+    "boneMeal": {
+      "from": {
+        "bone": 1
+      },
+      "makes": 3,
+      "perDay": 2
+    }
+  },
+  "combat": {
+    "note": "夜の戦い。見張りの攻撃力 atk は装備で決まる（hand 素手・tool 道具やたいまつ・wood/stone/iron/gold/diamond は剣の素材）。1 回の攻撃は atk ±1、critBase + (atk − 素手) × critPerAtk の確率でクリティカル（critMult 倍）。敵は hp がなくなると倒れ、hp が fleeAt 割以下になると fleeP の確率で逃げる。戦うのは rounds 回まで（その後は朝まで持ちこたえ、残った敵は夜明けに帰る）。敵の攻撃は盾があれば shieldGuardP の確率でガード。見張りが hurtAt 以上ダメージを受けるとケガ（次の日休む）。倒した敵は drops を落とし、チェストに入る",
+    "atk": {
+      "hand": 2,
+      "tool": 3,
+      "wood": 4,
+      "stone": 5,
+      "iron": 7,
+      "gold": 5,
+      "diamond": 8
+    },
+    "critBase": 0.06,
+    "critPerAtk": 0.015,
+    "critMax": 0.4,
+    "critMult": 1.8,
+    "fleeAt": 0.3,
+    "fleeP": 0.5,
+    "rounds": 6,
+    "shieldGuardP": 0.55,
+    "hurtAt": 9,
+    "mobs": {
+      "zombie": {
+        "hp": 20,
+        "atk": 2,
+        "drops": {
+          "rotten_flesh": [
+            0,
+            2
+          ]
+        }
+      },
+      "skeleton": {
+        "hp": 16,
+        "atk": 2,
+        "drops": {
+          "bone": [
+            0,
+            2
+          ],
+          "arrow": [
+            0,
+            2
+          ]
+        }
+      },
+      "spider": {
+        "hp": 16,
+        "atk": 2,
+        "drops": {
+          "string": [
+            0,
+            2
+          ]
+        }
+      }
+    }
+  },
+  "badges": {
+    "note": "バッジ。stat の数が tiers（銅・銀・金・ダイヤ）に届くともらえる。絵はあとでまとめて作る（今は仮）",
+    "tierNames": [
+      "銅",
+      "銀",
+      "金",
+      "ダイヤ"
+    ],
+    "list": {
+      "guard": {
+        "name": "見張り番",
+        "stat": "kills",
+        "tiers": [
+          10,
+          100,
+          500,
+          1000
+        ],
+        "note": "夜に敵を倒した数"
+      }
+    }
   }
 }

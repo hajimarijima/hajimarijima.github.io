@@ -199,6 +199,54 @@ const ICONS = {
     for (let y = 4; y < 13; y++) { if (y < 6 || y > 9) { put(px, 6, y, hex('#6e4524')); put(px, 10, y, hex('#6e4524')); } } // 板のつぎ目（こぶの所はよける）
     put(px, 8, 7, hex('#c9cfd6')); put(px, 7, 7, hex('#eef2f6'));
   },
+  // ---- 敵の落とし物 ----
+  rotten_flesh(px) {
+    // 腐った肉：くすんだ赤茶のかたまりに、緑がかったまだらと白い筋
+    const g = shapeGrid();
+    poly(g, [[3, 7], [6, 3], [11, 3], [14, 6], [13, 11], [9, 14], [4, 13], [2, 10]], 'm');
+    disc(g, 6, 7, 1.7, 'g'); disc(g, 10.5, 10, 1.4, 'g');
+    puffy(px, g, { m: { c: hex('#9a4a3a'), shine: 0.25, grain: 0.12 }, g: { c: hex('#7a8a4a'), shine: 0.1, flat: true } }, 'flesh');
+    for (const [x, y] of [[8, 5], [9, 6], [10, 7], [5, 10], [6, 11]]) put(px, x, y, hex('#e8d2b8'));
+  },
+  bone(px) {
+    // 骨：ななめの白い棒の両はしに、丸いこぶ 2 つずつ
+    const g = shapeGrid();
+    line(g, 4.5, 11.5, 11.5, 4.5, 2.2, 'b');
+    for (const [x, y] of [[3, 11], [4.8, 13], [11.2, 3], [13, 4.8]]) disc(g, x, y, 1.7, 'b');
+    puffy(px, g, { b: { c: hex('#ece4cc'), shine: 0.45 } }, 'bone');
+  },
+  arrow(px) {
+    // 矢：ななめの木の柄、先に灰色の矢じり、後ろに白い羽
+    const g = shapeGrid();
+    line(g, 4, 12, 11, 5, 1.9, 'w');
+    poly(g, [[9.2, 3.6], [14.6, 1.4], [12.4, 6.8]], 'h');
+    poly(g, [[1.2, 10.4], [4.4, 9.6], [6.4, 11.6], [5.6, 14.8], [2, 13.8]], 'f');
+    puffy(px, g, { w: { c: hex('#a87a48'), shine: 0.2 }, h: { c: hex('#9aa2aa'), shine: 0.6 }, f: { c: hex('#f0ece4'), shine: 0.3, flat: true } }, 'arrow');
+  },
+  string(px) {
+    // 糸：白い糸をくるくる巻いた玉と、ほどけた端
+    const g = shapeGrid();
+    disc(g, 7.5, 8, 4.6, 's');
+    line(g, 11, 10, 14, 14, 1.2, 's');
+    puffy(px, g, { s: { c: hex('#e6e6ea'), shine: 0.4 } }, 'string');
+    for (let k = 0; k < 4; k++) for (let x = 4; x < 12; x++) { const y = 5 + k * 2 + ((x + k) % 3 === 0 ? 1 : 0); if (px[(y * S + x) * 4 + 3]) put(px, x, y, hex('#b8b8c2')); } // 巻いた筋
+  },
+  bone_meal(px) {
+    // 骨粉：白い粉の小山（上は明るく、すそは影）
+    const g = shapeGrid();
+    ellipse(g, 8, 12, 6.6, 2.6, 'p');
+    ellipse(g, 8, 10, 4.6, 3.2, 'p');
+    disc(g, 8, 8.2, 2.6, 'p');
+    puffy(px, g, { p: { c: hex('#f2f0ea'), shine: 0.35, grain: 0.14 } }, 'bonemeal');
+    for (const [x, y] of [[4, 14], [12, 14], [13, 12], [3, 12]]) put(px, x, y, hex('#d8d4ca'));
+  },
+  bow(px) {
+    // 弓：木の弓を半月に曲げ、両はしを白い弦でつなぐ
+    const g = shapeGrid();
+    for (let a = 0; a <= 20; a++) { const t = -Math.PI * 0.75 + (a / 20) * Math.PI; const x = 4 + Math.cos(t + Math.PI / 4) * 9.5, y = 12 + Math.sin(t + Math.PI / 4) * -9.5; disc(g, x, y, 1.1, 'w'); }
+    line(g, 2.4, 3.2, 12.8, 13.6, 0.9, 's');
+    puffy(px, g, { w: { c: hex('#8a5a30'), shine: 0.3 }, s: { c: hex('#e8e6e0'), shine: 0.2, flat: true } }, 'bow');
+  },
   wheat(px) {
     // 小麦の束：黄金色の太い穂 3 本が上でふくらみ、下を紐で縛る。穂のまわりは濃い縁で 1 本ずつ分け、粒は 1 段ごとに互いちがい
     const art = [
