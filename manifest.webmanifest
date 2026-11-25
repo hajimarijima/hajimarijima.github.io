@@ -2,7 +2,7 @@
   "name": "はじまり島",
   "short_name": "はじまり島",
   "description": "インスタの参加者が村人になって、毎日すこしずつ町を育てます。",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",

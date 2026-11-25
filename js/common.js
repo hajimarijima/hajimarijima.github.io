@@ -45,8 +45,10 @@ export function nav(current) {
   const items = [['index.html', '町'], ['history.html', '歴史'], ['vote.html', '投票'], ['people.html', '村人'], ['relations.html', '関係']];
   const el = document.createElement('header');
   el.className = 'site-head';
-  el.innerHTML = '<a class="brand" href="index.html">はじまり島</a><nav>' +
-    items.map(([h, t]) => `<a href="${h}"${h === current ? ' class="on"' : ''}>${t}</a>`).join('') + '</nav>';
+  // 町のページは「./」で開く（URL の末尾に index.html が付かないように）
+  const link = (h) => (h === 'index.html' ? './' : h);
+  el.innerHTML = '<a class="brand" href="./">はじまり島</a><nav>' +
+    items.map(([h, t]) => `<a href="${link(h)}"${h === current ? ' class="on"' : ''}>${t}</a>`).join('') + '</nav>';
   document.body.prepend(el);
 }
 
