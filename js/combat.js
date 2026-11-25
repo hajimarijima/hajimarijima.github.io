@@ -27,40 +27,73 @@ export function seededRng(str) {
   return () => { h = (h + 0x6D2B79F5) >>> 0; let t = h; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
-// ひと晩の戦い。mobs: [{ type }]、guards: [{ key, weapon, shield }]
-// 返す値：{ mobs: [{ type, max, hp, fate: 'killed'|'fled'|'dawn', by, round }], log: [...], taken: { key: 受けたダメージ } }
-//   log の 1 行：見張りの攻撃 { r, g, m, dmg, crit, kill?, flee? } ／ 敵の攻撃 { r, m, g, to: ダメージ } か { r, m, g, guard: true }
-//   敵 i の相手は guards[i % 見張りの数]。相手の敵がいなくなった見張りは、残っている敵のうち先の番号を打つ
+// ひと晩の戦い：敵は逃げず、どちらかが全員倒れるまで戦う。mobs: [{ type }]、guards: [{ key, weapon, shield }]
+// 返す値：{ mobs: [{ type, max, hp, fate: 'killed'|'raid', by, round }], guards: [{ key, max, hp, down: 倒れた回 | null }],
+//          log: [...], taken: { key: 受けたダメージ }, down: [倒れた見張り], end: 'won'|'lost' }
+//   log の 1 行：見張りの攻撃 { r, g, m, dmg, crit, kill? } ／ 敵の攻撃 { r, m, g, to, down? } か { r, m, g, guard: true }
+//   敵 i の相手は、その回に立っている見張りの i 番目（数で割った余り）。見張りは自分を相手にしている敵のうち先の番号を打つ。
+//   見張りが倒れると、ほかの見張りが代わりに相手をする。全員倒れたら残った敵は 'raid'（柵や建物を少し壊して朝に消える）
 export function fightNight({ mobs, guards, C, rng }) {
   const M = mobs.map((m) => { const S = C.mobs[m.type] || C.mobs.zombie; return { type: m.type, max: S.hp, hp: S.hp, fate: null, by: null, round: null }; });
+  const G = guards.map((g) => ({ key: g.key, max: C.guardHp || 20, hp: C.guardHp || 20, down: null }));
   const log = [], taken = {};
-  if (!guards.length) { for (const m of M) m.fate = 'dawn'; return { mobs: M, log, taken }; }
-  const alive = (m) => !m.fate;
-  const rounds = C.rounds || 6;
-  for (let r = 0; r < rounds && M.some(alive); r++) {
-    guards.forEach((g, gi) => {
-      let mi = M.findIndex((m, i) => alive(m) && i % guards.length === gi);
+  const alive = (m) => !m.fate, up = (g) => g.down === null;
+  const cap = C.maxRounds || 80; // 念のための上限（ふつうはその前にどちらかが倒れる）
+  let r = 0;
+  for (; r < cap && M.some(alive) && G.some(up); r++) {
+    const standing = guards.map((g, gi) => gi).filter((gi) => up(G[gi]));
+    const foe = (mi) => standing[mi % standing.length];
+    standing.forEach((gi) => {
+      let mi = M.findIndex((m, i) => alive(m) && foe(i) === gi);
       if (mi < 0) mi = M.findIndex(alive);
       if (mi < 0) return;
-      const m = M[mi], h = rollHit(g.weapon, C, rng);
+      const m = M[mi], h = rollHit(guards[gi].weapon, C, rng);
       m.hp = Math.max(0, m.hp - h.dmg);
-      const e = { r, g: g.key, m: mi, dmg: h.dmg, crit: h.crit };
-      if (m.hp <= 0) { m.fate = 'killed'; m.by = g.key; m.round = r; e.kill = true; }
-      else if (m.hp <= m.max * C.fleeAt && rng() < C.fleeP) { m.fate = 'fled'; m.by = g.key; m.round = r; e.flee = true; }
+      const e = { r, g: guards[gi].key, m: mi, dmg: h.dmg, crit: h.crit };
+      if (m.hp <= 0) { m.fate = 'killed'; m.by = guards[gi].key; m.round = r; e.kill = true; }
       log.push(e);
     });
     // 残った敵が、それぞれの相手をなぐる（盾があれば受けられることがある）
     M.forEach((m, mi) => {
       if (!alive(m)) return;
-      const g = guards[mi % guards.length], S = C.mobs[m.type] || C.mobs.zombie;
+      const gi = foe(mi), g = guards[gi], S = C.mobs[m.type] || C.mobs.zombie;
+      if (!up(G[gi])) return; // この回にもう倒れている
       if (g.shield && rng() < C.shieldGuardP) { log.push({ r, m: mi, g: g.key, guard: true }); return; }
       const to = Math.max(1, S.atk + (rng() < 0.3 ? 1 : 0));
       taken[g.key] = (taken[g.key] || 0) + to;
-      log.push({ r, m: mi, g: g.key, to });
+      G[gi].hp = Math.max(0, G[gi].hp - to);
+      const e = { r, m: mi, g: g.key, to };
+      if (G[gi].hp <= 0) { G[gi].down = r; e.down = true; }
+      log.push(e);
     });
   }
-  for (const m of M) if (!m.fate) m.fate = 'dawn';
-  return { mobs: M, log, taken };
+  const won = !M.some(alive);
+  for (const m of M) if (!m.fate) { m.fate = 'raid'; m.round = r; }
+  return { mobs: M, guards: G, log, taken, down: G.filter((g) => !up(g)).map((g) => g.key), end: won ? 'won' : 'lost' };
+}
+
+// 画面で見せる用：戦いの記録を「回ごと・敵ごと」に並べ直す（fight.html と町で共通）
+// 返す値：{ R: 回の数, rounds: [回][敵] = { foe: 相手の見張り, hit: { g, dmg, crit, kill } | null, atk: { g, to?, guard?, down? } | null },
+//          killAt: [敵] = 倒れた回 | null, downAt: { 見張り: たおれた回 }, end }
+export function roundsOf(F) {
+  const R = F.log.length ? Math.max(...F.log.map((e) => e.r)) + 1 : 0;
+  const nM = F.mobs.length, rounds = [], foe = new Array(nM).fill(null);
+  for (let r = 0; r < R; r++) rounds.push(Array.from({ length: nM }, () => ({ foe: null, hit: null, atk: null })));
+  for (const e of F.log) {
+    const X = rounds[e.r][e.m];
+    if (e.dmg) X.hit = { g: e.g, dmg: e.dmg, crit: e.crit, kill: !!e.kill };
+    else X.atk = { g: e.g, to: e.to, guard: !!e.guard, down: !!e.down };
+  }
+  for (let r = 0; r < R; r++) for (let m = 0; m < nM; m++) {
+    const X = rounds[r][m];
+    if (X.atk) foe[m] = X.atk.g; else if (foe[m] === null && X.hit) foe[m] = X.hit.g;
+    X.foe = foe[m];
+  }
+  // 最初の回に相手が決まっていない敵は、あとで最初に決まった相手を使う
+  for (let m = 0; m < nM; m++) { let f = null; for (let r = R - 1; r >= 0; r--) { if (rounds[r][m].foe) f = rounds[r][m].foe; else rounds[r][m].foe = f; } }
+  const killAt = F.mobs.map((mb) => (mb.fate === 'killed' ? mb.round : null));
+  const downAt = {}; for (const g of F.guards || []) if (g.down !== null) downAt[g.key] = g.down;
+  return { R, rounds, killAt, downAt, end: F.end };
 }
 
 // 倒した敵の落とし物（config.combat.mobs[type].drops = { 物: [最小, 最大] }）

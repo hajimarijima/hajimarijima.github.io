@@ -412,7 +412,7 @@ t('夜：sim.js で履歴に残り、ケガをした人は次の日「休み」�
   assert.ok(h.every((x) => /日目の夜、/.test(x.text)));
   assert.strictEqual(rd('villagers.json').length, 20);
   const life = rd('life.json');
-  for (const k in life) for (const d of life[k].diary) if (/ケガで、今日は家で休んだ/.test(d.text)) assert.ok(life[k].diary.some((e) => e.day === d.day - 1 && /ケガをした/.test(e.text)), 'ケガの次の日だけ休む');
+  for (const k in life) for (const d of life[k].diary) if (/ケガで、今日は家で休んだ/.test(d.text)) assert.ok(life[k].diary.some((e) => e.day === d.day - 1 && /ケガをした|たおれた/.test(e.text)), 'ケガの次の日だけ休む');
   // 戦い：倒した数・経験値・落とし物・記録
   const killers = Object.values(life).filter((l) => l.kills && l.kills.total > 0);
   assert.ok(killers.length > 0, '敵を倒した見張りがいる');
@@ -422,6 +422,15 @@ t('夜：sim.js で履歴に残り、ケガをした人は次の日「休み」�
   const st = rd('state.json');
   assert.ok(st.night === null || st.night.quiet || (st.night.fight && Array.isArray(st.night.fight.log)), '夜の戦いの記録（町の画面で数字を出す元）');
   assert.ok(rd('history.json').some((x) => /落とし物/.test(x.text)), '落とし物をチェストに入れた記録');
+  assert.ok(!h.some((x) => /逃げ|追い払/.test(x.text)), '敵は逃げない');
+  // 建てる段取り：部品を作る → 建て始める（土台）→ 壁・屋根 → できあがり
+  const hAll = rd('history.json');
+  assert.ok(hAll.some((x) => x.type === 'first' && /建てる部品/.test(x.text)), 'はじめて部品を作った記録');
+  assert.ok(hAll.some((x) => x.type === 'build_start' && /まず土台から/.test(x.text)), '建て始めた記録');
+  assert.ok(hAll.some((x) => x.type === 'build_stage' && /土台ができた/.test(x.text)), '土台ができた記録');
+  const iS = hAll.findIndex((x) => x.type === 'build_start'), iB = hAll.findIndex((x, i) => i > iS && x.type === 'build');
+  assert.ok(iS >= 0 && iB > iS, '建て始めてから、あとでできあがる');
+  assert.ok(h.some((x) => /守りきった|みんなたおれた/.test(x.text)), '守りきったか、見張りが全員たおれたかが残る');
   // 同じ種なら同じ結果
   const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'town-night2-'));
   fs.writeFileSync(path.join(dir2, 'config.json'), JSON.stringify(cfgN));
@@ -446,10 +455,14 @@ t('戦い：攻撃力は装備で決まる・クリティカルは良い装備�
     kHand += run(null, 'k' + i).mobs.filter((m) => m.fate === 'killed').length;
     const F = run('iron_sword', 'k' + i); kIron += F.mobs.filter((m) => m.fate === 'killed').length;
     for (const e of F.log) if (e.dmg) { hits++; if (e.crit) crit++; }
-    for (const m of F.mobs) assert.ok(['killed', 'fled', 'dawn'].includes(m.fate));
+    for (const m of F.mobs) assert.ok(['killed', 'raid'].includes(m.fate), '敵は逃げない：倒れるか、見張りが全員たおれて残るか');
+    if (F.end === 'won') assert.ok(F.mobs.every((m) => m.fate === 'killed'), '守りきった夜は敵が全員倒れている');
+    else assert.ok(F.guards.every((g) => g.down !== null), '負けた夜は見張りが全員たおれている');
+    for (const g of F.guards) assert.strictEqual(g.down !== null, F.log.some((e) => e.g === g.key && e.down), 'たおれた記録が合う');
+    for (const g of F.guards) if (g.down !== null) assert.ok(!F.log.some((e) => e.g === g.key && e.r > g.down), 'たおれた見張りはそのあと戦わない');
     for (const e of F.log) if (e.kill) assert.strictEqual(F.mobs[e.m].fate, 'killed');
   }
-  assert.ok(kIron > kHand * 2, `鉄の剣の方がたくさん倒す（素手 ${kHand} / 鉄 ${kIron}）`);
+  assert.ok(kIron > kHand * 1.2, `鉄の剣の方がたくさん倒す（素手 ${kHand} / 鉄 ${kIron}）`);
   const cr = crit / hits; assert.ok(Math.abs(cr - CB.critChance('iron_sword', C)) < 0.04, `クリティカルの割合 ${cr.toFixed(3)}`);
   const d = CB.rollDrops('skeleton', C, CB.seededRng('d'));
   assert.ok(Object.keys(d).every((k) => ['bone', 'arrow'].includes(k)), 'スケルトンは骨と矢');
@@ -1068,7 +1081,7 @@ t('町のチェスト：中身を 材料・食べ物・道具・その他 に分
   assert.deepStrictEqual(g.tool, [['wood_axe', 1]]);
   assert.deepStrictEqual(g.other, [['old_coin', 1]]);
   const b = Object.keys(cfg.buildings).find((k) => cfg.buildings[k].cost.wood && cfg.buildings[k].cost.stone);
-  const c = cfg.buildings[b].cost;
+  const c = require('../js/construction.js').needsOf(b, cfg).raw; // 部品にした分を引いた材料
   const st = { plan: { build: b, site: { label: 'テスト' }, leveled: 1 }, resources: { wood: c.wood + 50, stone: 1, food: 0 }, store: {} };
   const p = CV.goalProgress(st, cfg, 10);
   const w = p.rows.find((x) => x.key === 'wood'), s = p.rows.find((x) => x.key === 'stone');
@@ -1076,6 +1089,18 @@ t('町のチェスト：中身を 材料・食べ物・道具・その他 に分
   assert.strictEqual(s.have, 1);
   assert.strictEqual(p.ready, false);
   assert.ok(CV.goalHtml(st, cfg, 10).includes(`1／${c.stone}`));
+  assert.ok(p.rows.some((x) => x.part && x.icon === 'beam'), '部品（柱）の行もある');
+  // 部品にした分＋残りの材料＝建物の cost（全体の量は変わらない）。部品のアイコンと名前がある
+  const CON = require('../js/construction.js');
+  for (const k of ['hut', 'house', 'workshop', 'castle']) {
+    const nd = CON.needsOf(k, cfg), cost = cfg.buildings[k].cost, used = { wood: 0, stone: 0, food: 0 };
+    for (const [pk, n] of Object.entries(nd.parts)) for (const [it, m] of Object.entries(cfg.construction.parts[pk].from)) for (const r in used) used[r] += ((cfg.items[it].value || {})[r] || 0) * m * n;
+    for (const r of Object.keys(cost)) assert.ok(Math.abs(nd.raw[r] + used[r] - cost[r]) < 1, `${k} の ${r}：部品 ${used[r]} + 残り ${nd.raw[r]} ≒ ${cost[r]}`);
+    assert.ok(nd.parts.beam > 0, `${k} は柱がいる`);
+  }
+  assert.deepStrictEqual(CON.needsOf('fence', cfg).parts, {}, '柵は部品なし');
+  for (const k of Object.keys(cfg.construction.parts)) { assert.ok(cfg.items[k] && cfg.items[k].part, `${k} は部品`); assert.ok(fs.existsSync(path.join(__dirname, '..', 'icons', k + '.png')), `${k} のアイコン`); }
+  assert.deepStrictEqual([0, 0.33, 0.34, 0.66, 0.67, 1].map((x) => CON.stageOf(x, cfg)), [0, 0, 1, 1, 2, 3], '土台 → 壁 → 屋根 → できあがり');
   assert.strictEqual(CV.goalProgress({ plan: null }, cfg), null);
   assert.ok(CV.chestHtml({}, cfg).includes('空っぽ'));
 });

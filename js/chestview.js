@@ -2,6 +2,7 @@
 // ・チェストの中身を 材料／部品／食べ物／道具／その他 に分けて、マス目（アイコンと数）で出す
 // ・今つくっている物（投票で決まった建物）の、あつまった数／いる数 と進みぐあいのバー
 
+import { needsOf, stageOf, STAGE_NAMES } from './construction.js';
 const RES_JA = { wood: '木材', stone: '石', food: '食べ物' };
 export const GROUPS = [['mat', '材料'], ['part', '部品'], ['food', '食べ物'], ['tool', '道具'], ['other', 'その他']];
 const MAT = ['log', 'planks', 'stick', 'driftwood', 'cobble', 'coal', 'iron', 'gold', 'diamond', 'wool', 'stump', 'sapling', 'seeds'];
@@ -37,8 +38,10 @@ export function goalProgress(state, config, hour) {
   const b = config.buildings[plan.build] || { name: plan.build, cost: {} };
   const items = config.items || {}, res = state.resources || {}, store = state.store || {};
   const rows = [];
-  for (const [r, n] of Object.entries(b.cost || {})) if (n > 0) rows.push({ key: r, name: RES_JA[r] || r, have: plan.started ? n : Math.min(res[r] || 0, n), need: n, res: true });
-  for (const [k, n] of Object.entries(b.parts || {})) rows.push({ key: k, name: (items[k] || {}).name || k, have: plan.started ? n : Math.min(store[k] || 0, n), need: n, icon: k });
+  // 材料（部品にした分を引いた残り）と部品（柱・石材・屋根板・扉）。建て始めたら全部そろった扱い
+  const NEED = config.construction ? needsOf(plan.build, config) : { raw: b.cost || {}, parts: b.parts || {} };
+  for (const [r, n] of Object.entries(NEED.raw)) if (n > 0) rows.push({ key: r, name: RES_JA[r] || r, have: plan.started ? n : Math.min(res[r] || 0, n), need: n, res: true });
+  for (const [k, n] of Object.entries(NEED.parts)) rows.push({ key: k, name: (items[k] || {}).name || k, have: plan.started ? n : Math.min(store[k] || 0, n), need: n, icon: k, part: true });
   let stage = 'gather', prog = 0;
   if (plan.started) {
     stage = 'build';
@@ -51,10 +54,7 @@ export function goalProgress(state, config, hour) {
 
 // 建てている時の見た目の段階（土台 → 壁 → 屋根 → できあがり）
 export function stageName(prog, stages = [0.34, 0.67]) {
-  if (prog >= 1) return 'できあがり';
-  if (prog >= stages[1]) return '屋根';
-  if (prog >= stages[0]) return '壁';
-  return '土台';
+  return STAGE_NAMES[stageOf(prog, { construction: { stages } })];
 }
 
 const bar = (k) => `<span class="pbar"><i style="width:${Math.round(Math.max(0, Math.min(1, k)) * 100)}%"></i></span>`;

@@ -1,9 +1,9 @@
 // 戦いの数字（ダメージ・クリティカル・ガード・たおした）。当たった所から数字がぽんと跳ねて浮き上がり、消える。
 // 時間で決まる（同じ時刻なら同じ見た目）ので、止めた画面や巻き戻しでも同じ所に出る。
 //   ft.begin() → ft.show(id, 世界の位置, 文字, 種類, 出てからの秒) を何回か → ft.end(camera)
-//   種類：dmg 白／crit 黄〜橙（色と大きさだけで分ける。札はつけない）／guard ガード／kill たおした！／hurt 見張りが受けたダメージ（赤で小さく）
+//   種類：dmg 白／crit 黄〜橙（色と大きさだけで分ける。札はつけない）／guard ガード／kill たおした！／hurt 見張りが受けたダメージ（赤で小さく）／down 見張りがたおれた
 // 数字は字体に頼らず、5×7 のドット絵を canvas に自前で描く（ネットがなくても同じ見た目）
-const LIFE = { dmg: 1.0, crit: 1.25, guard: 0.9, kill: 1.4, hurt: 0.9 };
+const LIFE = { dmg: 1.0, crit: 1.25, guard: 0.9, kill: 1.4, hurt: 0.9, down: 1.8 };
 // 数字のドット絵（5×7）。横に 1 つ太らせて 6×7 で描く
 const GLYPH = {
   0: ['01110', '10001', '10011', '10101', '11001', '10001', '01110'], 1: ['00100', '01100', '00100', '00100', '00100', '00100', '01110'],
@@ -47,6 +47,7 @@ function addStyle() {
 .ft canvas { display: block; image-rendering: pixelated; position: static !important; width: auto !important; height: auto !important; inset: auto !important; } /* ページ全体の canvas 指定（3D 画面用）に引っぱられないように */
 .ft.guard { color: #bfe4ff; font-size: 22px; text-shadow: ${o('#0c2340', 2)}, 0 3px 0 #0c2340; }
 .ft.kill { color: #fff1a8; font-size: 26px; text-shadow: ${o('#3a2400', 2)}, 0 4px 0 #3a2400; }
+.ft.down { color: #ffb4a4; font-size: 30px; text-shadow: ${o('#3a0a06', 2)}, 0 4px 0 #3a0a06; }
 .ft.hurt { color: #ff5a4a; font-size: 18px; text-shadow: ${o('#2a0606', 2)}, 0 3px 0 #2a0606; }`;
   document.head.appendChild(st);
 }
@@ -75,7 +76,9 @@ export function makeFloatText(THREE) {
     // w, h：描く所の大きさ、ox, oy：描く所の左上（画面の中の位置）
     end(camera, w = innerWidth, h = innerHeight, ox = 0, oy = 0) {
       used.clear();
-      for (const it of items) {
+      // 同じ所に重なる札は、新しい物をその場に、古い物を上へずらして積む（重ならない）
+      const placed = [];
+      for (const it of items.slice().sort((a, b) => a.age - b.age || (a.id < b.id ? -1 : 1))) {
         v.set(it.x, it.y, it.z).project(camera);
         if (v.z > 1 || v.z < -1) continue;
         let el = pool.get(it.id);
@@ -86,13 +89,17 @@ export function makeFloatText(THREE) {
           el.firstChild.textContent = num ? '' : it.text; el.lastChild.style.display = num ? '' : 'none';
           if (num) drawNumber(el.lastChild, it.text, it.kind);
           el.dataset.t = it.text; el.dataset.d = it.kind;
+          el.style.display = ''; el.style.transform = 'none'; el.dataset.w = el.offsetWidth; el.dataset.h = el.offsetHeight;
         }
         // ぽんと跳ねる（はじめ大きく → 少し縮む）→ 浮き上がる → 最後に薄くなる
         const k = it.age / it.life, pop = it.age < 0.08 ? 0.5 + it.age / 0.08 * 0.9 : it.age < 0.2 ? 1.4 - (it.age - 0.08) / 0.12 * 0.4 : 1;
         const hop = Math.sin(Math.min(1, it.age / 0.35) * Math.PI) * (it.kind === 'crit' ? 26 : 16);
         const rise = k * (it.kind === 'hurt' ? 30 : 46);
         const drift = ((it.id.length * 7 + it.id.charCodeAt(it.id.length - 1)) % 5 - 2) * 6 * k;
-        const x = ox + (v.x + 1) / 2 * w + drift, y = oy + (1 - v.y) / 2 * h - hop - rise;
+        const x = ox + (v.x + 1) / 2 * w + drift; let y = oy + (1 - v.y) / 2 * h - hop - rise;
+        const bw = (+el.dataset.w || 40) * pop, bh = (+el.dataset.h || 30) * pop;
+        for (let moved = true, n = 0; moved && n < 8; n++) { moved = false; for (const p of placed) if (Math.abs(p.x - x) < (p.w + bw) / 2 && Math.abs(p.y - y) < (p.h + bh) / 2) { y = p.y - (p.h + bh) / 2 - 2; moved = true; } }
+        placed.push({ x, y, w: bw, h: bh });
         el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%) scale(${pop.toFixed(3)})`;
         el.style.opacity = String(k > 0.7 ? Math.max(0, 1 - (k - 0.7) / 0.3) : 1);
         el.style.display = '';

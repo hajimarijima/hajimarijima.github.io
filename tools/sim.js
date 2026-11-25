@@ -17,6 +17,7 @@ const N = require('./night');
 const O = require('./ores');
 const CR = require('./craft');
 const HR = require('../js/hours.js');
+const CON = require('../js/construction.js'); // 材料 → 部品 → 建てる（土台・壁・屋根）
 const CB = require('../js/combat.js'); // 夜の戦い・バッジの段 // 1 日 24 時間の行動の記号と数の決まり
 
 const ROOT = path.join(__dirname, '..');
@@ -1261,14 +1262,41 @@ function stepDay(S) {
     }
   }
 
-  // ---- 8. 建てる（投票で決まった物を、決まった場所に。整地が終わって、チェストの材料が足りたら） ----
-  // チェストだけで足りなければ、材料を持っている人が持ち寄る（その人は明日の仕事が往復ぶん減る）
-  const lacking = () => RES.filter((r) => state.res[r] + 1e-9 < (cost[r] || 0));
-  if (plan && plan.site && plan.leveled && lacking().length) {
+  // ---- 8. 建てる（投票で決まった物を、決まった場所に）：材料 → 部品 → 建てる（土台 → 壁 → 屋根 → できあがり） ----
+  // 部品（柱・石材・屋根板・扉）はチェストの原木・丸石・板から毎日少しずつ作る。部品にした分を引いた残りの材料と、部品がそろったら建て始める。
+  // チェストだけで材料が足りなければ、材料を持っている人が持ち寄る（その人は明日の仕事が往復ぶん減る）
+  const CNF = config.construction || {};
+  const NEED = plan ? CON.needsOf(plan.build, config) : null;
+  const rawCost = NEED ? NEED.raw : {};
+  const lacking = () => RES.filter((r) => state.res[r] + 1e-9 < (rawCost[r] || 0));
+  const partsLack = () => (NEED ? Object.entries(NEED.parts).filter(([k, n]) => (state.store[k] || 0) < n) : []);
+  if (plan && plan.site && !plan.started && partsLack().length && CNF.parts) {
+    const made = {}; let budget = CNF.partsPerDay || 6;
+    for (const [k, n] of Object.entries(NEED.parts)) {
+      const from = (CNF.parts[k] || {}).from || {};
+      while ((state.store[k] || 0) < n && budget > 0) {
+        if (from.planks && (state.store.planks || 0) < from.planks && (state.store.log || 0) > 0) { // 板が足りなければ原木から（原木 1 → 板 4）
+          state.store.log--; if (!state.store.log) delete state.store.log; state.store.planks = (state.store.planks || 0) + 4; continue;
+        }
+        if (!Object.entries(from).every(([it, m]) => (state.store[it] || 0) >= m)) break;
+        for (const [it, m] of Object.entries(from)) { state.store[it] -= m; if (!state.store[it]) delete state.store[it]; }
+        state.store[k] = (state.store[k] || 0) + 1; made[k] = (made[k] || 0) + 1; budget--;
+      }
+    }
+    syncRes();
+    if (Object.keys(made).length) {
+      const txt = Object.entries(made).map(([k, n]) => `${ITEMS[k] ? ITEMS[k].name : k} ${n}`).join('、');
+      const maker = active.slice().sort((a, b) => hashStr(a.key + ':pt' + day) - hashStr(b.key + ':pt' + day))[0];
+      if (maker && life[maker.key]) { const L = life[maker.key]; L.diary[L.diary.length - 1].text += `${B(plan.build).name}の部品（${txt}）を作った。`; L.xp += IC.xp.carry || 0; }
+      first('part', `はじめて建てる部品（${txt}）を作った。材料を部品にしてから建てる。`, { parts: made });
+    }
+  }
+  const lackingAll = () => lacking().length || partsLack().length;
+  if (plan && plan.site && plan.leveled && !plan.started && lacking().length) {
     const pooled = { ...state.res };
     const carriers = active.map((v) => ({ v, val: valueOf(Object.fromEntries(life[v.key].inv.filter((s) => s && !I.isTool(s) && config.spendOrder.wood.concat(config.spendOrder.stone, config.spendOrder.food).includes(s.item)).map((s) => [s.item, s.n]))) }));
     for (const c of carriers) for (const r of RES) pooled[r] += c.val[r];
-    if (RES.every((r) => pooled[r] + 1e-9 >= (cost[r] || 0))) {
+    if (RES.every((r) => pooled[r] + 1e-9 >= (rawCost[r] || 0))) {
       carriers.sort((a, b) => RES.reduce((s, r) => s + (lacking().includes(r) ? b.val[r] - a.val[r] : 0), 0));
       for (const c of carriers) {
         const lk = lacking();
@@ -1282,12 +1310,34 @@ function stepDay(S) {
       }
     }
   }
-  if (plan && plan.site && plan.leveled && !lacking().length) {
-    for (const r of RES) if (cost[r]) spend(r, cost[r]);
+  // 材料と部品がそろった：使って建て始める（まず土台）
+  if (plan && plan.site && plan.leveled && !plan.started && !lackingAll()) {
+    for (const r of RES) if (rawCost[r]) spend(r, rawCost[r]);
+    for (const [k, n] of Object.entries(NEED.parts)) { state.store[k] -= n; if (!state.store[k]) delete state.store[k]; }
+    syncRes();
+    const bc = B(plan.build).cost || {};
+    let bs = active.filter((v) => RES.some((r) => (bc[r] || 0) > 0 && life[v.key].contrib[r] > 0)).map((v) => v.key);
+    if (!bs.length) bs = active.slice().sort((a, b) => hashStr(a.key + ':bd' + day) - hashStr(b.key + ':bd' + day)).slice(0, 2).map((v) => v.key);
+    Object.assign(plan, { started: day, buildNeed: CON.buildHours(plan.build, config), buildH: 0, builders: bs });
+    const pt = Object.entries(NEED.parts).map(([k, n]) => `${ITEMS[k] ? ITEMS[k].name : k} ${n}`).join('、');
+    hist('build_start', `${B(plan.build).name}の材料${pt ? 'と部品（' + pt + '）' : ''}がそろったので、${plan.site.label}で建て始めた。${CON.hasStages(plan.build, config) ? 'まず土台から。' : ''}`, { buildingType: plan.build });
+  }
+  // 建てている：毎日、建てる人が少しずつ進める（土台 → 壁 → 屋根）。町の画面は hourProg で 1 時間ごとの進みを見せる
+  if (plan && plan.started && plan.buildH < plan.buildNeed) {
+    const nB = Math.min(CNF.builders || 4, Math.max(2, (plan.builders || []).length));
+    const before = plan.buildH, after = Math.min(plan.buildNeed, before + nB * (CNF.builderHours || 3));
+    plan.hourProg = Array.from({ length: 24 }, (_, h) => +((before + (after - before) * Math.max(0, Math.min(1, (h - 8) / 9))) / plan.buildNeed).toFixed(3));
+    plan.buildH = after;
+    const s0 = CON.stageOf(before / plan.buildNeed, config), s1 = CON.stageOf(after / plan.buildNeed, config), nm = B(plan.build).name;
+    const staged = CON.hasStages(plan.build, config);
+    if (staged) for (let s = s0 + 1; s <= Math.min(2, s1); s++) hist('build_stage', `${nm}の${CON.STAGE_NAMES[s - 1]}ができた。次は${CON.STAGE_NAMES[s]}。`, { buildingType: plan.build, stage: s });
+    for (const k of (plan.builders || []).slice(0, nB)) if (life[k] && life[k].diary.length) life[k].diary[life[k].diary.length - 1].text += staged ? `${nm}を建てた（${CON.STAGE_NAMES[Math.min(2, s1)]}）。` : `${nm}を作った。`;
+  }
+  if (plan && plan.started && plan.buildH >= plan.buildNeed - 1e-9) {
     const def = B(plan.build);
     const pos = plan.site;
     const id = plan.build + '_' + world.buildings.length;
-    const builders = active.filter((v) => RES.some((r) => (cost[r] || 0) > 0 && life[v.key].contrib[r] > 0)).map((v) => v.key);
+    const builders = plan.builders || [];
     const b = { id, type: plan.build, x: pos.x, z: pos.z, plot: pos.plot, rot: +Math.atan2(-pos.x, -(pos.z + 1)).toFixed(3), day, builders, variant: R.int(0, 3), voted: true };
     if (pos.plot === 'coast' || pos.plot === 'coast2' || pos.plot === 'coast3') b.rot = Math.PI;
     if (pos.rot !== undefined) b.rot = pos.rot;
@@ -1421,7 +1471,7 @@ function stepDay(S) {
       let gain = XP.guard || 0;
       const kl = (NT.kills || {})[k] || {};
       for (const t of Object.keys(kl)) { gain += (XP['kill_' + t] || 0) * kl[t]; L.kills = L.kills || { total: 0 }; L.kills[t] = (L.kills[t] || 0) + kl[t]; L.kills.total += kl[t]; }
-      gain += (XP.repel || 0) * (((NT.stats || {})[k] || {}).fled || 0);
+      if (NT.fight && NT.fight.end === 'won') gain += XP.repel || 0; // 守りきった夜（敵を全員倒した）
       L.xp += gain; L.nightXp = { day, xp: gain };
       // バッジ（見張り番など）：数が段に届いたら、町の歴史に残す
       if (BG) for (const [id, B] of Object.entries(BG.list)) {

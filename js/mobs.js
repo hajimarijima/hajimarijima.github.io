@@ -261,7 +261,7 @@ function burnFx(g, t, k) {
       m.visible = true;
     } else { // 煙：上へのぼって薄くなる
       const u = (t * 0.6 + ph) % 1;
-      m.position.set(sx * 1.4, 1.6 + u * 2.2, sz); m.scale.setScalar(0.6 + u * 1.6); m.material.opacity = 0.55 * (1 - u);
+      m.position.set(sx * 1.4, 1.6 + u * 2.2, sz); m.scale.setScalar(0.5 + u * 0.7); m.material.opacity = 0.35 * (1 - u);
     }
   });
 }

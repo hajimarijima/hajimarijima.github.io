@@ -21,7 +21,7 @@ import { makeTerrain, BLOCK } from './terrain_gen.js';
 import { makeTerrainView } from './terrain.js';
 import { SpatialHash, TILE } from './tilemap.js';
 import { makeClouds } from './clouds.js';
-import { rollHit, seededRng } from './combat.js';
+import { seededRng, fightNight, roundsOf } from './combat.js';
 import { makeFloatText } from './floattext.js';
 import { makeMob, animateMob, makeArrow, arrowAt, flashMob, fadeMob, makeHitFx, hitFxAt, MOB_SCALE } from './mobs.js';
 import { makeChunkObjects, makeFx, setRock, rockScale, setTreeState, setTreeFall, setTreeCrack, makeDebris, makeChest, setChestOpen, makeMarker, strikeAt, breakTime, dropPos, chipList, DIG, CHOP, FALL_END } from './blocks.js';
@@ -258,14 +258,41 @@ async function main() {
   // 建てている所（投票で決まった物・場所。整地が終わったら足場）
   const plan = state.plan;
   if (plan && plan.site && plan.leveled && plan.site.plot !== 'ring') {
+    // 建てる段階：材料・部品を集めている間は足場と材料の山。建て始めたら 土台 → 壁 → 屋根 と少しずつできる（sim の hourProg）
     const g = new THREE.Group();
-    const w = 2.2;
-    box(w * 2 + 0.6, 0.06, w * 2 + 0.6, 0xb59a72, 0, 0.03, 0, g);
-    for (const [x, z] of [[-w, -w], [w, -w], [-w, w], [w, w]]) box(0.22, 3.0, 0.22, 0x9b6b3d, x, 1.5, z, g);
-    for (const y of [1.1, 2.4]) { box(w * 2 + 0.3, 0.18, 0.18, 0x8a5a33, 0, y, -w, g); box(w * 2 + 0.3, 0.18, 0.18, 0x8a5a33, 0, y, w, g); box(0.18, 0.18, w * 2 + 0.3, 0x8a5a33, -w, y, 0, g); box(0.18, 0.18, w * 2 + 0.3, 0x8a5a33, w, y, 0, g); }
-    box(w * 2, 0.5, w * 2, 0x9a7650, 0, 0.3, 0, g);
+    const L = (config.buildings[plan.build] || {}).look || {};
+    const W = Math.max(2.4, Math.min(7, L.w || 4)) / 2, D = Math.max(2.4, Math.min(7, L.d || L.w || 4)) / 2, Hh = Math.max(1.6, Math.min(4.5, L.h || 2.4));
+    const hp = Array.isArray(plan.hourProg) ? plan.hourProg[((Math.floor(hourNow()) % 24) + 24) % 24] : null;
+    const prog = plan.started ? Math.max(0, Math.min(1, hp ?? (plan.buildNeed ? (plan.buildH || 0) / plan.buildNeed : 0))) : 0;
+    const st = (config.construction || {}).stages || [0.34, 0.67];
+    const k0 = Math.min(1, prog / st[0]), k1 = Math.max(0, Math.min(1, (prog - st[0]) / (st[1] - st[0]))), k2 = Math.max(0, Math.min(1, (prog - st[1]) / (1 - st[1])));
+    const wallC = new THREE.Color(L.wall || '#b08a5c').getHex(), roofC = new THREE.Color(L.roof || '#7a4a2e').getHex();
+    box(W * 2 + 1.0, 0.06, D * 2 + 1.0, 0xb59a72, 0, 0.03, 0, g); // ならした地面
+    if (!plan.started) { // 材料と部品の山（集めている間）
+      for (let i = 0; i < 3; i++) box(1.6, 0.22, 0.26, 0xa87a48, -W + 0.9, 0.12 + i * 0.24, D + 0.9 + (i % 2) * 0.1, g);
+      for (let i = 0; i < 3; i++) box(0.5, 0.42, 0.5, 0x9a9da2, W - 0.4 - i * 0.55, 0.21, D + 0.9, g);
+    }
+    if (prog > 0) box(W * 2 + 0.3, 0.42 * k0, D * 2 + 0.3, 0x8f9296, 0, 0.21 * k0, 0, g); // 土台（石材）
+    if (k0 >= 1) { // 壁：四すみの柱が立ち、壁が下から上へ
+      const hw = Hh * k1;
+      for (const [x, z] of [[-W, -D], [W, -D], [-W, D], [W, D]]) box(0.3, Math.max(0.05, Hh * Math.min(1, k1 * 2)), 0.3, 0x8a5e3a, x, 0.42 + Hh * Math.min(1, k1 * 2) / 2, z, g);
+      if (hw > 0.02) {
+        box(W * 2, hw, 0.18, wallC, 0, 0.42 + hw / 2, -D, g); box(W * 2, hw, 0.18, wallC, 0, 0.42 + hw / 2, D, g);
+        box(0.18, hw, D * 2, wallC, -W, 0.42 + hw / 2, 0, g); box(0.18, hw, D * 2, wallC, W, 0.42 + hw / 2, 0, g);
+      }
+    }
+    if (k1 >= 1 && k2 > 0) { // 屋根：屋根板を下から並べていく
+      const n = Math.max(1, Math.ceil(k2 * 4));
+      for (let i = 0; i < n; i++) { const t = (i + 0.5) / 4, y = 0.42 + Hh + t * Hh * 0.55, w2 = (W + 0.35) * (1 - t * 0.85); box(w2 * 2, 0.22, (D + 0.35) * 2 * (1 - t * 0.85), roofC, 0, y, 0, g); }
+    }
+    if (prog < 1) { // 足場
+      const sw = W + 0.5, sd = D + 0.5, sh = 0.42 + Hh + 0.8;
+      for (const [x, z] of [[-sw, -sd], [sw, -sd], [-sw, sd], [sw, sd]]) box(0.16, sh, 0.16, 0x9b6b3d, x, sh / 2, z, g);
+      for (const y of [1.1, Math.min(sh - 0.2, 2.4)]) { box(sw * 2 + 0.2, 0.14, 0.14, 0x8a5a33, 0, y, -sd, g); box(sw * 2 + 0.2, 0.14, 0.14, 0x8a5a33, 0, y, sd, g); box(0.14, 0.14, sd * 2 + 0.2, 0x8a5a33, -sw, y, 0, g); box(0.14, 0.14, sd * 2 + 0.2, 0x8a5a33, sw, y, 0, g); }
+    }
     g.position.set(plan.site.x, 0, plan.site.z); g.rotation.y = Math.atan2(-plan.site.x, -(plan.site.z + 1)); scene.add(g);
-    const tag = document.createElement('div'); tag.className = 'btag new'; tag.textContent = '建てている：' + config.buildings[plan.build].name;
+    const stN = ['土台', '壁', '屋根', 'できあがり'][prog >= 1 ? 3 : prog >= st[1] ? 2 : prog >= st[0] ? 1 : 0];
+    const tag = document.createElement('div'); tag.className = 'btag new'; tag.textContent = '建てている：' + config.buildings[plan.build].name + (plan.started ? `（${stN} ${Math.round(prog * 100)}%）` : '（材料と部品を集めている）');
     const lo = new CSS2DObject(tag); lo.position.set(plan.site.x, 4.2, plan.site.z); scene.add(lo); btags.push(lo);
   }
   // 「どこに建てる？」の投票中は、A/B/C の場所に旗
@@ -904,166 +931,185 @@ async function main() {
       mobs.push({ m, type: g.type, i, target, off: i * 3.1, side: (i % 3 - 1) * 3.2, arrows, fx, fx2 });
     }
   }
-  // 近くで戦う敵（ゾンビ・クモ）の 1 回のやりとり：敵がなぐる（盾で受ける）→ 見張りが振りかぶって打つ → 敵が赤く光って下がる。何回か打たれたら逃げる
-  const MELEE = { zombie: { ex: 2.4, kb: 1.15, back: 0 }, spider: { ex: 2.0, kb: 0.9, back: 1.9 } };
-  const Q_SWING = 0.45, Q_HIT = Q_SWING + (1 - Q_SWING) * 0.75; // 見張りが振り始める所・当たる所（strike の 0.75）
-  // 見張りが打つ所：敵の手前 3。柵があれば柵の内側（一歩前）まで
-  const meleeSpot = (mb, goal) => { const G = mb.target.guard, dx = goal.x - G.x, dz = goal.z - G.z, dl = Math.hypot(dx, dz) || 1, r = ringR ? Math.min(1.4, dl) : Math.max(0, dl - 3); return { x: G.x + (dx / dl) * r, z: G.z + (dz / dl) * r }; };
-  const meleeGoal = (mb, start) => {
-    const G = mb.target && mb.target.guard;
-    if (!G || ringR) return onRing(mobR, (mb.target ? mb.target.guardS : 0) + (mb.i % 2 ? 1.3 : -1.3)); // 柵があれば柵の外で止まる
-    const dx = start.x - G.x, dz = start.z - G.z, dl = Math.hypot(dx, dz) || 1, sd = (mb.i % 2 ? 1 : -1) * Math.min(1, Math.floor(mb.i / guards.length)) * 1.4;
-    return { x: G.x + (dx / dl) * 6 - (dz / dl) * sd, z: G.z + (dz / dl) * 6 + (dx / dl) * sd }; // 持ち場の少し先まで来る（見張りが走って迎え撃つ）
-  };
+  // 夜の戦い：sim の戦い（state.night.fight）をそのまま回ごとに見せる。敵は逃げず、どちらかが全員倒れるまで戦う。
+  // 見張りの体力がなくなると「たおれた」と横になり、ほかの見張りが代わる。全員たおれたら、残った敵は柵（なければ町の中）まで来て壊し、
+  // 朝日でゾンビ・スケルトンは燃え、クモは森へ戻る。ゾンビははじかれても何度も向かい、クモは飛びかかっては離れ、スケルトンは離れて撃つ
+  const MELEE = { zombie: { kb: 1.15, back: 0, sp: 1.4 }, spider: { kb: 0.9, back: 1.9, sp: 2.6 } };
+  const Q_SWING = 0.45, Q_HIT = Q_SWING + (1 - Q_SWING) * 0.75, Q_PUNCH = 0.17; // 見張りが振り始める所・当たる所・敵の攻撃が当たる所（1 回の中の割合）
+  const RD = 2.6, DIE = 1.8, SHOT_D = 1.4, SHOT_REL = 0.84, ARROW_T = 0.4, RAID_WALK = 4, RAID = 8, PAUSE = 5;
   TM0.ready = performance.now();
   Object.assign(window.TOWN, { mobs, people, timing: Object.fromEntries(Object.entries(TM0).map(([k, v]) => [k, Math.round(v - TM0.start)])) }); // 確かめ用
-  const MOB_CYCLE = 34; // 近づく → 戦う → 倒れる・逃げる を、夜の間くり返して見せる
-  const DIE = 1.8, Q_PUNCH = 0.17, SHOT = 2.2, CYS = SHOT + 1.7;
-  const ft = makeFloatText(THREE); // ダメージの数字・クリティカル・ガード・たおした
-  // 敵ごとの打ち合いの中身：sim の戦い（state.night.fight）の数字そのまま。古いデータでは装備から決まった乱数で作る
-  function scriptFor(mb) {
-    const F = N && N.fight, CB = config.combat;
-    if (F && F.mobs && F.mobs[mb.i]) {
-      const hits = F.log.filter((e) => e.m === mb.i && e.dmg), atks = F.log.filter((e) => e.m === mb.i && !e.dmg);
-      const atkOf = (a) => (!a ? {} : a.guard ? { guard: true } : { to: a.to });
-      const ex = hits.slice(0, 8).map((h) => ({ hit: { dmg: h.dmg, crit: h.crit }, atk: [atkOf(atks.find((a) => a.r === h.r))] }));
-      if (!ex.length) for (const a of atks.slice(0, 4)) ex.push({ hit: null, atk: [atkOf(a)] });
-      if (!ex.length) ex.push({ hit: null, atk: [{}] });
-      return { ex, fate: F.mobs[mb.i].fate };
+  const ft = makeFloatText(THREE); // ダメージの数字・クリティカル・ガード・たおした・たおれた
+  // 戦いの中身：sim の記録。古いデータ（見張りの体力がない形）は、見張りの装備から決まった乱数でここで戦わせる
+  const FT = (() => {
+    if (!mobs.length) return null;
+    const CB = config.combat;
+    let F = N && N.fight && N.fight.guards && N.fight.mobs && N.fight.mobs.length === mobs.length ? N.fight : null;
+    if (!F && CB) {
+      const gs = guards.map((p) => { const gg = guardGear(p); return { key: p.v.key, weapon: gg.tool && gg.tool.startsWith('sword:') ? gg.tool.slice(6) + '_sword' : gg.tool ? 'tool' : null, shield: gg.shield }; });
+      F = fightNight({ mobs: mobs.map((mb) => ({ type: mb.type })), guards: gs, C: CB, rng: seededRng('town:' + state.day) });
     }
-    if (!CB) return { ex: [{ hit: null, atk: [{}] }], fate: 'dawn' };
-    const rng = seededRng('town:' + state.day + ':' + mb.i), S = CB.mobs[mb.type] || CB.mobs.zombie;
-    const gg = mb.target ? guardGear(mb.target) : { tool: null, shield: false };
-    const weapon = gg.tool && gg.tool.startsWith('sword:') ? gg.tool.slice(6) + '_sword' : gg.tool ? 'tool' : null;
-    let hp = S.hp, fate = null; const ex = [];
-    for (let e = 0; e < 7 && !fate; e++) {
-      const atk = [gg.shield && rng() < CB.shieldGuardP ? { guard: true } : { to: Math.max(1, S.atk + (rng() < 0.3 ? 1 : 0)) }];
-      const hit = rollHit(weapon, CB, rng); hp = Math.max(0, hp - hit.dmg);
-      if (hp <= 0) fate = 'killed'; else if (hp <= S.hp * CB.fleeAt && rng() < CB.fleeP) fate = 'fled';
-      ex.push({ atk, hit });
-    }
-    return { ex, fate: fate || 'dawn' };
+    if (!F) return null;
+    const T = roundsOf(F);
+    T.fate = F.mobs.map((m) => m.fate);
+    return T;
+  })();
+  const gByKey = Object.fromEntries(guards.map((p) => [p.v.key, p]));
+  const startOf = (mb) => ({ x: from.x * 0.85 + fside.x * mb.side, z: from.z * 0.85 + fside.z * mb.side });
+  // 敵の立つ所：相手の見張りの持ち場から、敵が来た向きへ（柵があれば柵の外）
+  function goalFor(mb, key) {
+    const G = gByKey[key] || guards[0], st = startOf(mb);
+    if (!G) return { x: st.x * 0.4, z: st.z * 0.4, d: { x: fdir.x, z: fdir.z } };
+    const H = G.guard, dx = st.x - H.x, dz = st.z - H.z, dl = Math.hypot(dx, dz) || 1, d = { x: dx / dl, z: dz / dl };
+    if (ringR) { const p = onRing(mobR + (mb.type === 'skeleton' ? 4 : 0), G.guardS + ((mb.i % 3) - 1) * 1.4); return { x: p.x, z: p.z, d }; }
+    const side = ((mb.i % 3) - 1) * 1.4, far = mb.type === 'skeleton' ? 10 : 6;
+    return { x: H.x + d.x * far - d.z * side, z: H.z + d.z * far + d.x * side, d };
   }
-  for (const mb of mobs) mb.script = scriptFor(mb);
+  const foeAt = (mb, r) => (FT && FT.R ? FT.rounds[Math.max(0, Math.min(FT.R - 1, r))][mb.i].foe : null);
+  function posAt(mb, r, q) { // 相手が代わった回は、はじめの 4 割で歩いて移る
+    const g1 = goalFor(mb, foeAt(mb, r));
+    if (r <= 0) return { ...g1, move: false };
+    const g0 = goalFor(mb, foeAt(mb, r - 1));
+    if (Math.abs(g0.x - g1.x) + Math.abs(g0.z - g1.z) < 0.01) return { ...g1, move: false };
+    const k = Math.min(1, q / 0.4);
+    return { x: g0.x + (g1.x - g0.x) * k, z: g0.z + (g1.z - g0.z) * k, d: g1.d, move: k < 1 };
+  }
+  const walkSp = (mb) => (mb.type === 'skeleton' ? 1.9 : MELEE[mb.type].sp);
+  const LOST = !!FT && FT.end === 'lost';
+  const TF = FT ? Math.max(...mobs.map((mb) => { const g = goalFor(mb, foeAt(mb, 0)), s = startOf(mb); return mb.i * 0.8 + Math.hypot(g.x - s.x, g.z - s.z) / walkSp(mb); })) + 0.6 : 0;
+  const MOB_CYCLE = FT ? TF + FT.R * RD + (LOST ? RAID_WALK + RAID : DIE + 2) + PAUSE : 34; // 近づく → 戦う → 倒れる（→ 柵を壊す）を、夜の間くり返して見せる
+  // 見張りがたおれる時刻（1 回りの中の秒）
+  for (const p of guards) {
+    p.downT = null;
+    const r = FT && FT.downAt[p.v.key]; if (r === undefined || r === null) continue;
+    const e = N && N.fight && N.fight.log ? N.fight.log.find((x) => x.r === r && x.g === p.v.key && x.down) : null;
+    p.downT = TF + r * RD + (e && mobs[e.m] && mobs[e.m].type === 'skeleton' ? SHOT_REL + ARROW_T : Q_PUNCH * RD);
+  }
+  // 壊しに行く所：柵があれば柵の内側の線、なければ見張りの持ち場より町の中
+  const raidAt = (mb) => { const G = gByKey[foeAt(mb, FT.R - 1)] || guards[0], s = (G ? G.guardS : 0) + ((mb.i % 3) - 1) * 1.6; return ringR ? onRing(ringR + 0.9, s) : onRing(postR - 4, s); };
   const chestAt = (mb, m) => ({ x: m.position.x, y: mb.type === 'spider' ? 1.5 : 3.0, z: m.position.z });
   const headAt = (G) => ({ x: G.ch.position.x, y: 4.2, z: G.ch.position.z });
-  function hitShow(mb, e, age, at) {
-    const X = mb.script.ex[e]; if (!X || !X.hit) return;
-    const id = mb.i + ':' + e;
+  function hitShow(mb, r, age, at) {
+    const X = FT.rounds[r] && FT.rounds[r][mb.i]; if (!X || !X.hit) return;
+    const id = mb.i + ':' + r;
     ft.show('h' + id, at, X.hit.dmg, X.hit.crit ? 'crit' : 'dmg', age);
-    if (age >= 0 && age < 0.45) { hitFxAt(mb.fx, at.x, at.y - 0.7, at.z, age / 0.45, mb.i + e); if (X.hit.crit) hitFxAt(mb.fx2, at.x + 0.3, at.y - 0.4, at.z, age / 0.45, mb.i + e + 7); }
-    if (e === mb.script.ex.length - 1 && mb.script.fate === 'killed') ft.show('k' + id, { x: at.x, y: at.y + 0.9, z: at.z }, 'たおした！', 'kill', age - 0.2);
+    if (age >= 0 && age < 0.45) { hitFxAt(mb.fx, at.x, at.y - 0.7, at.z, age / 0.45, mb.i + r); if (X.hit.crit) hitFxAt(mb.fx2, at.x + 0.3, at.y - 0.4, at.z, age / 0.45, mb.i + r + 7); }
+    if (X.hit.kill) ft.show('k' + id, { x: at.x, y: at.y + 0.9, z: at.z }, 'たおした！', 'kill', age - 0.2);
   }
-  function atkShow(mb, G, a, id, age) {
+  function atkShow(G, a, id, age) {
     if (!G || !a) return;
     if (a.guard) { ft.show('g' + id, headAt(G), 'ガード', 'guard', age); if (age >= 0 && age < 0.5) G.guardHit = Math.max(G.guardHit ?? -1, age / 0.5); }
     else if (a.to) { ft.show('d' + id, headAt(G), '-' + a.to, 'hurt', age); if (age >= 0 && age < 0.4) G.flinch = Math.max(G.flinch || 0, Math.sin(age / 0.4 * Math.PI)); }
   }
+  let cycU = 0, fightOn = false; // 1 回りの中の秒・夜の戦いを見せているか（見張りがたおれた姿勢に使う）
+  const isDown = (p) => fightOn && p.downT !== null && p.downT !== undefined && cycU >= p.downT;
   function updateMobs(time, n, h) {
     const nightOn = n > 0.55, dawn = h < 12 && n > 0.15 && n <= 0.55;
     ft.begin();
+    fightOn = nightOn && !!FT;
+    cycU = (time % MOB_CYCLE);
     for (const g of guards) { g.duel = null; g.blockA = false; g.dodge = 0; g.faceAt = null; g.want = null; g.guardHit = -1; g.flinch = 0; }
     for (const mb of mobs) {
-      const { m } = mb, SC = mb.script, nE = SC.ex.length;
-      mb.fx.visible = false; mb.fx2.visible = false;
+      const { m } = mb;
+      mb.fx.visible = false; mb.fx2.visible = false; mb.fight = false;
       if (mb.arrows) for (const a of mb.arrows) a.visible = false;
-      if (!nightOn && !dawn) { m.visible = false; continue; }
-      const start = { x: from.x * 0.85 + fside.x * mb.side, z: from.z * 0.85 + fside.z * mb.side };
-      const archer = mb.type === 'skeleton', ME = MELEE[mb.type] || MELEE.zombie;
-      const goal = meleeGoal(mb, start);
-      const L = Math.hypot(goal.x - start.x, goal.z - start.z);
-      const sp = mb.type === 'spider' ? 2.6 : mb.type === 'skeleton' ? 1.9 : 1.4;
-      const tw = L / sp;
       flashMob(m, 0); fadeMob(m, 1);
-      if (dawn) { // 朝日：残っていた敵だけ。ゾンビは燃え、ほかは森へ帰る（倒した・逃げた敵はもういない）
-        if (SC.fate !== 'dawn') { m.visible = false; continue; }
-        const k = Math.min(1, (0.55 - n) / 0.3);
-        if (mb.type === 'zombie') { m.position.set(goal.x, 0, goal.z); animateMob(m, 'burn', time, k); m.visible = k < 1; }
-        else { const q = Math.min(1, k * 1.2); m.position.set(goal.x + (start.x - goal.x) * q, 0, goal.z + (start.z - goal.z) * q); m.rotation.y = Math.atan2(start.x - goal.x, start.z - goal.z); animateMob(m, 'flee', time); fadeMob(m, (1 - q) / 0.3); } // 森の端まで走ってから薄くなって消える
-        continue;
-      }
+      if (!FT || (!nightOn && !dawn)) { m.visible = false; continue; }
+      const archer = mb.type === 'skeleton', ME = MELEE[mb.type];
       m.scale.setScalar(MOB_SCALE); m.position.y = 0;
-      const u = (time + mb.off) % MOB_CYCLE;
-      mb.fight = false;
-      const G = mb.target && mb.target.guard ? mb.target : null, spot = G ? meleeSpot(mb, goal) : null;
-      const tg = G ? G.guard : { x: 0, z: 0 }, dx = goal.x - tg.x, dz = goal.z - tg.z, dl = Math.hypot(dx, dz) || 1, d = { x: dx / dl, z: dz / dl };
-      const ex = archer ? CYS : ME.ex, loop = SC.fate === 'dawn'; // 朝まで残る敵は、夜の間ずっと打ち合う
-      const tf = loop ? MOB_CYCLE - tw - 0.01 : ex * nE;
-      const endAt = (t) => { // 倒れて薄くなる／森へ走って薄くなる
-        if (SC.fate === 'killed') { const k = t / DIE; animateMob(m, 'die', time, k); fadeMob(m, 1 - Math.max(0, (k - 0.55) / 0.45)); return; }
-        const k = Math.min(1, t / (tw * 0.6)); m.position.set(m.position.x + (start.x - m.position.x) * k, 0, m.position.z + (start.z - m.position.z) * k); m.rotation.y = Math.atan2(start.x - goal.x, start.z - goal.z); animateMob(m, 'flee', time); fadeMob(m, (1 - k) / 0.3);
-      };
-      if (u < tw) {
-        const k = u / tw; m.position.set(start.x + (goal.x - start.x) * k, 0, start.z + (goal.z - start.z) * k); m.rotation.y = Math.atan2(goal.x - start.x, goal.z - start.z); animateMob(m, 'walk', time);
-        if (spot && !G.duel && !G.want && Math.hypot(m.position.x - G.guard.x, m.position.z - G.guard.z) < 13) { G.want = spot; G.faceAt = { x: m.position.x, z: m.position.z }; } // 見つけたら走って行く
+      if (dawn) { // 朝日：見張りが全員たおれて残った敵だけ。ゾンビ・スケルトンは燃え、クモは森へ戻る
+        if (FT.fate[mb.i] !== 'raid') { m.visible = false; continue; }
+        const k = Math.min(1, (0.55 - n) / 0.3), p = raidAt(mb), st = startOf(mb);
+        if (mb.type !== 'spider') { m.position.set(p.x, 0, p.z); animateMob(m, 'burn', time, k); m.visible = k < 1; }
+        else { const q = Math.min(1, k * 1.2); m.position.set(p.x + (st.x - p.x) * q, 0, p.z + (st.z - p.z) * q); m.rotation.y = Math.atan2(st.x - p.x, st.z - p.z); animateMob(m, 'flee', time); fadeMob(m, (1 - q) / 0.3); }
         continue;
       }
-      if (u >= tw + tf) {
-        const tl = u - tw - tf;
-        const back = archer ? 1.4 * (nE - 1) : SC.fate === 'killed' ? ME.kb * 0.4 : 0;
-        m.position.set(goal.x + d.x * back, 0, goal.z + d.z * back);
-        endAt(tl);
-        hitShow(mb, nE - 1, tl + (archer ? CYS - (SHOT + 0.9) : ME.ex * (1 - Q_HIT)), chestAt(mb, m));
-        if (spot && SC.fate === 'fled' && !G.duel && !G.want && tl < 1.4 && !ringR) { const c = 2.5 * Math.min(1, tl); G.want = { x: spot.x + d.x * c, z: spot.z + d.z * c }; G.faceAt = { x: m.position.x, z: m.position.z }; } // 逃げたら少し追う
+      const u = cycU, st = startOf(mb);
+      // 1) 近づいてくる（見張りは見つけたら走って迎え撃つ）
+      if (u < TF) {
+        const g = goalFor(mb, foeAt(mb, 0)), t = u - mb.i * 0.8, tw = Math.hypot(g.x - st.x, g.z - st.z) / walkSp(mb);
+        if (t < 0) { m.visible = false; continue; }
+        if (t < tw) { const k = t / tw; m.position.set(st.x + (g.x - st.x) * k, 0, st.z + (g.z - st.z) * k); m.rotation.y = Math.atan2(g.x - st.x, g.z - st.z); animateMob(m, 'walk', time); }
+        else { m.position.set(g.x, 0, g.z); m.rotation.y = Math.atan2(-g.d.x, -g.d.z); animateMob(m, archer ? 'shoot' : 'hit', time, archer ? 0.3 : 0); }
+        const X0 = FT.R ? FT.rounds[0][mb.i] : null, Hg = X0 && X0.hit ? gByKey[X0.hit.g] : null;
+        if (Hg && !Hg.duel && Math.hypot(m.position.x - Hg.guard.x, m.position.z - Hg.guard.z) < 13) { Hg.want = { x: g.x - g.d.x * (archer ? 2.8 : 3), z: g.z - g.d.z * (archer ? 2.8 : 3) }; Hg.faceAt = { x: m.position.x, z: m.position.z }; }
         continue;
       }
-      const u2 = u - tw, e0 = Math.floor(u2 / ex), e = loop ? e0 % nE : Math.min(nE - 1, e0), X = SC.ex[e];
+      const uf = u - TF, r = Math.floor(uf / RD), c = uf - r * RD, q = c / RD;
+      // 2) 倒れた：横へ倒れて、薄くなって消える
+      const kr = FT.killAt[mb.i];
+      if (kr !== null && (r > kr || (r === kr && q >= Q_HIT))) {
+        const tk = uf - (kr + Q_HIT) * RD, g = goalFor(mb, foeAt(mb, kr)), off = archer ? 0 : ME.kb * 0.4 + ME.back;
+        m.position.set(g.x + g.d.x * off, 0, g.z + g.d.z * off); m.rotation.y = Math.atan2(-g.d.x, -g.d.z);
+        const k = tk / DIE; if (k > 1.05) { m.visible = false; continue; }
+        animateMob(m, 'die', time, Math.min(1, k)); fadeMob(m, 1 - Math.max(0, (k - 0.55) / 0.45));
+        hitShow(mb, kr, tk, chestAt(mb, m));
+        continue;
+      }
+      // 3) 見張りが全員たおれた後：残った敵が柵（なければ町の中）まで来て壊す
+      if (r >= FT.R) {
+        if (FT.fate[mb.i] !== 'raid') { m.visible = false; continue; }
+        const tr = uf - FT.R * RD, g = goalFor(mb, foeAt(mb, FT.R - 1)), p = raidAt(mb);
+        if (tr < RAID_WALK) { const k = tr / RAID_WALK; m.position.set(g.x + (p.x - g.x) * k, 0, g.z + (p.z - g.z) * k); m.rotation.y = Math.atan2(p.x - g.x, p.z - g.z); animateMob(m, 'walk', time); continue; }
+        const tp = tr - RAID_WALK;
+        m.position.set(p.x, 0, p.z); m.rotation.y = Math.atan2(-fdir.x, -fdir.z);
+        if (tp < RAID) animateMob(m, archer ? 'hit' : 'punch', time, archer ? Math.abs(Math.sin(tp * 2.4)) * 0.6 : (tp % 1.3) / 1.3);
+        else { m.visible = false; } // 1 回りの終わりの間（朝までは、次の回りでもう一度見せる）
+        continue;
+      }
+      // 4) 打ち合い（r 回目）
       mb.fight = true;
+      const X = FT.rounds[r][mb.i], P = posAt(mb, r, q), d = P.d, foe = gByKey[X.foe], Hg = X.hit ? gByKey[X.hit.g] : null;
+      const tHit = c - Q_HIT * RD;
+      if (r > 0) hitShow(mb, r - 1, tHit + RD, chestAt(mb, m));
       if (archer) {
-        // スケルトン：離れて 1 本撃つ → 見張りが詰め寄って打つ → 打たれたら少し下がって、また撃つ
-        const c = u2 - e0 * ex, kd = Math.min(e0, nE - 1), back0 = 1.4 * Math.max(0, kd - 1), back1 = 1.4 * kd, kb = c < 0.9 && e0 > 0 ? c / 0.9 : 1;
-        const back = loop ? 0 : back0 + (back1 - back0) * kb;
-        const pos = { x: goal.x + d.x * back, z: goal.z + d.z * back };
-        m.position.set(pos.x, 0, pos.z); m.rotation.y = Math.atan2(tg.x - pos.x, tg.z - pos.z);
-        const tHit = c - (SHOT + 0.9);
-        if (c < 0.9 && e0 > 0 && !loop) animateMob(m, 'walk', time);
-        else if (c < SHOT) animateMob(m, 'shoot', time, c / SHOT);
-        else if (tHit < 0) animateMob(m, 'shoot', time, 0.25);
-        else { animateMob(m, 'hit', time, Math.min(1, tHit * 1.6)); if (X.hit) flashMob(m, Math.max(0, 1 - tHit * 2.4)); }
-        hitShow(mb, e, tHit, chestAt(mb, m));
-        if (e0 > 0) hitShow(mb, (e0 - 1) % nE, c + CYS - (SHOT + 0.9), chestAt(mb, m));
-        const A = X.atk[0] || {}, rel = c - 0.6 * SHOT, id = mb.i + ':' + e0;
-        atkShow(mb, G, A, id, rel - 0.5);
-        if (G && !G.duel) {
-          G.want = { x: pos.x - d.x * 2.8, z: pos.z - d.z * 2.8 }; G.faceAt = { x: pos.x, z: pos.z };
-          if (A.guard && rel > -0.3 && rel < 0.6) G.blockA = true;
-          if (!A.guard && !A.to && rel > -0.45 && rel < 0.55) G.dodge = Math.sin(Math.min(1, (rel + 0.45) / 1.0) * Math.PI);
-          const s = (c - SHOT - 0.2) / 1.2;
-          if (X.hit && s >= 0 && s <= 1) G.duel = { strike: s, x: pos.x, z: pos.z };
+        m.position.set(P.x, 0, P.z); m.rotation.y = foe ? Math.atan2(foe.ch.position.x - P.x, foe.ch.position.z - P.z) : Math.atan2(-d.x, -d.z);
+        if (P.move) animateMob(m, 'walk', time);
+        else if (X.hit && tHit >= 0) { animateMob(m, 'hit', time, Math.min(1, tHit * 1.6)); flashMob(m, Math.max(0, 1 - tHit * 2.4)); }
+        else animateMob(m, 'shoot', time, c < SHOT_D ? c / SHOT_D : 0.25);
+        hitShow(mb, r, tHit, chestAt(mb, m));
+        const A2 = X.atk, rel = c - SHOT_REL, a = mb.arrows[r % mb.arrows.length], id = mb.i + ':' + r;
+        if (A2 && foe) {
+          atkShow(foe, A2, id, rel - ARROW_T);
+          if (A2.guard && rel > -0.3 && rel < 0.6) foe.blockA = true;
+          if (rel >= 0 && rel < (A2.guard ? 1.6 : ARROW_T)) {
+            const gp = foe.ch.position, dx = P.x - gp.x, dz = P.z - gp.z, dl = Math.hypot(dx, dz) || 1;
+            if (a.userData.e !== id) { a.userData.e = id; a.userData.to = A2.guard ? { x: gp.x + (dx / dl) * 0.9, y: 1.95, z: gp.z + (dz / dl) * 0.9 } : { x: gp.x, y: 2.3, z: gp.z }; }
+            const fr = { x: P.x - d.x * 0.6, y: 2.6, z: P.z - d.z * 0.6 };
+            a.visible = true; arrowAt(a, fr, a.userData.to, rel / ARROW_T, 1.4);
+            const pf = (rel - ARROW_T) / 0.35;
+            if (pf >= 0 && pf < 1 && A2.guard) hitFxAt(mb.fx2, a.userData.to.x, a.userData.to.y, a.userData.to.z, pf, mb.i + 2);
+          }
         }
-        const a = mb.arrows[e0 % mb.arrows.length];
-        if (rel >= 0 && rel < (A.guard ? 1.8 : A.to ? 0.5 : 2.5)) {
-          const gp = G ? G.ch.position : tg;
-          const to = A.guard ? { x: gp.x + d.x * 0.9, y: 1.95, z: gp.z + d.z * 0.9 } : A.to ? { x: gp.x, y: 2.3, z: gp.z } : ringR ? { ...onRing(ringR, (G ? G.guardS : 0) + 0.6), y: 0.95 } : { x: tg.x - d.x * 0.3, y: 0.1, z: tg.z - d.z * 0.3 };
-          if (a.userData.e !== id) { a.userData.e = id; a.userData.to = to; }
-          const fr = { x: pos.x - d.x * 0.6, y: 2.6, z: pos.z - d.z * 0.6 };
-          a.visible = true; arrowAt(a, fr, a.userData.to, rel / 0.5, 1.4);
-          const pf = (rel - 0.5) / 0.35;
-          if (pf >= 0 && pf < 1 && !A.to) hitFxAt(mb.fx2, a.userData.to.x, a.userData.to.y, a.userData.to.z, pf * (A.guard ? 1 : 0.6), mb.i + 2);
+        if (Hg && !Hg.duel) {
+          Hg.want = { x: P.x - d.x * 2.8, z: P.z - d.z * 2.8 }; Hg.faceAt = { x: P.x, z: P.z };
+          const s = (q - Q_SWING) / (1 - Q_SWING);
+          if (s >= 0 && s <= 1) Hg.duel = { strike: s, x: P.x, z: P.z };
         }
         continue;
       }
-      // ゾンビ・クモ：打ち合い。ゾンビははじかれても何度も向かい、クモは飛びかかってかみ、打たれるとすぐ跳んで離れる
-      const q = (u2 - e0 * ex) / ex;
       const rec = q >= Q_HIT ? (q - Q_HIT) / (1 - Q_HIT) : -1;
       const kbp = rec >= 0 && X.hit ? ME.kb * (X.hit.crit ? 1.9 : 1) * Math.min(1, rec * 7) * (1 - rec) * (1 - rec) : 0; // クリティカルは大きくはじかれる
       const jump = ME.back ? (q < Q_PUNCH ? ME.back * (1 - q / Q_PUNCH) : rec >= 0 ? ME.back * Math.min(1, rec * 2.2) : 0) : 0;
       const hop = ME.back && q < Q_PUNCH ? Math.sin(q / Q_PUNCH * Math.PI) * 0.7 : ME.back && rec >= 0 && rec < 0.45 ? Math.sin(rec / 0.45 * Math.PI) * 0.5 : 0;
-      m.position.set(goal.x + d.x * (kbp + jump), 0, goal.z + d.z * (kbp + jump));
-      m.rotation.y = Math.atan2(-dx, -dz);
-      if (q < Q_SWING) animateMob(m, 'punch', time, q / Q_SWING);
-      else animateMob(m, 'hit', time, rec >= 0 ? Math.min(1, rec * 1.6) : 0);
+      m.position.set(P.x + d.x * (kbp + jump), 0, P.z + d.z * (kbp + jump));
+      m.rotation.y = Math.atan2(-d.x, -d.z);
+      if (P.move) animateMob(m, 'walk', time);
+      else if (q < Q_SWING && X.atk) animateMob(m, 'punch', time, q / Q_SWING);
+      else animateMob(m, 'hit', time, rec >= 0 && X.hit ? Math.min(1, rec * 1.6) : 0);
       m.position.y = hop;
-      if (rec >= 0 && X.hit) flashMob(m, Math.max(0, 1 - rec * 2.4)); // 当たった瞬間に赤く光る
-      const tHit = (q - Q_HIT) * ex, tPunch = (q - Q_PUNCH) * ex;
-      hitShow(mb, e, tHit, chestAt(mb, m));
-      if (e0 > 0) hitShow(mb, (e0 - 1) % nE, tHit + ex, chestAt(mb, m));
-      const A = X.atk[0] || {};
-      atkShow(mb, G, A, mb.i + ':' + e0, tPunch);
-      if (A.guard && tPunch >= 0 && tPunch < 0.3) hitFxAt(mb.fx2, tg.x + d.x * 1.2, 1.95, tg.z + d.z * 1.2, tPunch / 0.3 * 0.8, mb.i + 3);
-      if (G && !G.duel && spot) G.want = spot;
-      if (G && !G.duel) G.duel = { q, x: m.position.x, z: m.position.z, strike: X.hit && q >= Q_SWING ? (q - Q_SWING) / (1 - Q_SWING) : null, block: !!A.guard && q > 0.04 && q < 0.3 };
+      if (rec >= 0 && X.hit) flashMob(m, Math.max(0, 1 - rec * 2.4)); // 当たった瞬間だけ、ほんのり赤く
+      hitShow(mb, r, tHit, chestAt(mb, m));
+      const tPunch = c - Q_PUNCH * RD;
+      if (X.atk && foe) {
+        atkShow(foe, X.atk, mb.i + ':' + r, tPunch);
+        if (X.atk.guard && tPunch >= 0 && tPunch < 0.3) { const gp = foe.ch.position, dx = P.x - gp.x, dz = P.z - gp.z, dl = Math.hypot(dx, dz) || 1; hitFxAt(mb.fx2, gp.x + (dx / dl) * 1.2, 1.95, gp.z + (dz / dl) * 1.2, tPunch / 0.3 * 0.8, mb.i + 3); }
+        if (foe !== Hg && !foe.duel) { foe.faceAt = { x: m.position.x, z: m.position.z }; if (X.atk.guard && q > 0.04 && q < 0.3) foe.blockA = true; }
+      }
+      if (Hg && !Hg.duel) { Hg.want = { x: P.x - d.x * 3, z: P.z - d.z * 3 }; Hg.duel = { q, x: m.position.x, z: m.position.z, strike: q >= Q_SWING ? (q - Q_SWING) / (1 - Q_SWING) : null, block: !!(X.atk && X.atk.guard && foe === Hg) && q > 0.04 && q < 0.3 }; }
     }
+    // 見張りがたおれた：「たおれた」の文字
+    if (fightOn) for (const p of guards) if (p.downT !== null && p.downT !== undefined) ft.show('down' + p.v.key, headAt(p), 'たおれた', 'down', cycU - p.downT);
   }
   function updateArrows() {} // 矢は updateMobs の中で、打ち合いの数字といっしょに動かす
   // 寝る・起きるは、決まった就寝時刻ではなく、その人の 1 時間ごとの行動（L.hours）で決まる。
@@ -1194,6 +1240,13 @@ async function main() {
       p.ch.visible = !(p.mode === 'sleep' && sp.inside); // 家の中の床で寝ている人は外から見えない
       p.ch.position.set(p.pos.x, 0, p.pos.z);
       if (p.lod === 'full') animate(p.ch,pose, time + (hash(p.v.key) % 100) / 10);
+      return;
+    }
+    if (p.mode === 'guard' && isDown(p)) { // 体力がつきてたおれた見張り：その場で横になる（朝に家で目を覚まし、次の日は休む）
+      setShield(p.ch, false); setTool(p.ch, null); p.ch.userData.block = false; p.ch.userData.lieY = 0;
+      const W = p.fightGo || { x: 0, z: 0 };
+      p.ch.position.set(p.pos.x + W.x, 0, p.pos.z + W.z);
+      if (p.lod === 'full') animate(p.ch, 'lie', time);
       return;
     }
     if (p.mode === 'toguard' || p.mode === 'guard') {

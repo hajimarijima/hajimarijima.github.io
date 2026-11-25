@@ -220,6 +220,26 @@
       "name": "棒",
       "value": {}
     },
+    "beam": {
+      "name": "柱",
+      "value": {},
+      "part": true
+    },
+    "stone_block": {
+      "name": "石材",
+      "value": {},
+      "part": true
+    },
+    "roof_tile": {
+      "name": "屋根板",
+      "value": {},
+      "part": true
+    },
+    "door": {
+      "name": "扉",
+      "value": {},
+      "part": true
+    },
     "wood_pickaxe": {
       "name": "木のつるはし",
       "tool": true
@@ -1975,7 +1995,7 @@
     }
   },
   "combat": {
-    "note": "夜の戦い。見張りの攻撃力 atk は装備で決まる（hand 素手・tool 道具やたいまつ・wood/stone/iron/gold/diamond は剣の素材）。1 回の攻撃は atk ±1、critBase + (atk − 素手) × critPerAtk の確率でクリティカル（critMult 倍）。敵は hp がなくなると倒れ、hp が fleeAt 割以下になると fleeP の確率で逃げる。戦うのは rounds 回まで（その後は朝まで持ちこたえ、残った敵は夜明けに帰る）。敵の攻撃は盾があれば shieldGuardP の確率でガード。見張りが hurtAt 以上ダメージを受けるとケガ（次の日休む）。倒した敵は drops を落とし、チェストに入る",
+    "note": "夜の戦い。見張りの攻撃力 atk は装備で決まる（hand 素手・tool 道具やたいまつ・wood/stone/iron/gold/diamond は剣の素材）。1 回の攻撃は atk ±1、critBase + (atk − 素手) × critPerAtk の確率でクリティカル（critMult 倍）。敵は逃げず、どちらかが全員倒れるまで戦う（maxRounds は念のための上限）。敵は hp がなくなると倒れて消える。見張りの体力は guardHp で、0 になると「たおれた」となり、ほかの見張りが代わる（村人は死なない：朝に家で目を覚まし、次の日は休む）。見張りが全員たおれたら、残った敵は柵や建物を少し壊して朝に消える（ゾンビ・スケルトンは朝日で燃え、クモは森へ戻る）。敵の攻撃は盾があれば shieldGuardP の確率でガード。倒した敵は drops を落とし、チェストに入る",
     "atk": {
       "hand": 2,
       "tool": 3,
@@ -1989,11 +2009,7 @@
     "critPerAtk": 0.015,
     "critMax": 0.4,
     "critMult": 1.8,
-    "fleeAt": 0.3,
-    "fleeP": 0.5,
-    "rounds": 6,
     "shieldGuardP": 0.55,
-    "hurtAt": 9,
     "mobs": {
       "zombie": {
         "hp": 20,
@@ -2029,7 +2045,9 @@
           ]
         }
       }
-    }
+    },
+    "guardHp": 20,
+    "maxRounds": 80
   },
   "badges": {
     "note": "バッジ。stat の数が tiers（銅・銀・金・ダイヤ）に届くともらえる。絵はあとでまとめて作る（今は仮）",
@@ -2052,5 +2070,54 @@
         "note": "夜に敵を倒した数"
       }
     }
+  },
+  "construction": {
+    "note": "建てる段取り。材料（チェストの原木・丸石・板）を部品（柱・石材・屋根板・扉）にしてから建てる。部品の数は建物の cost から決まる（per：その量ごとに 1 つ、fixed：決まった数、roof：屋根のある建物だけ、house：家の形の建物だけ）。部品にした分の材料は cost から引き、残りはそのまま使う。材料と部品がそろったら建て始め、土台 → 壁 → 屋根 の順にできていく（stages：壁・屋根に進む所）。かかる手間は cost の合計 × hoursPerCost（人×時間、minHours〜maxHours）。毎日 builders 人まで、1 人 builderHours 時間ずつ進める",
+    "stages": [
+      0.34,
+      0.67
+    ],
+    "minCost": 20,
+    "parts": {
+      "beam": {
+        "from": {
+          "log": 2
+        },
+        "per": {
+          "wood": 15
+        }
+      },
+      "stone_block": {
+        "from": {
+          "cobble": 2
+        },
+        "per": {
+          "stone": 15
+        }
+      },
+      "roof_tile": {
+        "from": {
+          "planks": 4
+        },
+        "per": {
+          "wood": 30,
+          "stone": 60
+        },
+        "roof": true
+      },
+      "door": {
+        "from": {
+          "planks": 6
+        },
+        "fixed": 1,
+        "house": true
+      }
+    },
+    "partsPerDay": 6,
+    "hoursPerCost": 0.6,
+    "minHours": 6,
+    "maxHours": 60,
+    "builders": 4,
+    "builderHours": 2.5
   }
 }

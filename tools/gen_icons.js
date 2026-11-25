@@ -231,6 +231,45 @@ const ICONS = {
     puffy(px, g, { s: { c: hex('#e6e6ea'), shine: 0.4 } }, 'string');
     for (let k = 0; k < 4; k++) for (let x = 4; x < 12; x++) { const y = 5 + k * 2 + ((x + k) % 3 === 0 ? 1 : 0); if (px[(y * S + x) * 4 + 3]) put(px, x, y, hex('#b8b8c2')); } // 巻いた筋
   },
+  // ---------- 建てる部品（材料から作る。土台・壁・屋根に使う） ----------
+  // 柱：原木を四角く削った長い角材。上の切り口に年輪、横は縦の木目
+  beam(px) {
+    const W = hex('#b98a52'), WD = hex('#9a6c3a'), RG = hex('#d9b47a'), RGD = hex('#b48d55');
+    isoBox(px, { a: 4, b: 4, c: 11, cx: 8, cy: 13, seed: 'beam', tex: (f, u, v) => {
+      if (f === 'top') { const r = Math.hypot(u - 0.5, v - 0.5); return Math.floor(r * 8) % 2 ? RGD : RG; }
+      return Math.floor(u * 4 + (v > 0.6 ? 1 : 0)) % 3 === 0 ? WD : W;
+    } });
+  },
+  // 石材：丸石を四角く切りそろえたブロック。面ごとに面取りの明るい縁と、まん中のなめらかな面
+  stone_block(px) {
+    const C = hex('#b4b6b8'), CL = hex('#d2d4d6'), CD = hex('#8a8d91'), J = hex('#5c5f63');
+    isoBox(px, { a: 7, b: 7, c: 6, cx: 8, cy: 9, seed: 'stoneblock', tex: (f, u, v) => {
+      const e = Math.min(u, v, 1 - u, 1 - v);
+      if (e < 0.08) return J;
+      if (e < 0.2) return u < 0.5 || v < 0.3 ? CL : CD; // 面取り：上・左の縁は明るく、下・右は暗い
+      if (f !== 'top' && Math.abs(v - 0.55) < 0.06) return CD; // 横の切れ目
+      return C;
+    } });
+  },
+  // 屋根板：赤茶の瓦を重ねた平たい束。上の面に段々の瓦、横は板の重なり
+  roof_tile(px) {
+    const T = hex('#c0623e'), TL = hex('#de8458'), TD = hex('#8e3f24'), B = hex('#7a4a2a');
+    isoBox(px, { a: 9, b: 7, c: 3, cx: 7, cy: 10, seed: 'rooftile', tex: (f, u, v) => {
+      if (f === 'top') { const row = Math.floor(v * 4), w = v * 4 - row; const col = Math.floor(u * 4 + (row % 2) * 0.5); return w > 0.78 ? TD : (col % 2 ? T : TL); }
+      return Math.floor(v * 3) % 2 ? B : TD;
+    } });
+  },
+  // 扉：正面から見た板の扉。枠・横木・取っ手
+  door(px) {
+    const g = shapeGrid();
+    poly(g, [[3.5, 1], [12.5, 1], [12.5, 15], [3.5, 15]], 'f');
+    poly(g, [[5, 2.5], [11, 2.5], [11, 14], [5, 14]], 'p');
+    poly(g, [[5, 5], [11, 5], [11, 6], [5, 6]], 'f');
+    poly(g, [[5, 10], [11, 10], [11, 11], [5, 11]], 'f');
+    puffy(px, g, { f: { c: hex('#6e4526'), flat: true }, p: { c: hex('#b07a44'), flat: true, grain: 0.1 } }, 'door');
+    for (let y = 3; y < 14; y++) if (y !== 5 && y !== 10) { put(px, 7, y, tone(hex('#b07a44'), 0.72)); put(px, 9, y, tone(hex('#b07a44'), 0.8)); } // 板の継ぎ目
+    put(px, 10, 8, hex('#e8c25a')); put(px, 10, 9, hex('#a07e2a')); // 取っ手
+  },
   bone_meal(px) {
     // 骨粉：白い粉の小山（上は明るく、すそは影）
     const g = shapeGrid();
