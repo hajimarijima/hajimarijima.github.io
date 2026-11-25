@@ -39,6 +39,18 @@ export function findExact(list, q) {
   return list.find((v) => searchKeys(v).includes(n)) || null;
 }
 
+// 頭の上の名前札：かくしていない人は「@ユーザー名」、かくしている人（とユーザー名の形でない人）はあだ名。
+// video が true で、config.nameTags.video が false の時は、だれでもあだ名（動画で名前を出さない時のため。今は出す）
+export function tagName(v, { video = false, cfg = null } = {}) {
+  if (!v) return '';
+  const showAt = !video || !cfg || !cfg.nameTags || cfg.nameTags.video !== false;
+  if (showAt && !v.hidden && v.name) {
+    const u = normQ(v.name);
+    if (IG_RE.test(u)) return '@' + u;
+  }
+  return v.display || '';
+}
+
 // インスタを見るリンク：かくしていない人で、ユーザー名の形のときだけ
 export function igUrl(v) {
   if (!v || v.hidden || !v.name) return null;

@@ -1002,5 +1002,15 @@ t('村人さがし：インスタのリンクは、かくしていない人の�
   assert.strictEqual(SR.igUrl({ name: '村人1', hidden: false }), null, 'ユーザー名の形でなければリンクなし');
   assert.strictEqual(SR.igUrl({ name: 'a/../b', hidden: false }), null);
 });
+t('名前札：かくしていない人は @ユーザー名・かくした人はあだ名・動画は config.nameTags.video で切りかえ', () => {
+  const vs = searchList(), s = vs.find((v) => v.hidden), taro = vs.find((v) => v.name === 'Taro_Yamada');
+  assert.strictEqual(SR.tagName(taro), '@taro_yamada');
+  assert.strictEqual(SR.tagName({ ...s, name: 'secret.user' }), s.display, 'かくした人はユーザー名を出さない');
+  assert.strictEqual(SR.tagName({ name: '村人1', display: '村人1', hidden: false }), '村人1');
+  const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'config.json'), 'utf8'));
+  assert.strictEqual(cfg.nameTags.video, true, '動画でも名前を出す（今の決まり）');
+  assert.strictEqual(SR.tagName(taro, { video: true, cfg }), '@taro_yamada');
+  assert.strictEqual(SR.tagName(taro, { video: true, cfg: { nameTags: { video: false } } }), taro.display, 'video を false にすると動画ではあだ名');
+});
 
 console.log(`\nぜんぶ通りました（${ok} 件）`);
