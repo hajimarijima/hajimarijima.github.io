@@ -10,6 +10,14 @@
   --B: #3f78b8;
   --C: #4b9a5e;
   --radius: 12px;
+  /* 共通の大きさ（ボタン・カード・表をそろえる） */
+  --radius-s: 8px;          /* 小さいボタン・入力 */
+  --radius-pill: 999px;     /* 丸いボタン・札 */
+  --pad-card: 14px;         /* カードの内側 */
+  --pad-x: 16px;            /* 表や一覧の左右の余白 */
+  --ctl-h: 38px;            /* ボタン・入力の高さ */
+  --nav-h: 32px;            /* 上のメニューのボタンの高さ */
+  --nav-w: 56px;            /* 上のメニューのボタンの幅（どれも同じ） */
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -29,17 +37,21 @@ img.pixel, canvas.pixel { image-rendering: pixelated; image-rendering: crisp-edg
   padding: 8px 12px; background: #2f4a37; color: #fff;
 }
 .site-head .brand { color: #fff; text-decoration: none; font-weight: 700; font-size: 15px; white-space: nowrap; }
-@media (max-width: 420px) { .site-head { gap: 4px; padding: 8px 8px; } .site-head .brand { font-size: 14px; } .site-head nav a { padding: 6px 6px; font-size: 13px; } }
+@media (max-width: 420px) { .site-head { gap: 4px; padding: 8px 8px; } .site-head .brand { font-size: 14px; } }
 .site-head nav { display: flex; gap: 2px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
 .site-head nav::-webkit-scrollbar { display: none; }
-.site-head nav a { color: #dfe9dc; text-decoration: none; padding: 6px 9px; border-radius: 8px; font-size: 14px; white-space: nowrap; }
+.site-head nav a {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 var(--nav-w);
+  width: var(--nav-w); height: var(--nav-h); padding: 0; margin: 0; box-sizing: border-box;
+  border: 0; border-radius: var(--radius-s); color: #dfe9dc; text-decoration: none; font-size: 14px; line-height: 1; white-space: nowrap;
+}
 .site-head nav a.on { background: rgba(255,255,255,.16); color: #fff; }
 
 .wrap { max-width: 880px; margin: 0 auto; padding: 14px 16px 40px; }
 h1 { font-size: 22px; margin: 6px 0 12px; }
 h2 { font-size: 17px; margin: 22px 0 10px; }
 .muted { color: var(--sub); font-size: 13px; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--pad-card); }
 .grid2 { display: grid; gap: 12px; grid-template-columns: 1fr; }
 @media (min-width: 720px) { .grid2 { grid-template-columns: 1fr 1fr; } }
 
@@ -82,7 +94,7 @@ h2 { font-size: 17px; margin: 22px 0 10px; }
 .vcard .who { flex: 1; min-width: 0; }
 .vcard .who b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vcard .close { position: absolute; top: 4px; right: 8px; border: 0; background: none; font-size: 20px; color: var(--sub); cursor: pointer; }
-.btn { display: inline-block; background: var(--accent); color: #fff; border: 0; border-radius: 999px; padding: 8px 14px; font-size: 14px; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: var(--ctl-h); background: var(--accent); color: #fff; border: 0; border-radius: var(--radius-pill); padding: 0 var(--pad-x); font-size: 14px; line-height: 1; text-decoration: none; cursor: pointer; white-space: nowrap; }
 .btn.sub { background: #e9e2d0; color: var(--ink); }
 
 /* 一覧 */
@@ -145,7 +157,7 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .views { display: flex; gap: 14px; justify-content: center; align-items: flex-end; flex-wrap: wrap; }
 .views figure { margin: 0; text-align: center; font-size: 12px; color: var(--sub); }
 .filter { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-.filter button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.filter button { border: 1px solid var(--line); background: var(--card); border-radius: var(--radius-pill); padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; }
 .filter button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .err { background: #fde8e4; border: 1px solid #f0b8aa; padding: 10px; border-radius: 8px; }
 
@@ -189,7 +201,7 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .profform select { font-size: 16px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; min-width: 84px; }
 .profout { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
 .profout code { font-size: 17px; background: #f1ece0; padding: 6px 10px; border-radius: 8px; overflow-wrap: anywhere; }
-.profout button, .profout .btn { font-size: 15px; padding: 7px 14px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; text-decoration: none; cursor: pointer; }
+.profout button, .profout .btn { display: inline-flex; align-items: center; min-height: var(--ctl-h); font-size: 15px; padding: 0 var(--pad-x); border-radius: var(--radius-s); border: 0; background: var(--accent); color: #fff; text-decoration: none; cursor: pointer; }
 .profout button:disabled { background: #b9b2a2; cursor: default; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0; font-size: 13px; }
 .legend i { display: inline-block; width: 18px; height: 5px; border-radius: 3px; margin-right: 5px; vertical-align: middle; }
@@ -220,7 +232,7 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .authbox { margin: 12px 0 0; padding: 12px 0 0; border-top: 1px dashed var(--line); }
 .authbox p { margin: 6px 0; }
 .gbtn {
-  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px;
+  display: inline-flex; align-items: center; gap: 8px; min-height: var(--ctl-h); padding: 0 var(--pad-x);
   border: 1px solid #c9c2b2; border-radius: 999px; background: #fff; color: var(--ink); font: inherit; font-weight: 700; cursor: pointer;
 }
 .gbtn:disabled { color: #9a9282; background: #f1ede3; cursor: not-allowed; }
@@ -233,7 +245,7 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .profedit .fld:last-child { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 10px; flex-wrap: wrap; }
 .profedit label { font-size: 13px; font-weight: 700; }
 .profedit input[type=text], .profedit input[type=number], .profedit input[type=date], .profedit select {
-  width: 100%; min-height: 38px; padding: 6px 8px; border: 1px solid #c9c2b2; border-radius: 8px; background: #fff; font: inherit; color: var(--ink);
+  width: 100%; min-height: var(--ctl-h); padding: 6px 8px; border: 1px solid #c9c2b2; border-radius: var(--radius-s); background: #fff; font: inherit; color: var(--ink);
 }
 .profedit input[type=color] { width: 56px; height: 38px; padding: 2px; border: 1px solid #c9c2b2; border-radius: 8px; background: #fff; }
 .profedit .md { display: flex; gap: 6px; }
@@ -243,7 +255,7 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .profedit .ferr { color: #b23b2a; font-size: 12px; min-height: 0; }
 .profedit .ferr:empty { display: none; }
 .priv { margin-left: 6px; padding: 0 6px; border-radius: 4px; background: #e7e1d3; font-size: 11px; font-weight: 400; }
-.savebtn { min-height: 40px; padding: 8px 22px; border: 0; border-radius: 999px; background: var(--accent); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.savebtn { min-height: var(--ctl-h); padding: 0 22px; border: 0; border-radius: 999px; background: var(--accent); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
 .swatch { display: inline-block; width: 18px; height: 18px; border-radius: 4px; border: 1px solid rgba(0,0,0,.2); vertical-align: -4px; }
 .fallback { margin: 14px 0 0; padding: 10px 0 0; border-top: 1px dashed var(--line); }
 .fallback summary { cursor: pointer; font-size: 14px; color: var(--sub); }
@@ -251,8 +263,9 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 /* スマホ幅のメニュー：題名を短くして 6 つとも入れる */
 @media (max-width: 420px) {
   .site-head .brand-pre { display: none; }
+  :root { --nav-w: 44px; }
   .site-head nav { gap: 0; }
-  .site-head nav a { padding: 6px 5px; font-size: 13px; }
+  .site-head nav a { font-size: 13px; }
 }
 /* 村人が 0 人の時の案内 */
 .empty { margin: 8px 0; padding: 14px 16px; border-radius: var(--radius); background: #fff7df; border: 1px solid #ecd9a4; color: #5a4520; font-weight: 700; line-height: 1.7; }
@@ -274,3 +287,26 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .mcslot b { position: absolute; right: 4px; top: 22px; color: #fff; font-size: 14px; text-shadow: 2px 2px 0 #3f3f3f; font-variant-numeric: tabular-nums; }
 .mcslot span { margin-top: 4px; font-size: 11px; color: #fff; text-shadow: 1px 1px 0 #3f3f3f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .btag.chesttag { background: #7a4e22; color: #fff3d6; font-weight: 700; text-decoration: none; cursor: pointer; }
+
+/* 一覧のカード：内側の左右に余白 */
+.list.card { padding: 4px var(--pad-x); }
+/* フォロワーの節目：人数の列は固定幅・右寄せで、建物名の始まりを縦にそろえる */
+.mslist .msrow { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); column-gap: 14px; align-items: baseline; }
+.mslist .msn { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mslist .msb { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 420px) { .mslist .msrow { grid-template-columns: 6.5em minmax(0, 1fr); column-gap: 10px; } }
+/* 見た目を選ぶ欄 */
+.lookpick{display:flex;gap:12px;align-items:center}
+.lookpick canvas{width:48px;height:96px;flex:none;background:var(--card2,#f3efe4);border-radius:var(--radius-s)}
+.lookpick>span{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.gen .skins{margin-top:10px}
+.gen details{margin-top:10px}
+/* 体力（ハート）とおなか（肉）のゲージ */
+.gauge{display:inline-flex;gap:1px;vertical-align:middle;line-height:0}
+.gauge svg{flex:none}
+.gauges{display:flex;flex-direction:column;gap:3px;margin-top:4px}
+.vcard .lvline{display:block}
+
+/* 村人の一覧のページ送り */
+.pager{display:flex;gap:12px;align-items:center;justify-content:center;margin:16px 0}
+.pager:empty{display:none}

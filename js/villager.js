@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeCharacter, animate, setTool, setAccent } from './character.js';
 import { initAuth } from './auth.js';
-import { loadAll, nav, esc, skinUrl, JOB, ACTION, RES, fmtDate, homeName, buildingLabel, showError, KIND, KIND_COLOR, MBTI, LETTER, mdText, villagerUrl, faceCanvas, emptyNote } from './common.js';
+import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, JOB, ACTION, RES, fmtDate, homeName, buildingLabel, showError, KIND, KIND_COLOR, MBTI, LETTER, mdText, villagerUrl, faceCanvas, emptyNote, lookDataUrl, loadImage, drawFigure, gaugeHtml, loadDiary } from './common.js';
+import { BODIES, BODY_LABEL } from './skingen.js';
 
 nav('people.html');
 
@@ -19,12 +20,15 @@ async function main() {
     ['今の仕事', `${JOB[L.job] || 'まだなし'}${L.action ? '（' + ACTION[L.action] + '）' : ''}`],
     ['住んでいる家', homeName(L, D.world, D.config)],
     ['最初の道具', startToolText(v, L, D.config)],
-    ['スキン', `${v.skin} 番 <a href="skins.html#s${v.skin}">一覧で見る</a>`],
-  ].map(([k, val]) => `<dt>${k}</dt><dd>${k === 'スキン' ? val : esc(val)}</dd>`).join('') + (v.hidden ? '<dt>表示</dt><dd>名前をかくしてあだ名で出しています</dd>' : '');
+    ['体力', gaugeHtml('heart', L.hp, (D.config.needs || {}).max || 20) + (L.restWhy === 'weak' ? ' <small class="muted">休んで戻している</small>' : '')],
+    ['おなか', gaugeHtml('food', L.hunger, (D.config.needs || {}).max || 20)],
+    ['スキン', v.look ? `${esc(BODY_LABEL[v.look.body] || '')}・${v.look.seed} 番（プロフィールで選んだ見た目）` : `${v.skin} 番 <a href="skins.html#s${v.skin}">一覧で見る</a>`],
+  ].map(([k, val]) => `<dt>${k}</dt><dd>${k === 'スキン' || k === '体力' || k === 'おなか' ? val : esc(val)}</dd>`).join('') + (v.hidden ? '<dt>表示</dt><dd>名前をかくしてあだ名で出しています</dd>' : '');
   document.getElementById('stats').innerHTML = ['wood', 'stone', 'food'].map((r) => `<div class="stat"><b>${Math.floor(L.gathered[r])}</b><small>${RES[r]}</small></div>`).join('');
   const built = L.built.map((id) => D.world.buildings.find((b) => b.id === id)).filter(Boolean);
   document.getElementById('built').innerHTML = built.length ? built.map((b) => `<span class="tag">${esc(buildingLabel(b, D.world, D.config))}（${b.day}日目）</span>`).join(' ') : 'まだありません。';
-  document.getElementById('diary').innerHTML = L.diary.slice().reverse().map((d) => `<li><span class="d">${d.day}日目</span><span>${esc(d.text)}</span></li>`).join('') || '<li>まだ日記がありません。</li>';
+  const diary = await loadDiary(v.key, L);
+  document.getElementById('diary').innerHTML = diary.slice().reverse().map((d) => `<li><span class="d">${d.day}日目</span><span>${esc(d.text)}</span></li>`).join('') || '<li>まだ日記がありません。</li>';
 
   // 持ち物
   renderInventory(L, D.config);
@@ -48,7 +52,7 @@ async function main() {
   const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(2, 4, 3); scene.add(sun);
   const ground = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.1, 24), new THREE.MeshLambertMaterial({ color: 0x86b85a }));
   ground.position.y = -0.05; scene.add(ground);
-  const ch = makeCharacter(skinUrl(v.skin), { scale: 1 });
+  const ch = makeCharacter(skinSrc(v), { scale: 1, slim: skinSlim(v), chibi: new URLSearchParams(location.search).get('chibi') === '1' });
   scene.add(ch);
   if (v.profile && v.profile.color) setAccent(ch, v.profile.color);
   let tool = { level: 'hoe', chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', tend: 'hoe', berry: 'basket', harvest: 'basket', forage: 'basket', fish: 'rod', ranch: 'basket' }[L.action];
@@ -77,7 +81,7 @@ function renderSocial(v, D) {
     li.innerHTML = `<span class="face"></span><a href="${villagerUrl(o)}">${esc(o.display)}</a>` +
       `<span class="kind" style="background:${KIND_COLOR[r.kind]}">${KIND[r.kind]}</span>` +
       `<span class="bar" title="仲のよさ ${r.s}"><i style="width:${pct}%;background:${KIND_COLOR[r.kind]}"></i></span>`;
-    faceCanvas(o.skin, 28).then((c) => li.querySelector('.face').append(c));
+    faceCanvas(o, 28).then((c) => li.querySelector('.face').append(c));
     ul.append(li);
   }
   const talks = (D.social.talks || []).filter((t) => t.a === v.key || t.b === v.key).slice(-6).reverse();
@@ -89,7 +93,7 @@ function renderSocial(v, D) {
 
 // MBTI と誕生日の入力（ここでは保存しない。コメント用の文を作るだけ）
 // 公開しているプロフィールの表示（項目の定義から作る。文字は必ずエスケープ）
-function profileValues(v) { return { ...(v.profile || {}), ...(v.mbti ? { mbti: v.mbti } : {}), ...(v.birthday ? { birthday: v.birthday } : {}) }; }
+function profileValues(v) { return { ...(v.profile || {}), ...(v.look ? { look: v.look.body + ':' + v.look.seed + ':' + (v.lookRerolls || 0) } : {}), ...(v.mbti ? { mbti: v.mbti } : {}), ...(v.birthday ? { birthday: v.birthday } : {}) }; }
 // 最初の道具（参加した時に選ぶ。選ばなかった人は、人が少ない仕事の道具）
 const startOpt = (config, id) => ((config.startTools && config.startTools.options) || []).find((o) => o.id === id);
 function startToolText(v, L, config) {
@@ -102,6 +106,7 @@ const startLocked = (v, day) => !!v.startToolChanged || (day != null && day > v.
 function showValue(f, val) {
   if (f.type === 'monthday') return esc(mdText(val));
   if (f.type === 'color') return `<span class="swatch" style="background:${/^#[0-9a-f]{6}$/i.test(val) ? val : '#ccc'}"></span>`;
+  if (f.type === 'skin') { const [b, s] = String(val).split(':'); return esc((BODY_LABEL[b] || '') + '・' + s + ' 番'); }
   if (f.id === 'mbti') return `${esc(val)}（${esc(String(val).split('').map((c) => LETTER[c] || '').join('・'))}）`;
   return esc(val);
 }
@@ -139,19 +144,25 @@ function renderAuth(v, config, ctx = {}) {
     box.innerHTML = tag + '<p>この村人とつながっています。下で書きかえて「保存」を押すと、次の毎日の更新で町に反映されます。</p>' + out;
     box.querySelector('#gout').onclick = () => A.signOut();
     const cur = startOpt(config, v.startTool || (ctx.L && ctx.L.startTool));
-    const vals0 = { ...profileValues(v), ...(cur ? { startTool: cur.label } : {}) };
+    const vals0 = { look: 'none:' + v.skin + ':' + (v.lookRerolls || 0),...profileValues(v), ...(cur ? { startTool: cur.label } : {}) };
     const locked = new Set(fields.filter((f) => f.once === 'joinDay' && startLocked(v, ctx.day)).map((f) => f.id));
-    buildForm(form, fields, vals0, async (vals) => {
-      for (const id of locked) delete vals[id];
-      const r = await A.save(v.key, window.ProfileFields.publicOnly(fields, vals), window.ProfileFields.privateOnly(fields, vals));
-      return r === 'demo' ? '見本なので保存していません（本番では Firestore に保存されます）。' : '保存しました。次の更新で町に反映されます。';
-    }, locked);
-    form.hidden = false;
+    // 見た目の引き直しを使った回数：村人の記録（毎日の更新）と、保存したプロフィールの大きい方（開き直しても戻らない）
+    Promise.resolve(A.load ? A.load(v.key) : {}).catch(() => ({})).then((saved) => {
+      const sv = window.ProfileFields.parseLookValue(saved && saved.look);
+      const lookUsed = Math.max(v.lookRerolls || 0, sv ? sv.used : 0);
+      if (sv && sv.used) vals0.look = saved.look; // 保存した見た目（まだ町に反映されていなくても）
+      buildForm(form, fields, vals0, async (vals) => {
+        for (const id of locked) delete vals[id];
+        const r = await A.save(v.key, window.ProfileFields.publicOnly(fields, vals), window.ProfileFields.privateOnly(fields, vals));
+        return r === 'demo' ? '見本なので保存していません（本番では Firestore に保存されます）。' : '保存しました。次の更新で町に反映されます。';
+      }, locked, { lookUsed });
+      form.hidden = false;
+    });
   };
   initAuth(v.key, render).catch((e) => { box.innerHTML = '<p class="err">ログインの準備でつまずきました：' + esc(e.message) + '</p>'; });
 }
 // 項目の定義から入力欄を作る
-function buildForm(form, fields, vals, onSave, locked = new Set()) {
+function buildForm(form, fields, vals, onSave, locked = new Set(), { lookUsed = 0 } = {}) {
   const PFm = window.ProfileFields;
   form.innerHTML = fields.map((f) => {
     const id = 'f_' + f.id, val = vals[f.id] ?? '';
@@ -161,9 +172,31 @@ function buildForm(form, fields, vals, onSave, locked = new Set()) {
     else if (f.type === 'color') input = `<input type="color" id="${id}" value="${/^#[0-9a-f]{6}$/i.test(val) ? val : '#7cb342'}"><label class="nocolor"><input type="checkbox" id="${id}_none"${val ? '' : ' checked'}>えらばない</label>`;
     else if (f.type === 'number') input = `<input type="number" id="${id}" value="${esc(val)}"${f.min !== undefined ? ` min="${f.min}"` : ''}${f.max !== undefined ? ` max="${f.max}"` : ''}>`;
     else if (f.type === 'date') input = `<input type="date" id="${id}" value="${esc(val)}">`;
+    else if (f.type === 'skin') input = `<span class="lookpick"><canvas class="pixel" id="${id}_c" width="16" height="32"></canvas><span><select id="${id}_b">${BODIES.map((b) => `<option value="${b}">${BODY_LABEL[b]}</option>`).join('')}</select> <button type="button" class="btn sub" id="${id}_r">別のを引く</button><input type="hidden" id="${id}" value="${esc(val)}"><small class="muted" id="${id}_t"></small></span></span>`;
     else input = `<input type="text" id="${id}" maxlength="${f.max || 30}" value="${esc(val)}"><small class="cnt" data-for="${id}"></small>`;
     return `<div class="fld"><label for="${id}">${esc(f.label)}${f.public ? '' : '<span class="priv">非公開</span>'}</label>${input}${locked.has(f.id) ? '<small class="muted">もう変えられません（参加した日に 1 回だけ）</small>' : f.note ? `<small class="muted">${esc(f.note)}</small>` : ''}<small class="ferr" id="${id}_err"></small></div>`;
   }).join('') + '<div class="fld"><button type="submit" class="savebtn">保存</button><span class="muted" id="fmsg"></span></div>';
+  // 見た目：体の種類を選ぶ。体の種類を変えた時だけ「別のを引く」を 1 回押せる（使ったら押せない）。下の絵がその見た目
+  for (const f of fields.filter((x) => x.type === 'skin')) {
+    const id = 'f_' + f.id, hid = form.querySelector('#' + id), sel = form.querySelector('#' + id + '_b'), cv = form.querySelector('#' + id + '_c'), btn = form.querySelector('#' + id + '_r');
+    const st = PFm.parseLookValue(hid.value) || { body: 'none', seed: 0, used: 0 };
+    st.used = Math.max(st.used, lookUsed);
+    const body0 = st.body;
+    const write = () => { hid.value = `${st.body}:${st.seed}:${st.used}`; };
+    const show = () => {
+      sel.value = st.body;
+      const L = lookDataUrl({ body: st.body, seed: st.seed });
+      loadImage(L.url).then((img) => { const g = cv.getContext('2d'); g.clearRect(0, 0, 16, 32); drawFigure(g, img, false, 1, 0, 0, L.slim); });
+      form.querySelector('#' + id + '_t').textContent = L.traits.filter((t) => !t.startsWith('体')).slice(0, 4).join('・');
+      const can = PFm.rerollAllowed({ used: st.used, bodyChanged: st.body !== body0 });
+      btn.disabled = !can;
+      btn.textContent = st.used ? '引き直しは使いました' : '別のを引く';
+      btn.title = st.used ? '' : can ? '1 回だけ引き直せます' : '体の種類を変えると、1 回だけ引き直せます';
+    };
+    sel.onchange = () => { st.body = sel.value; write(); show(); };
+    btn.onclick = () => { if (!PFm.rerollAllowed({ used: st.used, bodyChanged: st.body !== body0 })) return; st.seed = Math.floor(Math.random() * 1e9); st.used = 1; write(); show(); };
+    write(); show();
+  }
   for (const c of form.querySelectorAll('.cnt')) { const inp = form.querySelector('#' + c.dataset.for); const up = () => { c.textContent = `${Array.from(inp.value).length}/${inp.maxLength}`; }; inp.addEventListener('input', up); up(); }
   form.onsubmit = async (e) => {
     e.preventDefault();

@@ -243,31 +243,35 @@ export const setTreeCrack = () => {}; // ひびは描かない
 
 // ---------- 遠くの木と、手つかずの岩はまとめて描く（instancing。スマホでも重くならないように） ----------
 const UNIT = new THREE.BoxGeometry(1, 1, 1);
-export function makeForest(trees) {
+// 遠くの木（LOD）：幹と、葉をまとめた 1 つの塊だけ
+const TREE_PARTS_LITE = [TREE_PARTS[0], { c: 0, s: [2.3 * TK, 2.2 * TK, 2.3 * TK], p: [0, 3.1 * TK + LIFT, 0] }];
+// lite：遠くの木を簡単な形に。shadow：影を落とすか（遠くは落とさない）。t.y があればその高さ（丘の上）に立てる
+export function makeForest(trees, { lite = false, shadow = true } = {}) {
   const g = new THREE.Group();
   const o = new THREE.Object3D();
   const groups = {}; // 色 → 行列
+  const PARTS = lite ? TREE_PARTS_LITE : TREE_PARTS;
   for (const t of trees) {
-    const s = t.size || 1, k = t.kind || 0;
-    for (const P of TREE_PARTS) {
+    const s = t.size || 1, k = t.kind || 0, y0 = t.y || 0;
+    for (const P of PARTS) {
       const c = partCol(P, k);
-      o.position.set(t.x + P.p[0] * s, P.p[1] * s, t.z + P.p[2] * s); o.scale.set(P.s[0] * s, P.s[1] * s, P.s[2] * s); o.updateMatrix();
+      o.position.set(t.x + P.p[0] * s, y0 + P.p[1] * s, t.z + P.p[2] * s); o.scale.set(P.s[0] * s, P.s[1] * s, P.s[2] * s); o.updateMatrix();
       (groups[c] = groups[c] || []).push(o.matrix.clone());
     }
   }
   for (const c in groups) {
     const m = new THREE.InstancedMesh(UNIT, lamC(+c), groups[c].length);
     groups[c].forEach((mx, i) => m.setMatrixAt(i, mx));
-    m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere(); g.add(m);
+    m.castShadow = shadow; m.receiveShadow = true; m.computeBoundingSphere(); g.add(m);
   }
   return g;
 }
-export function makeRockField(rocks) {
+export function makeRockField(rocks, { shadow = true } = {}) {
   const g = new THREE.Group(), lists = {};
   const o = new THREE.Object3D(), q = new THREE.Object3D();
   for (const r of rocks) {
     if (!rockScale(r.hp)) continue;
-    q.position.set(r.x, 0, r.z); q.rotation.set(0, (h32(r.id) % 628) / 100, 0); q.updateMatrix();
+    q.position.set(r.x, r.y || 0, r.z); q.rotation.set(0, (h32(r.id) % 628) / 100, 0); q.updateMatrix();
     const parts = ROCK_PARTS.map((P) => ({ c: ROCK_COL[P.c], s: P.s, p: P.p }));
     const ore = rockOre(r);
     if (ore) ORE_SPOTS.forEach((p, i) => { const k = i ? 0.7 : 1; parts.push({ c: ORE_HEX[ore], s: [0.4 * RK * k, 0.3 * RK * k, 0.4 * RK * k], p }); });
@@ -279,8 +283,75 @@ export function makeRockField(rocks) {
   for (const c in lists) {
     const m = new THREE.InstancedMesh(UNIT, lamC(+c), lists[c].length);
     lists[c].forEach((mx, i) => m.setMatrixAt(i, mx));
-    m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere(); g.add(m);
+    m.castShadow = shadow; m.receiveShadow = true; m.computeBoundingSphere(); g.add(m);
   }
+  return g;
+}
+
+// ---------- 木・切り株・苗木・岩を、チャンクごとに 1 つのメッシュにまとめる ----------
+// 箱を 1 つの形（頂点の色つき）に足していく。下の面（地面に付く面）は作らない。チャンクの一辺は 16 ブロック
+const CHUNK_W = 16 * BL;
+const BOX_FACES = [ // [法線, 4 つの角（-0.5〜0.5）, 明るさ]
+  [[1, 0, 0], [[1, 1, 1], [1, -1, 1], [1, -1, -1], [1, 1, -1]], 0.82], [[-1, 0, 0], [[-1, 1, -1], [-1, -1, -1], [-1, -1, 1], [-1, 1, 1]], 0.82],
+  [[0, 1, 0], [[-1, 1, -1], [-1, 1, 1], [1, 1, 1], [1, 1, -1]], 1],
+  [[0, 0, 1], [[-1, 1, 1], [-1, -1, 1], [1, -1, 1], [1, 1, 1]], 0.9], [[0, 0, -1], [[1, 1, -1], [1, -1, -1], [-1, -1, -1], [-1, 1, -1]], 0.9],
+];
+function boxesToGeometry(boxes) {
+  const pos = new Float32Array(boxes.length * 5 * 6 * 3), nor = new Float32Array(pos.length), col = new Float32Array(pos.length);
+  const v = new THREE.Vector3(), n = new THREE.Vector3(), nm = new THREE.Matrix3(), c = new THREE.Color();
+  let k = 0;
+  for (const b of boxes) {
+    nm.getNormalMatrix(b.m); c.setHex(b.c);
+    for (const [N, Q] of BOX_FACES) {
+      n.set(...N).applyMatrix3(nm).normalize();
+      for (const qi of [0, 1, 2, 0, 2, 3]) {
+        v.set(Q[qi][0] * 0.5, Q[qi][1] * 0.5, Q[qi][2] * 0.5).applyMatrix4(b.m);
+        pos[k] = v.x; pos[k + 1] = v.y; pos[k + 2] = v.z; nor[k] = n.x; nor[k + 1] = n.y; nor[k + 2] = n.z;
+        col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b; k += 3;
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.computeBoundingSphere();
+  return g;
+}
+const STUMP_PARTS = (s) => [
+  { c: TRUNK, s: [0.55 * TK * s, 0.35 * TK * 0.7 * s, 0.55 * TK * s], p: [0, 0.35 * TK * 0.7 * s / 2, 0] },
+  { c: 0xd8b98a, s: [0.55 * TK * s * 0.82, 0.05, 0.55 * TK * s * 0.82], p: [0, 0.35 * TK * 0.7 * s + 0.02, 0] },
+];
+const SAPLING_PARTS = (k) => [{ c: TRUNK, s: [0.33, 1.54, 0.33], p: [0, 0.77, 0] }, { c: GREENS[k][1], s: [1.32, 1.1, 1.32], p: [0, 1.98, 0] }];
+// 1 つの物の箱（ワールド座標の行列と色）
+function objectBoxes(o, lite, out) {
+  const M = new THREE.Matrix4(), S = new THREE.Matrix4(), Q = new THREE.Matrix4();
+  const push = (P, base) => { S.makeScale(...P.s); M.makeTranslation(...P.p).multiply(S); out.push({ m: new THREE.Matrix4().multiplyMatrices(base, M), c: P.c }); };
+  const y0 = o.y || 0;
+  if (o.hp !== undefined) { // 岩
+    if (!rockScale(o.hp)) return;
+    Q.makeRotationY((h32(o.id) % 628) / 100).setPosition(o.x, y0, o.z);
+    for (const P of ROCK_PARTS) push({ c: ROCK_COL[P.c], s: P.s, p: P.p }, Q);
+    const ore = rockOre(o);
+    if (ore) ORE_SPOTS.forEach((p, i) => { const k = i ? 0.7 : 1; push({ c: ORE_HEX[ore], s: [0.4 * RK * k, 0.3 * RK * k, 0.4 * RK * k], p }, Q); });
+    return;
+  }
+  const s = o.size || 1, k = o.kind || 0;
+  Q.makeTranslation(o.x, y0, o.z);
+  if (o.state === 'stump') { for (const P of STUMP_PARTS(s)) push(P, Q); return; }
+  if (o.state === 'sapling') { for (const P of SAPLING_PARTS(k)) push(P, Q); return; }
+  if (o.state && o.state !== 'tree') return;
+  for (const P of lite ? TREE_PARTS_LITE : TREE_PARTS) push({ c: partCol(P, k), s: P.s.map((v) => v * s), p: P.p.map((v) => v * s) }, Q);
+}
+const vcMat = () => lam('vcolor', () => new THREE.MeshLambertMaterial({ vertexColors: true }));
+// 物の一覧 → チャンクごとの Mesh を入れた Group。lite：遠くの木を簡単な形に。shadow：影を落とすか
+export function makeChunkObjects(list, { lite = false, shadow = true } = {}) {
+  const g = new THREE.Group(), by = new Map();
+  for (const o of list) { const k = Math.floor(o.x / CHUNK_W) + ',' + Math.floor(o.z / CHUNK_W); let a = by.get(k); if (!a) by.set(k, (a = [])); objectBoxes(o, lite, a); }
+  for (const boxes of by.values()) {
+    if (!boxes.length) continue;
+    const m = new THREE.Mesh(boxesToGeometry(boxes), vcMat());
+    m.castShadow = shadow; m.receiveShadow = true; m.matrixAutoUpdate = false; g.add(m);
+  }
+  g.userData.dispose = () => g.traverse((m) => { if (m.isMesh) m.geometry.dispose(); });
   return g;
 }
 

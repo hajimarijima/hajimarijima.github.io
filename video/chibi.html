@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>2頭身の見本</title>
+<style>html, body { margin: 0; background: #2c2824; } canvas { display: block; }</style>
+<script type="importmap">
+{ "imports": { "three": "../node_modules/three/build/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="out" width="1800" height="1300"></canvas>
+<script type="module">
+// 2 頭身の見本：5 体（男性・女性・指定なしをまぜる）を正面と斜めで並べ、左に今の体型を 1 体。
+// 下の段は 1 体の動き（歩く 2 コマ・待つ・つるはしを振る 3 コマ）。tools/gen_chibi.js が撮って video/2頭身の見本.png にする
+import * as THREE from 'three';
+import { makeCharacter, animate, setTool } from '../js/character.js';
+import { makeSkin } from '../js/skingen.js';
+const W = 1800, H = 1300, FONT = '"BIZ UDPGothic", "Yu Gothic", "Meiryo", sans-serif';
+const out = document.getElementById('out'), ctx = out.getContext('2d');
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true });
+renderer.setPixelRatio(1); renderer.setSize(300, 360, false);
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xf2f6ff, 0x6a6a5a, 1.3));
+const sun = new THREE.DirectionalLight(0xfff2dc, 1.6); sun.position.set(-2, 4, 3); scene.add(sun);
+const ground = new THREE.Mesh(new THREE.CircleGeometry(0.9, 32), new THREE.MeshLambertMaterial({ color: 0x7aa84e })); ground.rotation.x = -Math.PI / 2; scene.add(ground);
+const camera = new THREE.PerspectiveCamera(30, 300 / 360, 0.1, 50);
+const url = (seed, body) => { const s = makeSkin(seed, body); const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), im = g.createImageData(64, 64); im.data.set(s.px); g.putImageData(im, 0, 0); return { url: c.toDataURL('image/png'), slim: s.slim, traits: s.traits }; };
+const LOOKS = [['male', 3], ['female', 7], ['none', 12], ['female', 21], ['male', 30]];
+const BL = { male: '男性', female: '女性', none: '指定なし' };
+const chars = LOOKS.map(([b, s]) => { const k = url(s, b); return { b, ch: makeCharacter(k.url, { slim: k.slim, chibi: true }) }; });
+const now = (() => { const k = url(3, 'male'); return makeCharacter(k.url, { slim: k.slim }); })();
+setTool(chars[0].ch, 'pick:wood');
+// テクスチャの読み込みを待つ
+const ready = () => { let ok = true; scene.traverse(() => {}); for (const c of [...chars.map((x) => x.ch), now]) c.traverse((o) => { if (o.isMesh && o.material.map && !(o.material.map.image && o.material.map.image.width)) ok = false; }); return ok; };
+for (let i = 0; i < 100 && !ready(); i++) await new Promise((r) => setTimeout(r, 50));
+function shot(ch, yaw, pose, t, x, y, w = 300, h = 360) {
+  scene.add(ch); ch.rotation.y = yaw; animate(ch, pose, t);
+  camera.position.set(0, 1.25, 4.6); camera.lookAt(0, 0.95, 0);
+  renderer.render(scene, camera); ctx.drawImage(renderer.domElement, x, y, w, h);
+  scene.remove(ch);
+}
+const text = (s, x, y, size = 26, col = '#f0ece4', align = 'center') => { ctx.font = `700 ${size}px ${FONT}`; ctx.fillStyle = col; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillText(s, x, y); };
+ctx.fillStyle = '#2c2824'; ctx.fillRect(0, 0, W, H);
+text('2 頭身の見本（採用前）  左：今の体型  右の 5 体：2 頭身', 30, 34, 30, '#ffd678', 'left');
+const COLX = (i) => 20 + i * 296;
+// 1 段目：正面、2 段目：斜め
+for (const [row, yaw, label] of [[0, 0, '正面'], [1, -0.7, '斜め']]) {
+  const y = 70 + row * 400;
+  text(label, 30, y + 14, 24, '#c8c0b0', 'left');
+  shot(now, yaw, 'idle', 0.3, COLX(0), y + 20);
+  chars.forEach((c, i) => shot(c.ch, yaw, 'idle', 0.3 + i, COLX(i + 1), y + 20));
+  text('今の体型', COLX(0) + 150, y + 392, 24);
+  chars.forEach((c, i) => text(BL[c.b] + (i === 0 ? '・つるはし' : ''), COLX(i + 1) + 150, y + 392, 24));
+}
+// 3 段目：動き（2 頭身の 1 体目）
+const y3 = 880;
+text('動き', 30, y3 + 14, 24, '#c8c0b0', 'left');
+const MOV = [['walk', 0.0, '歩く 1'], ['walk', 0.25, '歩く 2'], ['idle', 1.2, '待つ（上下にゆれる）'], ['dig', 0.2, '振りかぶる'], ['dig', 0.53, '振り下ろす'], ['dig', 0.6, '当たる']];
+MOV.forEach(([pose, t, label], i) => { shot(chars[0].ch, -0.9, pose, t, COLX(i), y3 + 20); text(label, COLX(i) + 150, y3 + 392, 22); });
+window.DONE = true;
+</script>
+</body>
+</html>

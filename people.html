@@ -25,15 +25,34 @@ loadAll().then(async (D) => {
   if (!D.active.length) document.getElementById('count').innerHTML = emptyNote(D.config);
   else document.getElementById('count').textContent = `${D.active.length} 人が住んでいます。名前をえらぶと、くわしいページへ行けます。`;
   const box = document.getElementById('list');
-  for (const v of D.active.slice().sort((a, b) => a.joinedDay - b.joinedDay)) {
-    const L = D.life[v.key] || {};
-    const a = document.createElement('a');
-    a.className = 'person'; a.href = villagerUrl(v);
-    a.append(await faceCanvas(v.skin, 32));
-    const s = document.createElement('span');
-    s.innerHTML = `<b>${esc(v.display)}</b><small>${esc(JOB[L.job] || '')}・${v.joinedDay}日目から</small>`;
-    a.append(s); box.append(a);
+  // 人が多い時は 1 ページ PER 人ずつ出す（顔の絵を一度に全部作らない）
+  const PER = 60;
+  const all = D.active.slice().sort((a, b) => a.joinedDay - b.joinedDay);
+  const pages = Math.ceil(all.length / PER);
+  let page = Math.max(0, Math.min(pages - 1, (+new URLSearchParams(location.search).get('page') || 1) - 1)), run = 0;
+  const pager = document.createElement('div'); pager.className = 'pager';
+  async function show() {
+    const me = ++run;
+    box.textContent = '';
+    for (const v of all.slice(page * PER, page * PER + PER)) {
+      const L = D.life[v.key] || {};
+      const a = document.createElement('a');
+      a.className = 'person'; a.href = villagerUrl(v);
+      const face = await faceCanvas(v, 32);
+      if (me !== run) return; // 途中でページを変えた
+      a.append(face);
+      const s = document.createElement('span');
+      s.innerHTML = `<b>${esc(v.display)}</b><small>${esc(JOB[L.job] || '')}・${v.joinedDay}日目から</small>`;
+      a.append(s); box.append(a);
+    }
+    pager.innerHTML = pages > 1 ? `<button class="btn" data-d="-1" ${page ? '' : 'disabled'}>前へ</button><span>${page + 1} / ${pages} ページ</span><button class="btn" data-d="1" ${page < pages - 1 ? '' : 'disabled'}>次へ</button>` : '';
   }
+  pager.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-d]'); if (!b) return;
+    page += +b.dataset.d; history.replaceState(null, '', '?page=' + (page + 1)); show(); scrollTo(0, 0);
+  });
+  box.after(pager);
+  show();
 }).catch(showError);
 </script>
 </body>

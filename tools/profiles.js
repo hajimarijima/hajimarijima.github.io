@@ -39,6 +39,16 @@ function applyProfiles(villagers, pubDocs, privDocs, fields, { day = null, start
       if (ok[f.id] === undefined) continue;
       if (f.id === 'mbti') v.mbti = ok.mbti;
       else if (f.id === 'birthday') v.birthday = ok.birthday;
+      else if (f.type === 'skin') {
+        // 見た目：体の種類はいつでも変えられる。シードが変わる（引き直し）のは、体の種類を変えた時に 1 回だけ。回数は v.lookRerolls に残す
+        const nw = PF.parseLookValue(ok[f.id]);
+        const cur = v.look || { body: 'none', seed: v.skin || 0 };
+        if (nw.seed !== cur.seed) {
+          if ((v.lookRerolls || 0) >= 1 || nw.body === cur.body) { report.rejected.push({ key, field: f.id, reason: '見た目の引き直しは、体の種類を変えた時に 1 回だけです' }); continue; }
+          v.lookRerolls = (v.lookRerolls || 0) + 1;
+        }
+        v.look = { body: nw.body, seed: nw.seed };
+      }
       else if (f.id === 'startTool') {
         const o = P.startToolByLabel(startTools, ok.startTool);
         if (!o || o.id === v.startTool) continue;

@@ -3,6 +3,7 @@
 // 決まり方は種と日付だけで決まる（同じ入力なら同じ結果）。
 const { hashStr } = require('./rand');
 const P = require('./people');
+const TM = require('../js/tilemap.js'); // 近い人を探すマスの一覧（空間ハッシュ）
 
 // ---------- MBTI ----------
 const MBTI = ['ISTJ', 'ISFJ', 'INFJ', 'INTJ', 'ISTP', 'ISFP', 'INFP', 'INTP', 'ESTP', 'ESFP', 'ENFP', 'ENTP', 'ESTJ', 'ESFJ', 'ENFJ', 'ENTJ'];
@@ -122,6 +123,7 @@ const T = {
 const fill = (s, ctx) => s.replace(/\{(\w)\}/g, (_, k) => ctx[k] ?? '');
 
 // 1 日の関係の更新と立ち話。ctx: { day, R, active, life, homesOf, weather, built, queueNext, vote, birthdays, hist }
+const SPARSE_AT = 200, NEAR_K = 6;
 function stepSocial(social, ctx) {
   const { day, R, active, life, weather } = ctx;
   social.pairs = social.pairs || {};
@@ -130,8 +132,35 @@ function stepSocial(social, ctx) {
   const changes = [];
   const pos = (k) => ctx.posOf(k);
   const crushers = new Set(Object.values(social.pairs).map((p) => p.crush).filter(Boolean)); // 片思いは 1 人 1 つまで
-  for (let i = 0; i < active.length; i++) for (let j = i + 1; j < active.length; j++) {
-    const a = active[i], b = active[j];
+  // 人が多い町（SPARSE_AT 人より多い）では、全員の組を見ずに「近くの人・同じ家・前から関係のある人」の組だけを見る（人数の 2 乗にしない）
+  const pairs = [];
+  if (active.length <= SPARSE_AT) {
+    for (let i = 0; i < active.length; i++) for (let j = i + 1; j < active.length; j++) pairs.push([active[i], active[j]]);
+  } else {
+    const set = new Set();
+    for (const k in social.pairs) { const [a, b] = k.split('|'); if (byKey[a] && byKey[b]) set.add(k); }
+    const groups = {};
+    const add = (g, v) => { (groups[g] = groups[g] || []).push(v); };
+    // 近い人は、村人の位置の「マスごとの一覧」（空間ハッシュ）で、周りのマスだけを見て探す
+    const grid = new TM.SpatialHash(8 * TM.TILE);
+    for (const v of active) {
+      const L = life[v.key];
+      if (L.home) add('h:' + L.home, v);
+      const q = pos(v.key);
+      if (q) grid.set(v.key, q.x, q.z, { x: q.x, z: q.z, v });
+    }
+    for (const v of active) {
+      const q = pos(v.key); if (!q) continue;
+      for (const o of grid.nearest(q.x, q.z, NEAR_K + 1, (o) => o.v !== v, 14)) set.add(pairKey(v.key, o.v.key));
+    }
+    for (const g of Object.values(groups)) {
+      // 1 人につき、組の中で名前順にとなりの NEAR_K 人まで
+      g.sort((x, y) => (x.key < y.key ? -1 : 1));
+      for (let i = 0; i < g.length; i++) for (let j = i + 1; j <= Math.min(g.length - 1, i + NEAR_K); j++) set.add(pairKey(g[i].key, g[j].key));
+    }
+    for (const k of [...set].sort()) { const [a, b] = k.split('|'); pairs.push([byKey[a], byKey[b]]); }
+  }
+  for (const [a, b] of pairs) {
     const k = pairKey(a.key, b.key);
     const p = social.pairs[k] || (social.pairs[k] = { s: 0, w: 0, family: 0 });
     const before = kindOf(p);
@@ -162,6 +191,8 @@ function stepSocial(social, ctx) {
     const after = kindOf(p);
     if (after !== before && ['best', 'rival', 'family', 'crush'].includes(after)) changes.push({ a: a.key, b: b.key, kind: after, by: p.crush });
   }
+  // 人が多い町では、まだ何もない組（ほぼ 0）は持たない（データを小さく）
+  if (active.length > SPARSE_AT) for (const k in social.pairs) { const p = social.pairs[k]; if (Math.abs(p.s) < 1 && !p.w && !p.family && !p.rival && !p.crush) delete social.pairs[k]; }
   // 家族は家ごとに 1 行にまとめる
   const fam = {};
   for (const ch of changes.filter((c) => c.kind === 'family')) { const h = life[ch.a].home; (fam[h] = fam[h] || new Set()).add(ch.a).add(ch.b); }
@@ -202,7 +233,8 @@ function stepSocial(social, ctx) {
   }
   social.talks.push(...talks.map((t) => ({ day, ...t })));
   // ページ用にまとめておく（ページ側で同じ計算をしなくてすむように）
-  social.view = Object.fromEntries(active.map((v) => [v.key, relationsOf(social, v.key).slice(0, 12)]));
+  const rel = relationsIndex(social);
+  social.view = Object.fromEntries(active.map((v) => [v.key, (rel[v.key] || []).sort((x, y) => y.s - x.s).slice(0, 12)]));
   social.edges = [];
   for (const k in social.pairs) {
     const [a, b] = k.split('|');
@@ -251,6 +283,15 @@ function makeTalk(a, b, kind, ctx, R, p) {
   return { a, b, topic, kind: kind || null, lines: lines.map(([w, t]) => [w ? b : a, t]) };
 }
 
+// 全員の関係の一覧を 1 回でまとめる（人ごとに全部の組を見直さない）
+function relationsIndex(social) {
+  const out = {};
+  for (const k in social.pairs || {}) {
+    const [a, b] = k.split('|'), p = social.pairs[k];
+    for (const [me, other] of [[a, b], [b, a]]) { const kind = viewOf(p, me); if (kind) (out[me] = out[me] || []).push({ other, kind, s: Math.round(p.s), w: p.w }); }
+  }
+  return out;
+}
 // 村人ページ用：その人の関係の一覧（仲のいい順）
 function relationsOf(social, key) {
   const out = [];

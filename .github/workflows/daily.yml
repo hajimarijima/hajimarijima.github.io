@@ -43,6 +43,6 @@ jobs:
         run: |
           git config user.name "town-bot"
           git config user.email "town-bot@users.noreply.github.com"
-          git add data/villagers.json data/world.json data/state.json data/life.json data/history.json data/social.json
+          git add data/villagers.json data/world.json data/state.json data/life.json data/history.json data/social.json data/diary
           git diff --cached --quiet || git commit -m "町が $(node -p "require('./data/state.json').day") 日目になった"
           git push

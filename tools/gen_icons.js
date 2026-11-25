@@ -117,13 +117,22 @@ const ICONS = {
     } });
   },
   cobble(px) {
-    const c1 = hex('#8f9399'), c2 = hex('#a9adb2'), cd = hex('#5f6368');
-    const cells = [[0.2, 0.25], [0.7, 0.2], [0.45, 0.6], [0.15, 0.8], [0.85, 0.7], [0.55, 0.95]];
+    // 丸石：灰色の石がごつごつ集まったブロック。面ごとに石を 7〜8 個、石のまん中は明るく縁は暗い。目地は濃く太め。角はところどころ欠ける
+    const c1 = hex('#9a9ea4'), c2 = hex('#848890'), c3 = hex('#adb1b6'), cd = hex('#45484d');
+    const CELLS = {
+      top: [[0.18, 0.2], [0.55, 0.15], [0.85, 0.35], [0.3, 0.55], [0.68, 0.62], [0.15, 0.88], [0.5, 0.92], [0.88, 0.85]],
+      left: [[0.2, 0.18], [0.62, 0.22], [0.9, 0.5], [0.35, 0.55], [0.12, 0.85], [0.55, 0.88], [0.85, 0.9]],
+      right: [[0.15, 0.25], [0.5, 0.15], [0.85, 0.3], [0.3, 0.62], [0.7, 0.6], [0.2, 0.92], [0.6, 0.95]],
+    };
+    const cols = [c1, c2, c3];
     isoBox(px, { a: 7, b: 7, c: 7, cx: 8, cy: 8, seed: 'cobble', tex: (f, u, v) => {
-      const ds = cells.map(([cx, cy], i) => [Math.hypot(u - cx, v - cy), i]).sort((p, q) => p[0] - q[0]);
-      if (ds[1][0] - ds[0][0] < 0.08) return cd;
-      return ds[0][1] % 2 ? c2 : c1;
+      const ds = CELLS[f].map(([cx, cy], i) => [Math.hypot(u - cx, v - cy), i]).sort((p, q) => p[0] - q[0]);
+      if (ds[1][0] - ds[0][0] < 0.1) return cd; // 目地
+      const k = 1.12 - ds[0][0] * 1.1; // 石のまん中ほど明るい（ふくらんで見える）
+      const c = cols[ds[0][1] % 3];
+      return [c[0] * k, c[1] * k, c[2] * k];
     } });
+    for (const [x, y] of [[8, 1], [2, 5], [14, 5], [1, 11], [15, 10], [8, 15]]) { const i = (y * S + x) * 4; px[i + 3] = 0; } // 角の欠け
   },
   // 鉄鉱石：石のかたまりに、赤茶の粒
   iron(px) { oreChunk(px, hex('#d6a27c'), hex('#b07650'), 'iron'); },
@@ -136,13 +145,22 @@ const ICONS = {
     put(px, 6, 4, [255, 255, 255]); put(px, 7, 4, [230, 255, 255]);
   },
   planks(px) {
-    const p1 = hex('#c49a5c'), p2 = hex('#ad8248'), pd = hex('#7d5a2e');
-    isoBox(px, { a: 7, b: 7, c: 7, cx: 8, cy: 8, seed: 'planks', tex: (f, u, v) => {
-      const row = f === 'top' ? u : v;
-      const k = Math.floor(row * 4);
-      if (Math.abs(row * 4 - Math.round(row * 4)) < 0.14) return pd; // 板のすき間
-      return k % 2 ? p2 : p1;
-    } });
+    // 板：木目の板が 4 枚、横に並んだブロック（正面から少し上を見た形）。板ごとに色を少し変え、すき間は濃く、木目のすじと継ぎ目・釘
+    const P = [hex('#c48c50'), hex('#ae7840'), hex('#bc844a'), hex('#a46e3a')], gap = hex('#4e3218'), grain = hex('#80552a'), topC = hex('#d8a468'), nail = hex('#3a2a1a');
+    const x0 = 1, x1 = 14, y0 = 3, y1 = 14;
+    for (let x = x0 + 1; x <= x1; x++) put(px, x, y0 - 1, tone(topC, 1.05)); // 上の面（細い明るい帯）
+    put(px, x0, y0 - 1, tone(topC, 0.6));
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const r = y - y0, k = Math.floor(r / 3), w = r % 3; // 板 1 枚 = 2 マス＋すき間 1
+      let c = w === 2 && k < 3 ? gap : P[Math.min(3, k)];
+      const joint = k % 2 ? 9 : 5;
+      if (w !== 2 && x === joint) c = gap; // 継ぎ目（板ごとにずらす）
+      else if (w === 1 && ((x * 7 + k * 3) % 5 === 0)) c = grain; // 木目
+      else if (w === 0 && c !== gap) c = tone(c, 1.1); // 板の上の縁は少し明るい
+      if (x === x0 || y === y1 || x === x1) c = tone(c === gap ? P[0] : c, x === x0 ? 0.75 : 0.5); // 外の縁
+      put(px, x, y, c);
+    }
+    for (const [x, y] of [[3, 3], [12, 6], [3, 9], [12, 12]]) put(px, x, y, nail);
   },
   stick(px) {
     const g = shapeGrid();
@@ -157,10 +175,42 @@ const ICONS = {
     put(px, 6, 6, [210, 210, 220]); put(px, 9, 8, [150, 150, 165]);
   },
   wheat(px) {
-    const art = ["................","...h....k....h..","..hkh..kkh..hkh.","..khk..hkk..khk.","..hkh..khh..hkh.","..khk..hkk..khk.","...hk..khh..kh..","....s..hkk..s...",".....s..s..s....","......s.s.s.....",".....bbbbbb.....","......s.s.s.....",".....s..s..s....","....s...s...s...","...s....s....s..","................"];
-    const g = shapeGrid();
-    art.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.') g[y * S + x] = ch; }));
-    puffy(px, g, { h: { c: hex('#ecc852'), shine: 0.3 }, k: { c: hex('#cfa23a'), shine: 0.2 }, s: { c: hex('#9a9a3a'), flat: true }, b: { c: hex('#8a5a2c'), flat: true } }, 'wheat');
+    // 小麦の束：黄金色の太い穂 3 本が上でふくらみ、下を紐で縛る。穂のまわりは濃い縁で 1 本ずつ分け、粒は 1 段ごとに互いちがい
+    const art = [
+      '................',
+      '.......e........',
+      '...e..eee..e....',
+      '..eee.eee.eee...',
+      '..eee.eee.eee...',
+      '..eee.eee.eee...',
+      '..eee.eee.eee...',
+      '..eee..s..eee...',
+      '...e...s...e....',
+      '....s..s..s.....',
+      '.....bbbbbb.....',
+      '.....bbbbbb.....',
+      '.....s..s..s....',
+      '....s...s...s...',
+      '...s....s....s..',
+      '................',
+    ];
+    const at = (x, y) => (x < 0 || y < 0 || x >= S || y >= S ? '.' : art[y][x]);
+    const EL = hex('#fbe070'), EM = hex('#eebc34'), ED = hex('#c08a1c'), OUT = hex('#5a3c0c');
+    const SL = hex('#d8bc5a'), SD = hex('#9a7e2c'), BL = hex('#b8682e'), BD = hex('#7a3e18');
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const c = at(x, y);
+      if (c === '.') { if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => at(x + dx, y + dy) === 'e')) put(px, x, y, OUT); continue; }
+      if (c === 'e') {
+        const l = at(x - 1, y) !== 'e', r = at(x + 1, y) !== 'e';
+        let col = (x + y) % 2 ? EL : EM; // 粒
+        if (r && !l) col = ED; else if (l && !r && (x + y) % 2) col = tone(EL, 1.05);
+        put(px, x, y, col);
+      } else if (c === 's') put(px, x, y, at(x + 1, y + 1) === 's' || at(x - 1, y + 1) === '.' ? SL : SD);
+      else put(px, x, y, (y === 10 ? BL : BD));
+    }
+    // 茎と紐の外の縁（右下だけ濃く）
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) if (at(x, y) === 'b' && (at(x + 1, y) === '.' || at(x, y + 1) === '.')) put(px, x, y, tone(BD, 0.7));
+    for (const x of [7, 8]) put(px, x, 10, hex('#e09a58')); // 結び目の光
   },
   seeds(px) {
     const g = shapeGrid();
@@ -187,6 +237,16 @@ const ICONS = {
     disc(g, 5, 8, 2.8, 'l'); disc(g, 11, 7, 2.8, 'k'); disc(g, 8, 4, 3, 'l'); disc(g, 6.5, 12, 2, 'k');
     puffy(px, g, { s: { c: hex('#6b4a2b'), flat: true }, l: { c: hex('#4f9a3a'), shine: 0.15 }, k: { c: hex('#3f8030'), shine: 0.15 } }, 'sap');
   },
+  stump(px) {
+    // 切り株：短い丸太。上の面に年輪、側面は皮、根元に根が 4 本はり出す
+    const bark = hex('#6b4a2b'), barkD = hex('#4e3420'), ring = hex('#d6b076'), ringD = hex('#a8804a');
+    isoBox(px, { a: 7, b: 7, c: 4, cx: 8, cy: 9, seed: 'stump', tex: (f, u, v) => {
+      if (f === 'top') { const r = Math.hypot(u - 0.5, v - 0.5); if (r > 0.44) return bark; return Math.floor(r * 11) % 2 ? ringD : ring; }
+      return Math.floor(u * 6) % 2 ? barkD : bark;
+    } });
+    const root = hex('#5a3c22'), rootD = hex('#3c2614');
+    for (const [x, y, d] of [[1, 12, 0], [2, 12, 0], [1, 13, 1], [14, 12, 0], [15, 12, 0], [15, 13, 1], [6, 15, 0], [7, 15, 1], [10, 15, 0], [11, 15, 1]]) put(px, x, y, d ? rootD : root);
+  },
   fish_funa(px) { fishIcon(px, '#8a8f6a', '#c9ccb0', 'funa'); },
   fish_koi(px) { fishIcon(px, '#d8682a', '#f2e6d8', 'koi'); },
   fish_masu(px) { fishIcon(px, '#6f8f9a', '#e8b0b8', 'masu'); },
@@ -210,9 +270,15 @@ const ICONS = {
     puffy(px, g, { e: { c: hex('#efe2c4'), shine: 0.5 } }, 'egg');
   },
   milk(px) {
+    // ミルク：白いミルクが入った鉄のバケツ（取っ手つき）
     const g = shapeGrid();
-    poly(g, [[4, 6], [12, 6], [12.5, 14.5], [3.5, 14.5]], 'b'); poly(g, [[6, 2.5], [10, 2.5], [10, 6.2], [6, 6.2]], 'n'); poly(g, [[4.5, 7], [11.5, 7], [11.6, 9.5], [4.4, 9.5]], 'm');
-    puffy(px, g, { b: { c: hex('#8a6a48'), shine: 0.2 }, n: { c: hex('#6b4f34') }, m: { c: hex('#f4f4ee'), shine: 0.3, flat: true } }, 'milk');
+    poly(g, [[3, 7.5], [13, 7.5], [11.8, 15], [4.2, 15]], 'b');
+    poly(g, [[3.4, 10.2], [12.6, 10.2], [12.4, 11.4], [3.6, 11.4]], 'd');
+    ellipse(g, 8, 7.4, 5.2, 1.9, 'r');
+    ellipse(g, 8, 7.4, 4.0, 1.2, 'm');
+    for (const [x0, y0, x1, y1] of [[2.8, 7, 4.2, 3.6], [4.2, 3.6, 8, 2.2], [8, 2.2, 11.8, 3.6], [11.8, 3.6, 13.2, 7]]) line(g, x0, y0, x1, y1, 1.0, 'h');
+    puffy(px, g, { b: { c: hex('#a8aeb6'), shine: 0.4 }, d: { c: hex('#7c828a'), flat: true }, r: { c: hex('#cfd4da'), shine: 0.3, flat: true }, m: { c: hex('#fbfbf6'), shine: 0.5, flat: true }, h: { c: hex('#5c6168'), flat: true } }, 'milk');
+    put(px, 6, 7, [255, 255, 255]); put(px, 7, 7, [255, 255, 255]);
   },
   wool(px) {
     const g = shapeGrid();
@@ -284,126 +350,76 @@ const region = (g, fn, m, th = 0.5) => { for (let y = 0; y < S; y++) for (let x 
 const rows = (g, list, m) => { for (const [y, xs] of list) for (const x of xs) g[y * S + x] = m; };
 const dots = (g, map) => map.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === '#') g[y * S + x] = 'm'; else if (ch === 'w') g[y * S + x] = 'w'; }));
 const rng2 = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+// マイクラの決まりにならう（絵は写さず、配置と形の考え方だけ）：
+//   柄は左下の角から右上へ 45° にまっすぐ。明るい茶（x + y = 15）と暗い茶（x + y = 16）の 2 段で、1 マスずつの階段。
+//   頭は右上の端。どの道具も柄の向きは同じ。頭は 3〜4 段の明るさ（左上が明るく右下が暗い）、縁取りは頭の色のいちばん暗い色。
+// 柄にそった座標 u（右上ほど大きい）と、柄からの横のずれ v（左上が正）。マスの中を 4×4 に分けて、半分以上入るマスをぬる
+const UV = (X, Y) => ({ u: (X - Y) / Math.SQRT2, v: (15.5 - X - Y) / Math.SQRT2 });
+const fillUV = (g, fn, m, th = 0.5) => { for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { let n = 0; for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { const { u, v } = UV(x + (i + 0.5) / 4, y + (j + 0.5) / 4); if (fn(u, v)) n++; } if (n / 16 >= th) g[y * S + x] = m; } };
+// 柄：yTop の行まで（左下の角 (0,15) から）
+const handle = (g, yTop) => { for (let y = 15; y >= yTop; y--) { const xl = 15 - y, xd = 16 - y; if (xl >= 0 && xl < S) g[y * S + xl] = 'w'; if (xd < S && y >= 1) g[y * S + xd] = 'd'; } };
 const TOOL_SHAPE = {
-  // 4 つとも：頭は大きく（6〜8 マス以上）、柄は 1 マスの細い茶色の線。1 マスずつのドット図をそのまま書く（# = 頭、w = 柄、. = なし）。
-  // 縁取り（濃い色の 1 マス）は drawTool が外側につける。並べた時に輪郭がまったく違うように、頭の形を変えている。
-  // つるはし：上が平らで両はしが下へ曲がる「⌒」。x = 6 を軸に左右対称。柄は頭のまん中から右下へ斜めに
+  // つるはし：柄に直角の大きな弓。左上の角の近くから右下の角の近くまで対角いっぱいにのび、まん中が右上へふくらむ「⌒」。柄は弓のまん中に刺さる
   pickaxe(g) {
-    dots(g, [
-      '................',
-      '................',
-      '....#######.....',
-      '..###########...',
-      '.##...###...##..',
-      '.##....w....##..',
-      '.#......w....#..',
-      '.........w......',
-      '..........w.....',
-      '...........w....',
-      '............w...',
-      '.............w..',
-      '..............w.',
-      '................',
-      '................',
-      '................',
-    ]);
+    handle(g, 5);
+    // 弓の中心線：v（柄に直角）を -1〜1 で動かすと、u（右上）がまん中でいちばん大きい
+    for (let k = -1; k <= 1.0001; k += 0.01) {
+      const vv = k * 9.2, uu = 6.2 - 3.4 * k * k, r = 1.25 - 0.55 * k * k;
+      fillUV(g, (u, v) => (u - uu) ** 2 + (v - vv) ** 2 <= r * r, 'm', 0.45);
+    }
   },
-  // 斧：柄の上の片側（左）に、大きな四角っぽい刃（刃先の左はしは上下に少し広がる）。反対側（右）の背は短い
+  // 斧：柄の上の端の左に、5×5 ぐらいの斧頭（刃の外側＝左がすこし広い）。右には柄の先が少し出るだけ
   axe(g) {
-    dots(g, [
-      '................',
-      '...#####........',
-      '...#######......',
-      '...##########w..',
-      '...#########w##.',
-      '...########w##..',
-      '...#######w.....',
-      '...#####.w......',
-      '........w.......',
-      '.......w........',
-      '......w.........',
-      '.....w..........',
-      '....w...........',
-      '...w............',
-      '..w.............',
-      '................',
-    ]);
+    handle(g, 1);
+    rows(g, [[1, rng2(5, 8)], [2, rng2(5, 11)], [3, rng2(6, 12)], [4, rng2(6, 11)], [5, rng2(5, 10)], [6, rng2(5, 8)]], 'm');
   },
-  // シャベル：柄の先に、平たいしずく形のスコップ（先は丸く、柄の方へ細くなる）
+  // シャベル：柄の先に、柄と同じ向きの平たいスコップ（幅 3〜4 マス、先は丸い）
   shovel(g) {
-    dots(g, [
-      '................',
-      '..........###...',
-      '.........#####..',
-      '........#######.',
-      '........#######.',
-      '.......########.',
-      '.......#######..',
-      '.......######...',
-      '......w.###.....',
-      '.....w..........',
-      '....w...........',
-      '...w............',
-      '..w.............',
-      '.w..............',
-      '................',
-      '................',
-    ]);
+    handle(g, 6);
+    fillUV(g, (u, v) => { const w = 1.9; if (Math.abs(v) > w) return false; if (u < 2.6) return false; const tip = 8.2; if (u > tip - w) return (u - (tip - w)) ** 2 + v * v <= w * w; return true; }, 'm');
   },
-  // くわ：柄の上から片側（左）へ、薄い棒がのびて、はしで短い刃が直角に下がる（L 字）。刃は斧より薄く小さい
+  // くわ：柄の先から左へ 3〜4 マスの細い頭。左のはしが少し下がる。斧よりずっと小さい
   hoe(g) {
-    dots(g, [
-      '................',
-      '................',
-      '......########..',
-      '......##...##...',
-      '......#...w.....',
-      '......#..w......',
-      '........w.......',
-      '.......w........',
-      '......w.........',
-      '.....w..........',
-      '....w...........',
-      '...w............',
-      '..w.............',
-      '.w..............',
-      '................',
-      '................',
-    ]);
+    handle(g, 1);
+    rows(g, [[1, rng2(9, 14)], [2, [9, 10]], [3, [9]]], 'm');
   },
-  // 剣：まっすぐな刃と先・つば・握り・柄頭
+  // 剣：刃は左下から右上へ斜め。左下よりに柄と直角の短いつば、その下に短い握りと柄頭
   sword(g) {
-    fillAP(g, (a, p) => a >= -1 && a <= 11 && p >= -2 && p <= 2, 'm');
-    fillAP(g, (a, p) => a >= 12 && a <= 13 && p >= -1 && p <= 1, 'm');
-    fillAP(g, (a, p) => a >= -3 && a <= -2 && p >= -5 && p <= 5, 'g');
-    fillAP(g, (a, p) => a >= -9 && a <= -4 && (p === 0 || p === 1), 'w');
-    fillAP(g, (a, p) => a >= -12 && a <= -10 && p >= -1 && p <= 2, 'g');
+    fillUV(g, (u, v) => u > -3.2 && u < 9.6 && Math.abs(v) <= 1.25 - Math.max(0, u - 8.2) * 0.8, 'm');
+    fillUV(g, (u, v) => u >= -4.4 && u <= -3.2 && Math.abs(v) <= 3.0, 'g');
+    for (const [x, y] of [[3, 12], [2, 13]]) g[y * S + x] = 'w';
+    for (const [x, y] of [[4, 12], [3, 13]]) g[y * S + x] = 'd';
+    for (const [x, y] of [[1, 14], [2, 14], [1, 13]]) g[y * S + x] = 'g';
   },
-  // 釣りざお：茶色の握りと、素材のさお
+  // 釣りざお：茶色の握りと、素材のさお（今の形のまま）
   fishing_rod(g) {
     fillAP(g, (a, p) => a >= -12 && a <= -6 && (p === 0 || p === 1), 'b');
     fillAP(g, (a, p) => a >= -5 && a <= 11 && (p === 0 || (p === 1 && a < 3)), 'm');
   },
 };
 const ROD_LINE = [[14, 3], [14, 4], [14, 5], [14, 6], [14, 7], [14, 8], [14, 9], [14, 10]];
+// 釣りざおだけは前の描き方。ほかの道具は js/toolart.js の絵（3D の道具と同じ）
+let TA = null;
 function drawTool(px, mat, kind) {
+  if (kind !== 'fishing_rod') { px.set(TA.toolPixels(kind, mat)); return; }
   const g = shapeGrid();
   TOOL_SHAPE[kind](g);
   const seed = mat + kind;
   const at = (x, y) => (x < 0 || y < 0 || x >= S || y >= S ? null : g[y * S + x]);
   // 釣りざおの木のさおは柄と同じ茶色。つば・柄頭は濃い革色
-  const palOf = (c) => ({ m: PAL[mat], w: PAL.stick, b: PAL.wrap, g: PAL.wrap }[c]);
+  const palOf = (c) => ({ m: PAL[mat], w: PAL.stick, d: PAL.stick, b: PAL.wrap, g: PAL.wrap }[c]);
   const out = (x, y) => !at(x, y);
   const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   // 縁取り：形の外側に 1px（中の色を縁で食わない）。色は、となりの部品のいちばん暗い色
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
     if (at(x, y)) continue;
-    const n = N4.map(([dx, dy]) => at(x + dx, y + dy)).find(Boolean);
+    const n = N4.map(([dx, dy]) => at(x + dx, y + dy)).find((c) => c === 'm' || c === 'g' || c === 'b'); // 縁取りは頭（とつば・握り）だけ。柄の階段はそのまま
     if (n) put(px, x, y, palOf(n)[0]);
   }
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
     const c = at(x, y); if (!c) continue;
     const P = palOf(c);
+    if (c === 'w' || c === 'd') { put(px, x, y, P[c === 'w' ? 3 : 1]); continue; } // 柄：明るい茶と暗い茶の 2 段
     // 1 暗 2 中 3 明 4 光：左か上が外なら明るく、右か下が外なら暗く
     const ul = out(x - 1, y) || out(x, y - 1), dr = out(x + 1, y) || out(x, y + 1);
     let t = ul && !dr ? 3 : dr && !ul ? 1 : 2;
@@ -458,6 +474,8 @@ function flower(px, petal, seed) {
   puffy(px, g, { s: { c: hex('#4f8f3a'), flat: true }, l: { c: hex('#5aa03c') }, p: { c: petal, shine: 0.3 }, c: { c: hex('#f6e27a'), shine: 0.2 } }, seed);
 }
 
+(async () => {
+TA = await import(require('url').pathToFileURL(path.join(__dirname, '..', 'js', 'toolart.js')).href);
 fs.mkdirSync(OUT, { recursive: true });
 for (const [name, draw] of Object.entries(ICONS)) { const px = canvas(); draw(px); writePNG(path.join(OUT, name + '.png'), S, S, px); }
 console.log('アイコンを ' + Object.keys(ICONS).length + ' 個作りました: ' + OUT);
@@ -484,3 +502,20 @@ console.log('アイコンを ' + Object.keys(ICONS).length + ' 個作りまし�
   writePNG(dst, W, H, sheet);
   console.log('道具一覧: ' + dst);
 }
+// 8 倍で 4 つ（つるはし・斧・シャベル・くわ）を並べた確かめ用。上の段が木、下の段が鉄
+{
+  const Z = 8, CELL = S * Z + 16, K4 = ['pickaxe', 'axe', 'shovel', 'hoe'], M2 = ['wood', 'iron'];
+  const W = CELL * K4.length + 16, H = CELL * M2.length + 16, sheet = new Uint8Array(W * H * 4);
+  for (let i = 0; i < W * H; i++) { sheet[i * 4] = 139; sheet[i * 4 + 1] = 139; sheet[i * 4 + 2] = 139; sheet[i * 4 + 3] = 255; }
+  M2.forEach((mat, r) => K4.forEach((kind, c) => {
+    const px = canvas(); drawTool(px, mat, kind);
+    for (let y = 0; y < S * Z; y++) for (let x = 0; x < S * Z; x++) {
+      const si = (Math.floor(y / Z) * S + Math.floor(x / Z)) * 4; if (!px[si + 3]) continue;
+      const di = ((8 + r * CELL + y) * W + 8 + c * CELL + x) * 4; sheet[di] = px[si]; sheet[di + 1] = px[si + 1]; sheet[di + 2] = px[si + 2];
+    }
+  }));
+  const dst = path.join(__dirname, '..', 'video', '道具_8倍.png');
+  writePNG(dst, W, H, sheet);
+  console.log('8 倍の確かめ: ' + dst);
+}
+})();

@@ -38,7 +38,7 @@ async function main() {
     d.type = 'button'; d.className = 'node';
     d.style.left = pos[v.key].x * 100 + '%'; d.style.top = pos[v.key].y * 100 + '%';
     d.innerHTML = `<span class="f"></span><span class="nm">${esc(v.display)}</span>`;
-    faceCanvas(v.skin, 32).then((c) => d.querySelector('.f').append(c));
+    faceCanvas(v, 32).then((c) => d.querySelector('.f').append(c));
     d.addEventListener('click', () => select(v.key));
     map.append(d); nodes[v.key] = d;
   }

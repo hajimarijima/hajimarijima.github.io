@@ -42,6 +42,9 @@
       }
       case 'date': return /^\d{4}-\d{2}-\d{2}$/.test(raw) && !isNaN(Date.parse(raw)) ? { value: raw } : { error: '日付を選んでください' };
       case 'color': return /^#[0-9a-f]{6}$/i.test(raw) ? { value: raw.toLowerCase() } : { error: '色を選んでください' };
+      // 見た目：「体の種類:シード」（例 female:123）
+      // 3 つ目は引き直しを使った回数（0 か 1）。例 female:123:1
+      case 'skin': return /^(none|male|female):\d{1,10}(:[01])?$/.test(raw) && +raw.split(':')[1] <= 4294967295 ? { value: raw } : { error: '見た目を選び直してください' };
       default: return { error: '知らない種類の項目です' };
     }
   }
@@ -55,6 +58,9 @@
   }
   const publicOnly = (fields, values) => Object.fromEntries(fields.filter((f) => f.public && values[f.id] !== undefined).map((f) => [f.id, values[f.id]]));
   const privateOnly = (fields, values) => Object.fromEntries(fields.filter((f) => !f.public && values[f.id] !== undefined).map((f) => [f.id, values[f.id]]));
-  const api = { badWord, cleanText, check, validate, publicOnly, privateOnly };
+  // 見た目の引き直し：体の種類を選んだ（変えた）時に、1 回だけ。used は使った回数（村人の記録と、保存したプロフィールの大きい方）
+  const parseLookValue = (s) => { const m = /^(none|male|female):(\d{1,10})(?::([01]))?$/.exec(String(s || '')); return m ? { body: m[1], seed: +m[2], used: +(m[3] || 0) } : null; };
+  const rerollAllowed = ({ used = 0, bodyChanged = false } = {}) => used < 1 && !!bodyChanged;
+  const api = { badWord, cleanText, check, validate, publicOnly, privateOnly, parseLookValue, rerollAllowed };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.ProfileFields = api;
 })(typeof self !== 'undefined' ? self : this);

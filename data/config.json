@@ -410,6 +410,10 @@
       "value": {
         "food": 0.4
       }
+    },
+    "stump": {
+      "name": "切り株",
+      "value": {}
     }
   },
   "buildings": {
@@ -1131,6 +1135,13 @@
   },
   "profileFields": [
     {
+      "id": "look",
+      "label": "見た目",
+      "type": "skin",
+      "public": true,
+      "note": "体の種類を変えた時に 1 回だけ「別のを引く」で引き直せます"
+    },
+    {
       "id": "mbti",
       "label": "MBTI",
       "type": "select",
@@ -1275,14 +1286,17 @@
     "treeHits": 6
   },
   "respawn": {
-    "note": "木と岩がまた出てくるまでの日数。切り株 → 若木 → 木。岩は同じ場所か別の場所に出る",
+    "note": "切り株は、その場所にはもう生えない。stumpDays たつと別の空いた場所に苗木が出て、saplingDays で木になる。切り株はたたくと（stumpDig の確率で、stumpHits 回）原木 1 本か「切り株」が落ちて消える。stumpRotDays で朽ちて消える。岩は同じ場所か別の場所に出る",
     "stumpDays": 3,
     "saplingDays": 3,
     "rockDays": [
       4,
       7
     ],
-    "sameSpot": 0.5
+    "sameSpot": 0.5,
+    "stumpHits": 2,
+    "stumpDig": 0.7,
+    "stumpRotDays": 6
   },
   "crafting": {
     "note": "道具のレシピ。チェストの中の材料で作る（原木 1 → 板 4、板 2 → 棒 4 は自動）。足りなければ作れない。良い道具ほど、たたく回数が少なく（早く）・たくさん落ち・長くもつ。金は早いがすぐこわれる",
@@ -1707,7 +1721,7 @@
     }
   },
   "animals": {
-    "note": "森や野原を歩く動物。柵（pen）を建てると、近くの動物を毎日 tamePerDay 頭まで中へ入れて飼う。村人は動物を殺さない。世話をする人（牧場の仕事）がいる日に、たまご・ミルク・羊毛・きのこをもらう",
+    "note": "森や野原を歩く動物。柵（pen）を建てると、近くの動物を毎日 tamePerDay 頭まで中へ入れて飼う。村人は動物を殺さない。世話をする人（牧場の仕事）がいる日に、たまご・ミルク・羊毛・きのこをもらう。種や作物を持っている村人には近くの動物がついてきて、柵があればその人が中へ連れて入れる（1 人 1 頭まで）",
     "kinds": {
       "cow": {
         "name": "ウシ",
@@ -1737,6 +1751,35 @@
     },
     "penCap": 8,
     "tamePerDay": 2,
-    "tameRange": 60
+    "tameRange": 60,
+    "followRange": 12
+  },
+  "terrain": {
+    "note": "町のまわりの地形（チャンクごとに種から作る）。clearBlocks：建物（建てる場所も）のまわり何ブロックに木と岩を置かないか（sim.js の生えかわりも同じ）。viewChunks：見える距離（チャンク）",
+    "seed": "town",
+    "clearBlocks": 4,
+    "viewChunks": 8,
+    "viewChunksMobile": 4
+  },
+  "grass": {
+    "note": "草の畑：くわを持った村人は、チェストに種があれば草を耕して畑にする（村のまん中から near の距離、maxFields まで）。草を摘むと、ときどき種が取れる",
+    "maxFields": 8,
+    "near": [
+      12,
+      30
+    ]
+  },
+  "needs": {
+    "note": "体力とおなか（0〜max、アイコン 1 つで 2）。おなかは毎日 hungerBase と、働いた分 hungerWork へり、食べると eat 戻る。おなか 0 だと体力が starve 減る（死なない）。おなかが regenAt 以上なら体力が regen 戻る。体力が restBelow 以下なら次の日は休んで restHeal 戻る",
+    "max": 20,
+    "hungerBase": 4,
+    "hungerWork": 5,
+    "eat": 10,
+    "starve": 2,
+    "regenAt": 14,
+    "regen": 2,
+    "restBelow": 8,
+    "restHeal": 8,
+    "restHunger": 2
   }
 }

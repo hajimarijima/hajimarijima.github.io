@@ -25,7 +25,7 @@
   <h2>これまでの投票</h2>
   <div id="past"></div>
   <h2>フォロワーの節目で増える候補</h2>
-  <ul class="list card" id="future"></ul>
+  <ul class="list card mslist" id="future"></ul>
 </main>
 <script type="module">
 import { loadAll, nav, esc, fmtDate, showError } from './js/common.js';
@@ -95,7 +95,7 @@ loadAll().then(({ state, config }) => {
   const B = config.buildings;
   document.getElementById('future').innerHTML = config.milestones.map((m) => {
     const got = state.reached.includes(m.at);
-    return `<li><b>${m.at.toLocaleString()} 人</b>　${esc(m.adds.map((k) => B[k].name).join('・'))}<span class="muted">${got ? '（候補に入った）' : 'が候補に入る'}</span></li>`;
+    return `<li class="msrow"><b class="msn">${m.at.toLocaleString()} 人</b><span class="msb">${esc(m.adds.map((k) => B[k].name).join('・'))}<span class="muted">${got ? '（候補に入った）' : 'が候補に入る'}</span></span></li>`;
   }).join('');
 }).catch(showError);
 </script>

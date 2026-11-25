@@ -1,5 +1,6 @@
 // マイクラのような四角い体を、64x64 のスキン画像から作る
 import * as THREE from 'three';
+import { toolPixels } from './toolart.js';
 
 const PX = 1 / 16;
 const loader = new THREE.TextureLoader();
@@ -49,6 +50,9 @@ function geos() {
     larm: boxGeo(32, 48, 4, 12, 4), lsleeve: boxGeo(48, 48, 4, 12, 4, 0.5),
     rleg: boxGeo(0, 16, 4, 12, 4), rpants: boxGeo(0, 32, 4, 12, 4, 0.5),
     lleg: boxGeo(16, 48, 4, 12, 4), lpants: boxGeo(0, 48, 4, 12, 4, 0.5),
+    // 細い腕（3px）のスキン
+    rarmS: boxGeo(40, 16, 3, 12, 4), rsleeveS: boxGeo(40, 32, 3, 12, 4, 0.5),
+    larmS: boxGeo(32, 48, 3, 12, 4), lsleeveS: boxGeo(48, 48, 3, 12, 4, 0.5),
   };
   return GEO;
 }
@@ -83,7 +87,52 @@ function finish(g, mat, M, w, h, d, x, y, z) {
   if (mat === 'wood') { for (const k of [-0.3, 0.25]) g.add(box(w + 0.006, h * 0.12, d * 0.8, tm(M[1]), x, y + h * k, z)); }
   else if (mat === 'stone') { g.add(box(w * 0.7 + 0.02, h * 0.3, d * 0.25, tm(M[1]), x, y + h * 0.3, z - d * 0.2)); g.add(box(w + 0.02, h * 0.25, d * 0.2, tm(M[2]), x, y - h * 0.2, z + d * 0.15)); }
 }
+// 道具の 16×16 の絵（js/toolart.js、アイコンと同じ）を厚み 1 マスで押し出した形（マイクラのアイテムと同じ作り方）。
+// 見えない面（となりにマスがある面）は作らない。形と色は種類と素材ごとに 1 つだけ作って使い回す
+const SPRITE_KIND = { axe: 'axe', pick: 'pickaxe', pickaxe: 'pickaxe', hoe: 'hoe', shovel: 'shovel', sword: 'sword' };
+const spriteGeoCache = {};
+const spriteMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+function spriteGeo(kind, mat) {
+  const key = kind + ':' + mat;
+  if (spriteGeoCache[key]) return spriteGeoCache[key];
+  const px = toolPixels(kind, mat), N = 16;
+  const on = (x, y) => x >= 0 && y >= 0 && x < N && y < N && px[(y * N + x) * 4 + 3] > 0;
+  const pos = [], nor = [], col = [];
+  // 絵の x → -z、絵の上 → +y、厚みは x。1 マス = 1
+  const quad = (pts, n, c) => { for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(...pts[i]); nor.push(...n); col.push(...c); } };
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    if (!on(x, y)) continue;
+    const i = (y * N + x) * 4, c = [px[i] / 255, px[i + 1] / 255, px[i + 2] / 255].map((v) => Math.pow(v, 2.2));
+    const z0 = -x, z1 = -x - 1, y0 = -y - 1, y1 = -y, a = -0.5, b = 0.5;
+    const cs = c.map((v) => v * 0.8); // 側面は少し暗く
+    quad([[b, y0, z0], [b, y0, z1], [b, y1, z1], [b, y1, z0]], [1, 0, 0], c);
+    quad([[a, y0, z1], [a, y0, z0], [a, y1, z0], [a, y1, z1]], [-1, 0, 0], c);
+    if (!on(x, y - 1)) quad([[a, y1, z0], [b, y1, z0], [b, y1, z1], [a, y1, z1]], [0, 1, 0], cs);
+    if (!on(x, y + 1)) quad([[a, y0, z1], [b, y0, z1], [b, y0, z0], [a, y0, z0]], [0, -1, 0], cs);
+    if (!on(x - 1, y)) quad([[a, y0, z0], [b, y0, z0], [b, y1, z0], [a, y1, z0]], [0, 0, 1], cs);
+    if (!on(x + 1, y)) quad([[b, y0, z1], [a, y0, z1], [a, y1, z1], [b, y1, z1]], [0, 0, -1], cs);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  // 握る所（絵の (3.5, 11.5) あたり）を原点に
+  g.translate(0, 11.5, 3.5);
+  return (spriteGeoCache[key] = g);
+}
+function makeSpriteTool(kind, mat) {
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(spriteGeo(kind, mat), spriteMat); m.castShadow = true;
+  const inner = new THREE.Group(); inner.add(m);
+  inner.rotation.x = Math.PI / 4; // 絵の斜めの柄を、手の向き（+y）にそろえる。頭の刃は +z 側
+  const k = 0.052; inner.scale.setScalar(k);
+  g.add(inner);
+  g.userData.base = 1; g.userData.sprite = true;
+  return g;
+}
 function makeTool(kind0) {
+  const [kind1, mat1] = String(kind0).split(':');
+  if (SPRITE_KIND[kind1]) return makeSpriteTool(SPRITE_KIND[kind1], TOOL_MAT[mat1] ? mat1 : 'iron');
   const g = new THREE.Group();
   const [kind, mat0] = String(kind0).split(':');
   const mat = TOOL_MAT[mat0] ? mat0 : 'iron', M = TOOL_MAT[mat];
@@ -151,7 +200,10 @@ function makeCarry(kind) {
 }
 
 // キャラクターを作る。返す group の userData.parts でアニメさせる
-export function makeCharacter(url, { scale = 1, oneHand = null } = {}) {
+// slim：細い腕（3px）のスキン（女性の見た目など）
+// chibi：2 頭身のデフォルメ（見本。頭 1.7 倍、体と手足は短く太く。頭と体はおよそ 1:1）。スキンの絵はそのまま使う
+export const CHIBI = { head: 1.7, torso: [1.1, 0.55, 1.1], arm: [1.2, 0.55, 1.2], leg: [1.2, 0.5, 1.2] };
+export function makeCharacter(url, { scale = 1, oneHand = null, slim = false, chibi = false } = {}) {
   const G = geos();
   const tex = skinTexture(url);
   const base = new THREE.MeshLambertMaterial({ map: tex });
@@ -174,19 +226,34 @@ export function makeCharacter(url, { scale = 1, oneHand = null } = {}) {
     const b = mk(g2, over); b.position.y = -6 * PX; p.add(b);
     return p;
   };
-  const rarm = limb(G.rarm, G.rsleeve, -6 * PX, 24 * PX); // キャラの右手は -x
-  const larm = limb(G.larm, G.lsleeve, 6 * PX, 24 * PX);
-  const rleg = limb(G.rleg, G.rpants, -2 * PX, 12 * PX);
-  const lleg = limb(G.lleg, G.lpants, 2 * PX, 12 * PX);
+  const ax = slim ? 5.5 : 6;
+  // 基準の高さ（px）：脚の付け根・胴のまん中・肩（＝頭の下）。2 頭身は脚 6・胴 6.6・頭 13.6
+  const C = chibi ? CHIBI : null;
+  const hip = C ? 12 * C.leg[1] : 12, top = C ? hip + 12 * C.torso[1] : 24;
+  const bp = { head: top * PX, torso: (hip + top) / 2 * PX, arm: top * PX };
+  const armX = C ? (4 * C.torso[0] + 2 * (slim ? 1.5 / 2 : 1) * C.arm[0] + 0.2) : ax, legX = C ? 2 * C.leg[0] : 2;
+  const rarm = limb(slim ? G.rarmS : G.rarm, slim ? G.rsleeveS : G.rsleeve, -armX * PX, bp.arm); // キャラの右手は -x
+  const larm = limb(slim ? G.larmS : G.larm, slim ? G.lsleeveS : G.lsleeve, armX * PX, bp.arm);
+  const rleg = limb(G.rleg, G.rpants, -legX * PX, hip * PX);
+  const lleg = limb(G.lleg, G.lpants, legX * PX, hip * PX);
   body.add(head, torso, rarm, larm, rleg, lleg);
+  head.position.y = bp.head; torso.position.y = bp.torso;
+  if (C) {
+    head.scale.setScalar(C.head); torso.scale.set(...C.torso);
+    for (const a of [rarm, larm]) a.scale.set(...C.arm);
+    for (const l of [rleg, lleg]) l.scale.set(...C.leg);
+  }
 
   const hand = new THREE.Group(); hand.position.set(0, -11 * PX, 0.5 * PX); rarm.add(hand);
-  const front = new THREE.Group(); front.position.set(0, 17 * PX, 4.5 * PX); body.add(front);
+  // 2 頭身は腕を縮めているので、手の中の道具がゆがまないように逆に戻す（道具は少しだけ小さく）
+  if (C) hand.scale.set(0.9 / C.arm[0], 0.9 / C.arm[1], 0.9 / C.arm[2]);
+  const front = new THREE.Group(); front.position.set(0, (C ? hip + 5 : 17) * PX, (C ? 5 : 4.5) * PX); body.add(front);
   root.scale.setScalar(scale);
   root.userData.seed = (charCount++ * 0.6180339) % 1;
   // 片手で振る人と両手で振る人がいる（oneHand で指定もできる）
   root.userData.oneHand = oneHand ?? root.userData.seed < 0.4;
   root.userData.balance = root.userData.seed < 0.2 ? 'out' : 'down';
+  root.userData.base = bp; root.userData.chibi = !!chibi;
   root.userData.parts = { torso, body, head, rarm, larm, rleg, lleg, hand, front, tool: null, toolKind: null, carry: null, carryKind: null };
   return root;
 }
@@ -269,8 +336,9 @@ export function animate(ch, pose, t) {
   const seed = ch.userData.seed || 0;
   P.body.position.y = 0; P.body.rotation.set(0, 0, 0);
   P.head.rotation.set(0, 0, 0);
-  P.head.position.y = 24 * PX; P.torso.position.y = 18 * PX;
-  P.rarm.position.y = 24 * PX; P.larm.position.y = 24 * PX;
+  const B0 = ch.userData.base || { head: 24 * PX, torso: 18 * PX, arm: 24 * PX };
+  P.head.position.y = B0.head; P.torso.position.y = B0.torso;
+  P.rarm.position.y = B0.arm; P.larm.position.y = B0.arm;
   for (const k of ['rarm', 'larm', 'rleg', 'lleg']) P[k].rotation.set(0, 0, 0);
   if (P.chips) P.chips.visible = false;
   if (P.tool) P.tool.rotation.x = Math.PI / 2;
@@ -361,6 +429,8 @@ export function animate(ch, pose, t) {
       P.head.rotation.y = Math.sin(t * 0.4 + seed * 5) * 0.15;
     }
   }
+  // 2 頭身は頭が重く大きいので、体の前かがみと首の傾きを小さくする（大きく傾けると頭が地面に付いて見える）
+  if (ch.userData.chibi) { P.body.rotation.x *= 0.35; P.head.rotation.x *= 0.5; P.body.position.y *= 0.5; }
   // 盾を持っていて矢が来ている時は、左腕を前に上げて盾で受ける（少し身をかがめる）
   if (P.shield && ch.userData.block) { P.larm.rotation.set(-1.45, 0.25, -0.2); P.body.rotation.x = Math.max(P.body.rotation.x, 0.12); P.head.rotation.x = -0.1; }
   else if (P.shield) P.larm.rotation.set(-1.0, 0.2, -0.15); // 盾を前に構えておく

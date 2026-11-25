@@ -28,14 +28,14 @@ run('init.js', '--demo');
   if (d1[4]) d1[4].startTool = 'fishing_rod'; // 「参加したい 釣り」
   fs.writeFileSync(path.join(dir, 'villagers.json'), JSON.stringify(vs, null, 2));
 }
-const base = read('world.json');
+const base = require('./store').readWorld(dir);
 const out = {
   trees: base.trees.map(({ id, x, z, kind, size, far }) => ({ id, x, z, kind, size, far })),
   bushes: base.bushes.map(({ id, x, z }) => ({ id, x, z })),
   seaZ: base.seaZ, campfire: base.campfire, square: base.square, debris: base.debris, chest: base.chest, pond: base.pond, animals: base.animals, days: [],
 };
 const snap = () => {
-  const w = read('world.json'), s = read('state.json'), life = read('life.json'), vs = read('villagers.json');
+  const w = require('./store').readWorld(dir), s = read('state.json'), life = require('./store').readLife(dir), vs = read('villagers.json');
   out.days.push({
     day: s.day, followers: s.followers, resources: s.resources, store: s.store,
     trees: w.trees.map((t) => (t.gone ? 'g' : t.state[0])).join(''),

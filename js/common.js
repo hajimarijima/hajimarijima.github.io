@@ -1,4 +1,7 @@
 // どのページでも使うもの
+import { makeSkin } from './skingen.js';
+import { decodeWorld } from './tilemap.js';
+import { diaryPath } from './datafiles.js';
 export const JOB = { wood: '木を切る', stone: '岩を掘る', food: '食べ物を集める' };
 export const RES = { wood: '木材', stone: '石', food: '食べ物' };
 export const RES_COLOR = { wood: '#b07a45', stone: '#8d939b', food: '#6aa84f' };
@@ -19,7 +22,23 @@ export async function load(name) {
 export async function loadAll() {
   const [config, state, villagers, world, life, history, social] = await Promise.all([...['config', 'state', 'villagers', 'world', 'life', 'history'].map(load), load('social').catch(() => ({ pairs: {}, talks: [], view: {}, edges: [] }))]);
   const active = villagers.filter((v) => v.joinedDay <= state.day);
-  return { config, state, villagers, active, world, life, history, social };
+  // world.json の木と岩は地図の文字で入っているので、いつもの一覧に戻す
+  return { config, state, villagers, active, world: decodeWorld(world), life, history, social };
+}
+// 日記は人ごとのファイル（開いた時だけ読む）。古い形（life.json の中）ならそれを使う
+export async function loadDiary(key, L) {
+  if (L && Array.isArray(L.diary)) return L.diary;
+  // 日記は 64 組のファイルに分けてある。{ key: {diary, locks} }。locks（持ち物の枠がいつ開くか）は L にも入れる
+  try {
+    const r = await fetch('data/' + diaryPath(key), { cache: 'no-cache' });
+    if (r.ok) {
+      const d = await r.json();
+      const e = (d && d[key]) || {};
+      if (L && e.locks) L.locks = e.locks;
+      if (Array.isArray(e.diary)) return e.diary;
+    }
+  } catch (e) { /* 読めない時は今日の分だけ */ }
+  return L && L.diaryLast ? [L.diaryLast] : [];
 }
 
 export function nav(current) {
@@ -37,6 +56,20 @@ export function emptyNote(config) { return `<p class="empty">${esc(emptyText(con
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const skinUrl = (n) => 'skins/skin_' + String(n).padStart(3, '0') + '.png';
+// 村人のスキンの画像：プロフィールで見た目を決めた人（v.look = { body, seed }）はその場で作る。ほかは番号の画像
+const lookCache = {};
+export function lookDataUrl(look) {
+  const k = look.body + ':' + look.seed;
+  if (!lookCache[k]) {
+    const s = makeSkin(look.seed, look.body);
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+    const g = c.getContext('2d'), img = g.createImageData(64, 64); img.data.set(s.px); g.putImageData(img, 0, 0);
+    lookCache[k] = { url: c.toDataURL('image/png'), slim: s.slim, traits: s.traits };
+  }
+  return lookCache[k];
+}
+export const skinSrc = (v) => (v && typeof v === 'object' ? (v.look ? lookDataUrl(v.look).url : skinUrl(v.skin)) : skinUrl(v));
+export const skinSlim = (v) => !!(v && typeof v === 'object' && v.look && lookDataUrl(v.look).slim);
 export const villagerUrl = (v) => 'villager.html?k=' + encodeURIComponent(v.key);
 export const fmtDate = (iso) => { if (!iso) return ''; const [y, m, d] = iso.slice(0, 10).split('-'); return `${y}年${+m}月${+d}日`; };
 export const shortDate = (iso) => { const [, m, d] = iso.slice(0, 10).split('-'); return `${+m}/${+d}`; };
@@ -55,10 +88,14 @@ const FRONT = [
 const FRONT_OV = [[40, 8, 8, 8, 4, 0], [20, 36, 8, 12, 4, 8], [44, 36, 4, 12, 0, 8], [52, 52, 4, 12, 12, 8], [4, 36, 4, 12, 4, 20], [4, 52, 4, 12, 8, 20]];
 const BACK = [[24, 8, 8, 8, 4, 0], [32, 20, 8, 12, 4, 8], [44, 52, 4, 12, 0, 8], [52, 20, 4, 12, 12, 8], [28, 52, 4, 12, 4, 20], [12, 20, 4, 12, 8, 20]];
 const BACK_OV = [[56, 8, 8, 8, 4, 0], [32, 36, 8, 12, 4, 8], [60, 52, 4, 12, 0, 8], [52, 36, 4, 12, 12, 8], [12, 52, 4, 12, 4, 20], [12, 36, 4, 12, 8, 20]];
-export function drawFigure(ctx, img, back = false, scale = 1, ox = 0, oy = 0) {
+// slim：細い腕（3px）のスキン。腕は幅 3 で、背面は元の位置が 1 つ左
+export function drawFigure(ctx, img, back = false, scale = 1, ox = 0, oy = 0, slim = false) {
   ctx.imageSmoothingEnabled = false;
   for (const list of back ? [BACK, BACK_OV] : [FRONT, FRONT_OV]) {
-    for (const [sx, sy, w, h, dx, dy] of list) ctx.drawImage(img, sx, sy, w, h, ox + dx * scale, oy + dy * scale, w * scale, h * scale);
+    for (let [sx, sy, w, h, dx, dy] of list) {
+      if (slim && dy === 8 && w === 4) { w = 3; if (back) sx -= 1; if (dx === 0) dx = 1; }
+      ctx.drawImage(img, sx, sy, w, h, ox + dx * scale, oy + dy * scale, w * scale, h * scale);
+    }
   }
 }
 export function drawFace(ctx, img, size) {
@@ -66,11 +103,37 @@ export function drawFace(ctx, img, size) {
   ctx.drawImage(img, 8, 8, 8, 8, 0, 0, size, size);
   ctx.drawImage(img, 40, 8, 8, 8, 0, 0, size, size);
 }
+// skin：スキンの番号か、村人（見た目を決めた人はその見た目）
 export async function faceCanvas(skin, size = 32) {
   const c = document.createElement('canvas');
   c.width = size; c.height = size; c.className = 'pixel';
-  loadImage(skinUrl(skin)).then((img) => drawFace(c.getContext('2d'), img, size));
+  loadImage(skinSrc(skin)).then((img) => drawFace(c.getContext('2d'), img, size));
   return c;
+}
+
+// 体力（ハート）とおなか（肉）のゲージ。マイクラのように 10 個のアイコン、1 つで 2。半分も描く
+const ICON_PX = {
+  heart: ['.KK...KK.', 'KRRK.KRRK', 'KRWRKRRRK', 'KRRRRRRRK', '.KRRRRRK.', '..KRRRK..', '...KRK...', '....K....'],
+  food: ['....KKKK.', '...KBLLBK', '..KBLBBBK', '..KBBBBBK', '..KBBBBK.', '.KWKKKK..', 'KWWK.....', '.KK......'],
+};
+const ICON_COL = { heart: { K: '#3a0d0d', R: '#d8232a', W: '#ffd4d4', E: '#4a3a3a' }, food: { K: '#3d2410', B: '#b5652a', L: '#e09a5c', W: '#efe6d2', E: '#4a4038' } };
+const iconCache = {};
+function gaugeIcon(kind, fill) { // fill: 2 ぜんぶ・1 半分（左）・0 から
+  const k = kind + fill;
+  if (iconCache[k]) return iconCache[k];
+  const C = ICON_COL[kind]; let r = '';
+  ICON_PX[kind].forEach((row, y) => [...row].forEach((ch, x) => {
+    if (ch === '.') return;
+    const on = ch === 'K' || fill === 2 || (fill === 1 && x <= 4);
+    r += `<rect x="${x}" y="${y}" width="1" height="1" fill="${on ? C[ch] : C.E}"/>`;
+  }));
+  return (iconCache[k] = `<svg viewBox="0 0 9 8" width="16" height="14" shape-rendering="crispEdges" aria-hidden="true">${r}</svg>`);
+}
+export function gaugeHtml(kind, val, max = 20) {
+  const v = Math.max(0, Math.min(max, Math.round(val ?? max)));
+  let s = '';
+  for (let i = 0; i < max / 2; i++) s += gaugeIcon(kind, v >= i * 2 + 2 ? 2 : v === i * 2 + 1 ? 1 : 0);
+  return `<span class="gauge" role="img" aria-label="${kind === 'heart' ? '体力' : 'おなか'} ${v}/${max}">${s}</span>`;
 }
 
 export function showError(e) {

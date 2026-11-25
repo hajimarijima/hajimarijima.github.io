@@ -8,6 +8,8 @@ const path = require('path');
 const { makeRng } = require('./rand');
 const { loadHidden, upsertVillager } = require('./people');
 const { genBlocks } = require('./ores');
+const TM = require('../js/tilemap.js'); // 地図の文字の持ち方（木と岩はマスの中の決まった所に置く）
+const { writeWorld } = require('./store');
 
 const DATA = process.env.TOWN_DATA || path.join(__dirname, '..', 'data');
 const args = process.argv.slice(2);
@@ -47,30 +49,30 @@ const HALF = 108, CELL = 6;
 const trees = [], rocks = [];
 for (let gz = -HALF; gz < SEA_Z - 5; gz += CELL) {
   for (let gx = -HALF; gx < HALF; gx += CELL) {
-    const x = gx + R.range(0.6, CELL - 0.6), z = gz + R.range(0.6, CELL - 0.6);
+    const sp = TM.spotIn(TM.tileOf(gx + R.range(0.6, CELL - 0.6)), TM.tileOf(gz + R.range(0.6, CELL - 0.6)));
+    const x = sp.x, z = sp.z; // マスの中の決まった所（保存は地図の文字だけで済む）
     const roll = R.next();
     if (z > SEA_Z - 5 || Math.hypot(x - SQUARE.x, z - SQUARE.z) < SQUARE.r + 2.5 || FIELD(x, z) || BUSH(x, z)) continue;
     const far = Math.hypot(x, z + 1) > FAR ? 1 : 0;
     if (roll < 0.12) {
       if (near(rocks, x, z, 4)) continue;
-      const max = R.int(GATHER.rockItems[0], GATHER.rockItems[1]);
-      const rk = { id: 'r' + rocks.length, x: +x.toFixed(2), z: +z.toFixed(2), hp: max, max, kind: R.int(0, 2) };
-      if (far) rk.far = 1;
+      const max = R.int(GATHER.rockItems[0], GATHER.rockItems[1]); R.int(0, 2);
+      const rk = { ...TM.rockAt(x, z), hp: max, max };
       rk.blocks = genBlocks(seed, rk, ORES); // 中身（1 つずつ落ちる物：石・石炭・鉄・金・ダイヤ）
       rocks.push(rk);
     } else if (roll < 0.66) {
-      const t = { id: 't' + trees.length, x: +x.toFixed(2), z: +z.toFixed(2), state: 'tree', regrow: 0, kind: R.int(0, 2), size: +R.range(0.85, 1.2).toFixed(2) };
-      if (far) t.far = 1;
-      trees.push(t);
+      R.int(0, 2); R.range(0.85, 1.2); // 乱数の流れはそのまま（形と大きさはマスから決まる）
+      trees.push(TM.treeAt(x, z));
     }
   }
 }
 // 最初の日に掘る岩が近くにあるように、まん中のそばに 2 つ
-for (const [x, z] of [[11.5, -9.5], [-10.5, 7.5]]) {
+for (const [x0, z0] of [[11.5, -9.5], [-10.5, 7.5]]) {
+  const { x, z } = TM.spotIn(TM.tileOf(x0), TM.tileOf(z0));
   if (near(rocks, x, z, 3)) continue;
   for (let i = trees.length - 1; i >= 0; i--) if (Math.hypot(trees[i].x - x, trees[i].z - z) < 3.2) trees.splice(i, 1);
   const max = R.int(GATHER.rockItems[0], GATHER.rockItems[1]);
-  const rk = { id: 'r' + rocks.length, x, z, hp: max, max, kind: 0 };
+  const rk = { ...TM.rockAt(x, z), hp: max, max, kind: 0 };
   rk.blocks = genBlocks(seed, rk, ORES);
   rocks.push(rk);
 }
@@ -78,7 +80,6 @@ for (const [x, z] of [[11.5, -9.5], [-10.5, 7.5]]) {
 const POND = { x: -20, z: 15, r: 4.2 };
 for (let i = trees.length - 1; i >= 0; i--) if (Math.hypot(trees[i].x - POND.x, trees[i].z - POND.z) < POND.r + 2.6) trees.splice(i, 1);
 for (let i = rocks.length - 1; i >= 0; i--) if (Math.hypot(rocks[i].x - POND.x, rocks[i].z - POND.z) < POND.r + 3) rocks.splice(i, 1);
-trees.forEach((t, i) => { t.id = 't' + i; });
 
 // 整地する前の村のまん中：草と小石
 const debris = [];
@@ -151,10 +152,11 @@ const state = {
   weather: '晴れ', updated: null,
 };
 
-write('world.json', world);
+writeWorld(DATA, world);
 write('villagers.json', villagers);
 write('state.json', state);
 write('life.json', {});
+fs.rmSync(path.join(DATA, 'diary'), { recursive: true, force: true }); // 日記（人ごとのファイル）も空に
 write('social.json', { pairs: {}, talks: [] });
 write('history.json', [{ day: 0, date: state.date, type: 'start', text: '何もない平地に、木と岩だけがある。ここから町づくりが始まる。' }]);
 console.log('0 日目にしました（' + (demo ? '見本の村人 ' + villagers.length + ' 人' : '村人なし') + '）');

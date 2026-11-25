@@ -15,7 +15,15 @@
 <body>
 <main class="wrap">
   <h1>スキン一覧</h1>
-  <p class="muted">村人の見た目は、ここにある 200 枚のどれかです。名前から決まるので、同じ人はいつも同じスキンになります。すべてスクリプトで組み合わせて作ったものです。</p>
+  <p class="muted">村人の見た目は、ふだんは下の 200 枚のどれかです（名前から決まるので、同じ人はいつも同じスキン）。プロフィールで見た目を選んだ人は、その見た目になります。すべてスクリプトで組み合わせて作ったものです。</p>
+  <section class="card gen">
+    <h2>見た目を作る</h2>
+    <p class="muted">村人の番号（シード）から、肌・髪・目・服・帽子が決まります。体の種類を選んで「別のを引く」で見くらべられます。ログインした村人は、自分のページで気に入った見た目に決められます。</p>
+    <div class="filter" id="gbody"><button data-b="none" class="on">指定なし</button><button data-b="male">男性</button><button data-b="female">女性</button><button id="greroll">別のを引く</button></div>
+    <div class="skins" id="ggrid"></div>
+    <details><summary>見本 24 体（男性・女性・指定なし を 8 体ずつ）</summary><img src="skins/見本24.png" class="pixel" alt="見本 24 体" style="max-width:100%;height:auto"></details>
+  </section>
+  <h2>200 枚のスキン</h2>
   <div class="filter" id="filter"><button data-f="all" class="on">すべて</button><button data-f="used">村人が使っている</button></div>
   <div class="skins" id="grid"></div>
 </main>
@@ -32,8 +40,31 @@
   </div>
 </div>
 <script type="module">
-import { load, nav, esc, skinUrl, loadImage, drawFigure, villagerUrl, showError } from './js/common.js';
+import { load, nav, esc, skinUrl, loadImage, drawFigure, villagerUrl, showError, lookDataUrl } from './js/common.js';
 nav('skins.html');
+// 見た目を作る：24 体をその場で作る
+{
+  let body = 'none', base = Math.floor(Math.random() * 1e6);
+  const ggrid = document.getElementById('ggrid');
+  const draw = () => {
+    ggrid.innerHTML = '';
+    for (let k = 0; k < 24; k++) {
+      const seed = base + k, L = lookDataUrl({ body, seed });
+      const b = document.createElement('div'); b.className = 'skin'; b.title = L.traits.join(' / ');
+      const c = document.createElement('canvas'); c.width = 16; c.height = 32; c.className = 'pixel';
+      loadImage(L.url).then((img) => drawFigure(c.getContext('2d'), img, false, 1, 0, 0, L.slim));
+      const sm = document.createElement('small'); sm.textContent = seed;
+      b.append(c, sm); ggrid.append(b);
+    }
+  };
+  document.getElementById('gbody').addEventListener('click', (e) => {
+    if (e.target.id === 'greroll') { base = Math.floor(Math.random() * 1e6); draw(); return; }
+    const b = e.target.dataset && e.target.dataset.b; if (!b) return;
+    body = b; for (const x of e.currentTarget.children) if (x.dataset.b) x.classList.toggle('on', x.dataset.b === b);
+    draw();
+  });
+  draw();
+}
 Promise.all([fetch('skins/index.json').then((r) => r.json()), load('villagers'), load('state')]).then(([skins, villagers, state]) => {
   const users = {};
   for (const v of villagers.filter((x) => x.joinedDay <= state.day)) (users[v.skin] = users[v.skin] || []).push(v);
