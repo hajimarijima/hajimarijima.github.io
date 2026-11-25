@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>相関図 | みんなで町づくり</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#7cb342">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js"));</script>
+</head>
+<body>
+<main class="wrap">
+  <h1>村人の相関図</h1>
+  <p class="muted">いっしょに働いた回数・近くに住んでいること・性格の相性で、関係は毎日少しずつ変わります。顔を押すと、その人の関係だけを表示します。</p>
+  <div class="legend" id="legend"></div>
+  <div class="relmap" id="map"><svg id="lines" viewBox="0 0 1000 1000" preserveAspectRatio="none"></svg></div>
+  <div class="card" id="detail"><p class="muted" style="margin:0">顔を押すと、ここに関係の一覧が出ます。</p></div>
+  <h2>最近の関係のできごと</h2>
+  <div class="card"><ul class="list" id="events"></ul></div>
+</main>
+<script type="module" src="js/relations.js"></script>
+</body>
+</html>

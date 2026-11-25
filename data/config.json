@@ -1,0 +1,1110 @@
+{
+  "title": "みんなで町づくり",
+  "account": "@your_account",
+  "joinWord": "参加したい",
+  "buildVote": {
+    "note": "建てる物と場所は毎回 A/B/C の投票で決める。1 日の中で時間を分けるので、同じ A/B/C のコメントでも区別できる（日本時間）",
+    "whatHours": [
+      9,
+      15
+    ],
+    "whereHours": [
+      15,
+      24
+    ],
+    "toolHours": [
+      9,
+      24
+    ]
+  },
+  "siteUrl": "",
+  "siteUrlNote": "公開したサイトの URL（例 https://ユーザー名.github.io/town/）。DM の招待リンクに使う",
+  "inventory": {
+    "base": 3,
+    "max": 27,
+    "stack": 64,
+    "levelSlots": [
+      3,
+      6,
+      10,
+      15,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50,
+      55,
+      60,
+      65,
+      70,
+      75,
+      80,
+      85,
+      90
+    ],
+    "daySlots": [
+      7,
+      14,
+      30,
+      60,
+      100
+    ],
+    "actionsPerDay": 8,
+    "tripCost": 3,
+    "xpBase": 20,
+    "xpExp": 1.5,
+    "maxLevel": 99,
+    "xp": {
+      "chop": 2,
+      "dig": 2,
+      "gather": 2,
+      "carry": 5,
+      "build": 15,
+      "vote": 5,
+      "comment": 3
+    }
+  },
+  "items": {
+    "log": {
+      "name": "原木",
+      "value": {
+        "wood": 0.25
+      }
+    },
+    "cobble": {
+      "name": "丸石",
+      "value": {
+        "stone": 0.25
+      }
+    },
+    "coal": {
+      "name": "石炭",
+      "value": {}
+    },
+    "iron": {
+      "name": "鉄鉱石",
+      "value": {}
+    },
+    "wheat": {
+      "name": "小麦",
+      "value": {
+        "food": 0.34
+      }
+    },
+    "seeds": {
+      "name": "種",
+      "value": {}
+    },
+    "berry": {
+      "name": "木の実",
+      "value": {
+        "food": 0.34
+      }
+    },
+    "apple": {
+      "name": "りんご",
+      "value": {
+        "food": 0.5
+      }
+    },
+    "flower_r": {
+      "name": "赤い花",
+      "value": {}
+    },
+    "flower_y": {
+      "name": "黄色い花",
+      "value": {}
+    },
+    "sapling": {
+      "name": "苗木",
+      "value": {}
+    },
+    "gold": {
+      "name": "金鉱石",
+      "value": {}
+    },
+    "diamond": {
+      "name": "ダイヤ",
+      "value": {}
+    },
+    "planks": {
+      "name": "板",
+      "value": {
+        "wood": 0.0625
+      }
+    },
+    "stick": {
+      "name": "棒",
+      "value": {}
+    },
+    "wood_pickaxe": {
+      "name": "木のつるはし",
+      "tool": true
+    },
+    "stone_pickaxe": {
+      "name": "石のつるはし",
+      "tool": true
+    },
+    "iron_pickaxe": {
+      "name": "鉄のつるはし",
+      "tool": true
+    },
+    "wood_axe": {
+      "name": "木の斧",
+      "tool": true
+    },
+    "stone_axe": {
+      "name": "石の斧",
+      "tool": true
+    },
+    "iron_axe": {
+      "name": "鉄の斧",
+      "tool": true
+    },
+    "wood_hoe": {
+      "name": "木のくわ",
+      "tool": true
+    }
+  },
+  "buildings": {
+    "hut": {
+      "name": "小屋",
+      "cost": {
+        "wood": 20
+      },
+      "cap": 2,
+      "look": {
+        "kind": "house",
+        "w": 3,
+        "d": 3,
+        "h": 1.6,
+        "wall": "#9b6b3d",
+        "roof": "#5e4026",
+        "roofType": "gable",
+        "log": true
+      }
+    },
+    "house": {
+      "name": "家",
+      "cost": {
+        "wood": 40,
+        "stone": 15
+      },
+      "cap": 4,
+      "look": {
+        "kind": "house",
+        "w": 4,
+        "d": 3.4,
+        "h": 2.2,
+        "wall": "#eadfc4",
+        "roof": "#b5523b",
+        "roofType": "gable",
+        "base": "#8d8d8d",
+        "varyRoof": true
+      }
+    },
+    "workshop": {
+      "name": "作業場",
+      "cost": {
+        "wood": 50,
+        "stone": 30
+      },
+      "unique": true,
+      "bonus": {
+        "wood": 0.2,
+        "stone": 0.2
+      },
+      "look": {
+        "kind": "house",
+        "w": 5,
+        "d": 4,
+        "h": 2.4,
+        "wall": "#a87a4f",
+        "roof": "#4f5b66",
+        "roofType": "gable",
+        "chimney": true,
+        "props": "workbench"
+      }
+    },
+    "shop": {
+      "name": "店",
+      "cost": {
+        "wood": 60,
+        "stone": 40,
+        "food": 20
+      },
+      "unique": true,
+      "bonus": {
+        "food": 0.1
+      },
+      "look": {
+        "kind": "house",
+        "w": 4.5,
+        "d": 4,
+        "h": 2.6,
+        "wall": "#f0e6d0",
+        "roof": "#3f7d5a",
+        "roofType": "gable",
+        "awning": "#d24a3a"
+      }
+    },
+    "storehouse": {
+      "name": "倉庫",
+      "cost": {
+        "wood": 60,
+        "stone": 20
+      },
+      "look": {
+        "kind": "storehouse",
+        "w": 5.2,
+        "d": 4,
+        "h": 2.6
+      }
+    },
+    "plaza": {
+      "name": "広場",
+      "cost": {
+        "stone": 80
+      },
+      "unique": true,
+      "plot": "center",
+      "look": {
+        "kind": "plaza"
+      }
+    },
+    "well": {
+      "name": "井戸",
+      "cost": {
+        "stone": 30,
+        "wood": 10
+      },
+      "bonus": {
+        "food": 0.05
+      },
+      "look": {
+        "kind": "well"
+      }
+    },
+    "garden": {
+      "name": "花畑",
+      "cost": {
+        "food": 30,
+        "wood": 10
+      },
+      "look": {
+        "kind": "garden"
+      }
+    },
+    "onsen": {
+      "name": "温泉",
+      "cost": {
+        "stone": 90,
+        "wood": 30
+      },
+      "unique": true,
+      "bonus": {
+        "food": 0.1
+      },
+      "look": {
+        "kind": "onsen"
+      }
+    },
+    "inn": {
+      "name": "宿屋",
+      "cost": {
+        "wood": 80,
+        "stone": 40,
+        "food": 20
+      },
+      "unique": true,
+      "cap": 4,
+      "look": {
+        "kind": "house",
+        "w": 5,
+        "d": 4.5,
+        "h": 3.4,
+        "wall": "#efe2c6",
+        "roof": "#7a3b2e",
+        "roofType": "gable",
+        "floors": 2
+      }
+    },
+    "bathhouse": {
+      "name": "湯治場",
+      "cost": {
+        "wood": 60,
+        "stone": 60
+      },
+      "unique": true,
+      "bonus": {
+        "food": 0.1
+      },
+      "look": {
+        "kind": "house",
+        "w": 4,
+        "d": 4,
+        "h": 2.4,
+        "wall": "#d9cdb3",
+        "roof": "#2f4f6f",
+        "roofType": "pyramid",
+        "chimney": true,
+        "steam": true
+      }
+    },
+    "clocktower": {
+      "name": "時計台",
+      "cost": {
+        "stone": 100,
+        "wood": 40
+      },
+      "unique": true,
+      "bonus": {
+        "wood": 0.1,
+        "stone": 0.1,
+        "food": 0.1
+      },
+      "look": {
+        "kind": "tower",
+        "w": 2.6,
+        "h": 9,
+        "wall": "#d8cdb5",
+        "roof": "#3c5a8a",
+        "clock": true
+      }
+    },
+    "school": {
+      "name": "学校",
+      "cost": {
+        "wood": 80,
+        "stone": 50
+      },
+      "unique": true,
+      "bonus": {
+        "wood": 0.1
+      },
+      "look": {
+        "kind": "house",
+        "w": 6,
+        "d": 4,
+        "h": 3,
+        "wall": "#f3efe6",
+        "roof": "#9c3d3d",
+        "roofType": "gable",
+        "floors": 2,
+        "bell": true
+      }
+    },
+    "library": {
+      "name": "図書館",
+      "cost": {
+        "wood": 70,
+        "stone": 60
+      },
+      "unique": true,
+      "bonus": {
+        "stone": 0.1
+      },
+      "look": {
+        "kind": "house",
+        "w": 5,
+        "d": 4,
+        "h": 3,
+        "wall": "#c9b48f",
+        "roof": "#4a3b6b",
+        "roofType": "pyramid",
+        "floors": 2
+      }
+    },
+    "port": {
+      "name": "港",
+      "cost": {
+        "wood": 90,
+        "stone": 30
+      },
+      "unique": true,
+      "plot": "coast",
+      "bonus": {
+        "food": 0.3
+      },
+      "look": {
+        "kind": "dock"
+      }
+    },
+    "fishery": {
+      "name": "漁師小屋",
+      "cost": {
+        "wood": 50,
+        "stone": 10
+      },
+      "unique": true,
+      "plot": "coast2",
+      "bonus": {
+        "food": 0.2
+      },
+      "look": {
+        "kind": "house",
+        "w": 3.4,
+        "d": 3,
+        "h": 2,
+        "wall": "#7f9aa8",
+        "roof": "#3d4d57",
+        "roofType": "gable",
+        "props": "nets"
+      }
+    },
+    "lighthouse": {
+      "name": "灯台",
+      "cost": {
+        "stone": 120,
+        "wood": 20
+      },
+      "unique": true,
+      "plot": "coast3",
+      "look": {
+        "kind": "tower",
+        "w": 2,
+        "h": 10,
+        "wall": "#f4f4f0",
+        "roof": "#c0392b",
+        "stripes": "#c0392b",
+        "light": true
+      }
+    },
+    "windmill": {
+      "name": "風車",
+      "cost": {
+        "wood": 90,
+        "stone": 40
+      },
+      "unique": true,
+      "bonus": {
+        "food": 0.25
+      },
+      "look": {
+        "kind": "windmill"
+      }
+    },
+    "bakery": {
+      "name": "パン屋",
+      "cost": {
+        "wood": 50,
+        "stone": 30,
+        "food": 20
+      },
+      "unique": true,
+      "bonus": {
+        "food": 0.15
+      },
+      "look": {
+        "kind": "house",
+        "w": 4,
+        "d": 3.6,
+        "h": 2.4,
+        "wall": "#f2d7a6",
+        "roof": "#a0522d",
+        "roofType": "gable",
+        "chimney": true,
+        "awning": "#e0a030"
+      }
+    },
+    "smithy": {
+      "name": "鍛冶屋",
+      "cost": {
+        "wood": 40,
+        "stone": 80
+      },
+      "unique": true,
+      "bonus": {
+        "wood": 0.25,
+        "stone": 0.25
+      },
+      "look": {
+        "kind": "house",
+        "w": 4,
+        "d": 4,
+        "h": 2.4,
+        "wall": "#77716b",
+        "roof": "#3a3a3a",
+        "roofType": "gable",
+        "chimney": true,
+        "smoke": true,
+        "props": "anvil"
+      }
+    },
+    "armory": {
+      "name": "道具倉",
+      "cost": {
+        "wood": 60,
+        "stone": 60
+      },
+      "unique": true,
+      "bonus": {
+        "stone": 0.15
+      },
+      "look": {
+        "kind": "house",
+        "w": 4,
+        "d": 4,
+        "h": 2.6,
+        "wall": "#8c8078",
+        "roof": "#46403c",
+        "roofType": "pyramid"
+      }
+    },
+    "ranch": {
+      "name": "牧場",
+      "cost": {
+        "wood": 90,
+        "food": 30
+      },
+      "unique": true,
+      "bonus": {
+        "food": 0.25
+      },
+      "look": {
+        "kind": "ranch"
+      }
+    },
+    "barn": {
+      "name": "納屋",
+      "cost": {
+        "wood": 70,
+        "stone": 20
+      },
+      "unique": true,
+      "bonus": {
+        "food": 0.1
+      },
+      "look": {
+        "kind": "house",
+        "w": 5,
+        "d": 4,
+        "h": 2.8,
+        "wall": "#9c2f2f",
+        "roof": "#5a2a2a",
+        "roofType": "gable"
+      }
+    },
+    "market": {
+      "name": "市場",
+      "cost": {
+        "wood": 100,
+        "stone": 60,
+        "food": 40
+      },
+      "unique": true,
+      "bonus": {
+        "food": 0.15,
+        "wood": 0.1
+      },
+      "look": {
+        "kind": "market"
+      }
+    },
+    "theater": {
+      "name": "劇場",
+      "cost": {
+        "wood": 120,
+        "stone": 100
+      },
+      "unique": true,
+      "look": {
+        "kind": "house",
+        "w": 6,
+        "d": 5,
+        "h": 4,
+        "wall": "#a33b4f",
+        "roof": "#d4af37",
+        "roofType": "pyramid",
+        "floors": 2
+      }
+    },
+    "watchtower": {
+      "name": "見張り塔",
+      "cost": {
+        "wood": 100,
+        "stone": 50
+      },
+      "unique": true,
+      "bonus": {
+        "stone": 0.15
+      },
+      "look": {
+        "kind": "tower",
+        "w": 2.4,
+        "h": 8,
+        "wall": "#8a6a48",
+        "roof": "#5e4026"
+      },
+      "defense": 3
+    },
+    "castle": {
+      "name": "城",
+      "cost": {
+        "stone": 300,
+        "wood": 120
+      },
+      "unique": true,
+      "look": {
+        "kind": "castle"
+      }
+    },
+    "cathedral": {
+      "name": "大聖堂",
+      "cost": {
+        "stone": 260,
+        "wood": 100
+      },
+      "unique": true,
+      "look": {
+        "kind": "house",
+        "w": 5,
+        "d": 7,
+        "h": 6,
+        "wall": "#e6e0d2",
+        "roof": "#41606e",
+        "roofType": "gable",
+        "floors": 3,
+        "spire": true
+      }
+    },
+    "observatory": {
+      "name": "天文台",
+      "cost": {
+        "stone": 220,
+        "wood": 80
+      },
+      "unique": true,
+      "look": {
+        "kind": "tower",
+        "w": 3.2,
+        "h": 5,
+        "wall": "#ddd6c8",
+        "roof": "#8fa3b5",
+        "dome": true
+      }
+    },
+    "fountain": {
+      "name": "大噴水",
+      "cost": {
+        "stone": 400
+      },
+      "unique": true,
+      "look": {
+        "kind": "fountain"
+      }
+    },
+    "museum": {
+      "name": "美術館",
+      "cost": {
+        "stone": 350,
+        "wood": 150
+      },
+      "unique": true,
+      "look": {
+        "kind": "house",
+        "w": 7,
+        "d": 5,
+        "h": 3.4,
+        "wall": "#f2efe8",
+        "roof": "#7d7365",
+        "roofType": "flat",
+        "columns": true
+      }
+    },
+    "station": {
+      "name": "駅",
+      "cost": {
+        "stone": 300,
+        "wood": 200
+      },
+      "unique": true,
+      "look": {
+        "kind": "house",
+        "w": 7,
+        "d": 4,
+        "h": 3,
+        "wall": "#b8664a",
+        "roof": "#3f4a52",
+        "roofType": "gable",
+        "clockFront": true
+      }
+    },
+    "fence": {
+      "name": "木の柵",
+      "cost": {
+        "wood": 40
+      },
+      "unique": true,
+      "plot": "ring",
+      "defense": 2,
+      "look": {
+        "kind": "fence"
+      }
+    },
+    "wall": {
+      "name": "石の壁",
+      "cost": {
+        "stone": 120,
+        "wood": 20
+      },
+      "unique": true,
+      "plot": "ring",
+      "defense": 4,
+      "look": {
+        "kind": "wall"
+      }
+    },
+    "lamps": {
+      "name": "街灯",
+      "cost": {
+        "wood": 20,
+        "stone": 20
+      },
+      "unique": true,
+      "plot": "ring",
+      "defense": 1,
+      "look": {
+        "kind": "lamps"
+      }
+    },
+    "watch": {
+      "name": "見張り台",
+      "cost": {
+        "wood": 40,
+        "stone": 10
+      },
+      "defense": 2,
+      "look": {
+        "kind": "watch"
+      }
+    },
+    "workbench": {
+      "name": "作業台",
+      "cost": {
+        "wood": 6
+      },
+      "unique": true,
+      "look": {
+        "kind": "workbench",
+        "h": 2.2
+      }
+    }
+  },
+  "milestones": [
+    {
+      "at": 50,
+      "adds": [
+        "onsen",
+        "clocktower",
+        "port"
+      ]
+    },
+    {
+      "at": 100,
+      "adds": [
+        "school",
+        "library",
+        "bathhouse"
+      ]
+    },
+    {
+      "at": 300,
+      "adds": [
+        "windmill",
+        "smithy",
+        "ranch",
+        "bakery"
+      ]
+    },
+    {
+      "at": 1000,
+      "adds": [
+        "market",
+        "theater",
+        "watchtower"
+      ]
+    },
+    {
+      "at": 3000,
+      "adds": [
+        "castle",
+        "cathedral",
+        "observatory"
+      ]
+    },
+    {
+      "at": 10000,
+      "adds": [
+        "fountain",
+        "museum",
+        "station"
+      ]
+    }
+  ],
+  "profileWord": "プロフ",
+  "profileForm": {
+    "url": "",
+    "note": "空なら「インスタの登録投稿にコメント」を案内する。Google フォームなどに差し替える時は url に入れる（{text} は作った文に置きかわる）"
+  },
+  "profileFields": [
+    {
+      "id": "mbti",
+      "label": "MBTI",
+      "type": "select",
+      "options": [
+        "ISTJ",
+        "ISFJ",
+        "INFJ",
+        "INTJ",
+        "ISTP",
+        "ISFP",
+        "INFP",
+        "INTP",
+        "ESTP",
+        "ESFP",
+        "ENFP",
+        "ENTP",
+        "ESTJ",
+        "ESFJ",
+        "ENFJ",
+        "ENTJ"
+      ],
+      "public": true,
+      "effect": "personality"
+    },
+    {
+      "id": "birthday",
+      "label": "誕生日（月日）",
+      "type": "monthday",
+      "public": true,
+      "effect": "birthday",
+      "note": "年は聞きません"
+    },
+    {
+      "id": "food",
+      "label": "好きな食べ物",
+      "type": "text",
+      "max": 20,
+      "public": true
+    },
+    {
+      "id": "color",
+      "label": "好きな色",
+      "type": "color",
+      "public": true,
+      "effect": "accent",
+      "note": "服の差し色になります"
+    },
+    {
+      "id": "hobby",
+      "label": "趣味",
+      "type": "text",
+      "max": 20,
+      "public": true
+    },
+    {
+      "id": "message",
+      "label": "ひとこと",
+      "type": "text",
+      "max": 40,
+      "public": true
+    },
+    {
+      "id": "wantJob",
+      "label": "やりたい仕事",
+      "type": "select",
+      "options": [
+        "伐採",
+        "採掘",
+        "農業",
+        "建築",
+        "商い"
+      ],
+      "public": true,
+      "effect": "job",
+      "note": "仕事を決める時に少し優先されます"
+    }
+  ],
+  "firebase": {
+    "note": "設定は js/firebase-config.js。空の間はログインは準備中になる",
+    "linkWord": "つなぐ"
+  },
+  "nightNote": "夜は森の外から敵が来る（enemies.enabled が true の時だけ）。守り（defense）の合計が大きいほど来る数が減る。村人は死なない（ケガで 1 日休む）",
+  "ores": {
+    "coal": 0.14,
+    "iron": 0.18,
+    "gold": 0.015,
+    "diamond": 0.004,
+    "note": "岩のブロック 1 つが鉱石になる確率。tools/ores.js が種と岩の id で決めるので毎回同じ"
+  },
+  "spendOrder": {
+    "note": "建てる時・食べる時にチェストから使う順",
+    "wood": [
+      "log",
+      "planks"
+    ],
+    "stone": [
+      "cobble"
+    ],
+    "food": [
+      "berry",
+      "wheat",
+      "apple"
+    ]
+  },
+  "gather": {
+    "note": "木と岩：決まった回数たたくと 1 つ落ちる。岩は 1 つ落ちるごとに一段小さくなり、最後は消える。木はたたき終わると倒れて原木が落ち、切り株が残る",
+    "treeLogs": [
+      3,
+      5
+    ],
+    "rockItems": [
+      6,
+      10
+    ],
+    "treeHits": 6
+  },
+  "respawn": {
+    "note": "木と岩がまた出てくるまでの日数。切り株 → 若木 → 木。岩は同じ場所か別の場所に出る",
+    "stumpDays": 3,
+    "saplingDays": 3,
+    "rockDays": [
+      4,
+      7
+    ],
+    "sameSpot": 0.5
+  },
+  "crafting": {
+    "note": "道具のレシピ。チェストの中の材料で作る（原木 1 → 板 4、板 2 → 棒 4 は自動）。足りなければ作れない。良い道具ほど、たたく回数が少なく（早く）・たくさん落ち・長くもつ",
+    "intermediates": {
+      "planks": {
+        "from": {
+          "log": 1
+        },
+        "makes": 4
+      },
+      "stick": {
+        "from": {
+          "planks": 2
+        },
+        "makes": 4
+      }
+    },
+    "tiers": {
+      "hand": {
+        "name": "素手",
+        "hits": 8,
+        "drop": 1,
+        "durability": 0
+      },
+      "wood": {
+        "name": "木",
+        "hits": 6,
+        "drop": 1,
+        "durability": 30
+      },
+      "stone": {
+        "name": "石",
+        "hits": 4,
+        "drop": 1.25,
+        "durability": 60,
+        "needs": "workbench"
+      },
+      "iron": {
+        "name": "鉄",
+        "hits": 3,
+        "drop": 1.5,
+        "durability": 120,
+        "needs": "workbench"
+      }
+    },
+    "recipes": {
+      "wood_pickaxe": {
+        "tool": "pickaxe",
+        "tier": "wood",
+        "from": {
+          "planks": 3,
+          "stick": 2
+        }
+      },
+      "wood_axe": {
+        "tool": "axe",
+        "tier": "wood",
+        "from": {
+          "planks": 3,
+          "stick": 2
+        }
+      },
+      "wood_hoe": {
+        "tool": "hoe",
+        "tier": "wood",
+        "from": {
+          "planks": 2,
+          "stick": 2
+        }
+      },
+      "stone_pickaxe": {
+        "tool": "pickaxe",
+        "tier": "stone",
+        "from": {
+          "cobble": 3,
+          "stick": 2
+        }
+      },
+      "stone_axe": {
+        "tool": "axe",
+        "tier": "stone",
+        "from": {
+          "cobble": 3,
+          "stick": 2
+        }
+      },
+      "iron_pickaxe": {
+        "tool": "pickaxe",
+        "tier": "iron",
+        "from": {
+          "iron": 3,
+          "coal": 1,
+          "stick": 2
+        }
+      },
+      "iron_axe": {
+        "tool": "axe",
+        "tier": "iron",
+        "from": {
+          "iron": 3,
+          "coal": 1,
+          "stick": 2
+        }
+      }
+    },
+    "toolVoteEvery": 5
+  },
+  "enemies": {
+    "enabled": false,
+    "note": "夜の敵（ゾンビ・スケルトン・クモ）。まだ出さない。true にすると 2 日目の夜から来る"
+  },
+  "firstChoices": [
+    "hut",
+    "storehouse",
+    "workbench"
+  ],
+  "choicePool": [
+    "house",
+    "well",
+    "fence",
+    "workshop",
+    "watch",
+    "garden",
+    "shop",
+    "plaza",
+    "lamps",
+    "house",
+    "wall",
+    "inn"
+  ],
+  "milestonesNote": "フォロワーがこの数に届くと、特別な建物が投票の候補に入る（序盤は普通の村の建物だけ）"
+}

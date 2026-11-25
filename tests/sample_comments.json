@@ -1,0 +1,28 @@
+{
+ "about": "Graph API のコメントと同じ形の見本。from.id がその人の固定の ID。",
+ "followers": 12,
+ "joinComments": [
+  {"id": "c1", "text": "参加したいです！", "timestamp": "2026-11-01T10:00:00+0000", "username": "new_hanako", "from": {"id": "1001", "username": "new_hanako"}},
+  {"id": "c2", "text": "参加します", "timestamp": "2026-11-01T11:00:00+0000", "username": "new_hanako", "from": {"id": "1001", "username": "new_hanako"}},
+  {"id": "c3", "text": "参加したい！おねがいします", "timestamp": "2026-11-01T12:00:00+0000", "username": "taro_pan", "from": {"id": "1002", "username": "taro_pan"}},
+  {"id": "c4", "text": "かわいい町！", "timestamp": "2026-11-01T13:00:00+0000", "username": "just_hello", "from": {"id": "1003", "username": "just_hello"}},
+  {"id": "c5", "text": "名前を変えました 参加", "timestamp": "2026-11-02T09:00:00+0000", "username": "taro_pan_new", "from": {"id": "1002", "username": "taro_pan_new"}},
+  {"id": "c6", "text": "わたしも住民登録", "timestamp": "2026-11-02T10:00:00+0000", "username": "secret_cat", "from": {"id": "1004", "username": "secret_cat"}},
+  {"id": "c7", "text": "今回は参加しないけど応援してます", "timestamp": "2026-11-02T11:00:00+0000", "username": "watch_only", "from": {"id": "1005", "username": "watch_only"}}
+ ],
+ "vote": {"opensAt": "2026-11-03T09:00:00+09:00", "closesAt": "2026-11-06T00:00:00+09:00"},
+ "voteComments": [
+  {"id": "v1",  "text": "A",          "timestamp": "2026-11-03T10:00:00+09:00", "from": {"id": "2001", "username": "u2001"}},
+  {"id": "v2",  "text": "c",          "timestamp": "2026-11-03T20:00:00+09:00", "from": {"id": "2002", "username": "u2002"}},
+  {"id": "v3",  "text": "Ｂがいい",    "timestamp": "2026-11-04T12:00:00+09:00", "from": {"id": "2001", "username": "u2001"}},
+  {"id": "v4",  "text": "BとCで迷う",  "timestamp": "2026-11-04T13:00:00+09:00", "from": {"id": "2003", "username": "u2003"}},
+  {"id": "v5",  "text": "b案",        "timestamp": "2026-11-04T14:00:00+09:00", "from": {"id": "2006", "username": "u2006"}},
+  {"id": "v6",  "text": "I like A",   "timestamp": "2026-11-04T15:00:00+09:00", "from": {"id": "2007", "username": "u2007"}},
+  {"id": "v7",  "text": "ABC",        "timestamp": "2026-11-04T16:00:00+09:00", "from": {"id": "2008", "username": "u2008"}},
+  {"id": "v8",  "text": "やっぱりC",   "timestamp": "2026-11-05T08:00:00+09:00", "from": {"id": "2002", "username": "u2002"}},
+  {"id": "v9",  "text": "Aで！",       "timestamp": "2026-11-05T23:00:00+09:00", "from": {"id": "2004", "username": "u2004"}},
+  {"id": "v10", "text": "C",          "timestamp": "2026-11-06T01:00:00+09:00", "from": {"id": "2005", "username": "u2005"}},
+  {"id": "v11", "text": "ａ",          "timestamp": "2026-11-03T08:00:00+09:00", "from": {"id": "2009", "username": "u2009"}}
+ ],
+ "expect": {"votes": {"A": 2, "B": 2, "C": 1}, "voters": 5, "newVillagers": 3}
+}

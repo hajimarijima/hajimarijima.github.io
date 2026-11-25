@@ -1,0 +1,48 @@
+# 毎日 1 回、インスタを読んで町を 1 日進め、data/ をコミットする（下書き）。
+# 今は手で動かす時だけ（workflow_dispatch）。毎日動かすには schedule の行の # を外す。
+# Secrets（Settings > Secrets and variables > Actions）に入れるもの：
+#   IG_TOKEN / IG_USER_ID / IG_JOIN_MEDIA / IG_VOTE_MEDIA   （README 参照）
+#   FIREBASE_SERVICE_ACCOUNT（Google ログインを使う時だけ。サービスアカウントの鍵の JSON をそのまま入れる）
+name: daily
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "0 21 * * *"   # 毎朝 6 時（日本時間）
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily
+  cancel-in-progress: false
+
+jobs:
+  day:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: インスタを読む
+        run: node tools/instagram.js
+        env:
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_JOIN_MEDIA: ${{ secrets.IG_JOIN_MEDIA }}
+          IG_VOTE_MEDIA: ${{ secrets.IG_VOTE_MEDIA }}
+      - name: Google ログインのつなぎとプロフィールを読む
+        # FIREBASE_SERVICE_ACCOUNT が空なら何もしないで終わる
+        run: node tools/firestore_sync.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: 町を 1 日進める
+        run: node tools/sim.js
+      - name: 結果をコミット
+        run: |
+          git config user.name "town-bot"
+          git config user.email "town-bot@users.noreply.github.com"
+          git add data/villagers.json data/world.json data/state.json data/life.json data/history.json data/social.json
+          git diff --cached --quiet || git commit -m "町が $(node -p "require('./data/state.json').day") 日目になった"
+          git push

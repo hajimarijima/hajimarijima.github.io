@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>町の歴史 | みんなで町づくり</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#7cb342">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="町づくり">
+<script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js"));</script>
+</head>
+<body>
+<main class="wrap">
+  <h1>町の歴史</h1>
+  <div class="filter" id="filter"></div>
+  <h2>建った順</h2>
+  <p id="builds"></p>
+  <h2>できごと</h2>
+  <ul class="timeline" id="tl"></ul>
+</main>
+<script type="module">
+import { loadAll, nav, esc, fmtDate, buildingLabel, showError } from './js/common.js';
+nav('history.html');
+loadAll().then((D) => {
+  const types = [['all', 'すべて'], ['build', '建物'], ['vote', '投票'], ['join', '村人'], ['social', '関係・誕生日'], ['night', '夜'], ['event', 'そのほか']];
+  let cur = 'all';
+  const f = document.getElementById('filter');
+  const draw = () => {
+    f.innerHTML = types.map(([k, t]) => `<button data-k="${k}" class="${k === cur ? 'on' : ''}">${t}</button>`).join('');
+    const list = D.history.filter((h) => cur === 'all' || (cur === 'vote' ? h.type.startsWith('vote') : cur === 'social' ? ['social', 'birthday'].includes(h.type) : cur === 'event' ? ['event', 'start'].includes(h.type) : h.type === cur));
+    document.getElementById('tl').innerHTML = list.slice().reverse().map((h) => `<li class="${h.type}"><div class="when">${h.day}日目・${fmtDate(h.date)}</div>${esc(h.text)}</li>`).join('');
+  };
+  f.addEventListener('click', (e) => { const k = e.target.dataset && e.target.dataset.k; if (k) { cur = k; draw(); } });
+  draw();
+  document.getElementById('builds').innerHTML = D.world.buildings.map((b) => `<span class="tag">${b.day}日目 ${esc(buildingLabel(b, D.world, D.config))}</span>`).join(' ') || 'まだありません。';
+}).catch(showError);
+</script>
+</body>
+</html>

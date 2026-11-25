@@ -1,0 +1,76 @@
+rules_version = '2';
+// みんなで町づくり：Firestore のセキュリティルール
+// - users/{uid}        本人だけが読める。本人が書けるのは「つなぐコード」だけ。villager（結びつけた村人）は毎日の処理（サービスアカウント）だけが書く。
+// - invites/{印}       DM で送る招待リンクの印（7 日で切れる・1 回だけ）。下の match を参照。
+// - linkCodes/{code}   つなぐコード（予備の方法）。本人が作るだけで、だれも読めない（毎日の処理だけが読む）。
+// - profiles/{村人}    公開してよい項目。だれでも読める。書けるのは、その村人と結びついた本人だけ。
+// - private/{村人}     公開しない項目。結びついた本人だけが読み書きできる。
+// メールアドレスはどこにも入れない（入れようとしても項目の決まりで弾く）。
+// data/config.json の profileFields を変えたら、下の publicKeys / privateKeys も合わせること。
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return /databases/$(database)/documents/users/$(request.auth.uid); }
+    function isMine(vkey) { return signedIn() && exists(me()) && get(me()).data.get('villager', '') == vkey; }
+    function shortStr(v, n) { return v is string && v.size() <= n; }
+
+    // 招待リンクの印を使って、自分を村人につなぐ書きこみか（印は同じ書きこみの中で自分が使ったことにする）
+    function byInvite() {
+      let inv = request.resource.data.get('invite', '');
+      let path = /databases/$(database)/documents/invites/$(inv);
+      return inv is string && inv.size() >= 16 && exists(path)
+        && getAfter(path).data.get('usedBy', '') == request.auth.uid
+        && get(path).data.villager == request.resource.data.villager;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid
+        && ((request.resource.data.keys().hasOnly(['code', 'codeAt']) && shortStr(request.resource.data.code, 4))
+          || (request.resource.data.keys().hasOnly(['villager', 'invite', 'linkedAt']) && byInvite()));
+      allow update: if signedIn() && request.auth.uid == uid
+        && ((request.resource.data.diff(resource.data).affectedKeys().hasOnly(['code', 'codeAt']) && shortStr(request.resource.data.code, 4))
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['villager', 'invite', 'linkedAt']) && byInvite()));
+      allow delete: if false;
+    }
+
+    // invites/{印}   DM で送る招待リンクの印。毎日の処理だけが作る。印を知っている人だけが 1 件読める（一覧は出せない）。
+    // 使う時は、使った人の uid を 1 回だけ書ける（切れていたら書けない）。使い終わり・切れたものは毎日の処理が消す。
+    match /invites/{token} {
+      allow get: if signedIn() && token.size() >= 16;
+      allow list, create, delete: if false;
+      allow update: if signedIn()
+        && resource.data.get('usedBy', '') == ''
+        && resource.data.expiresAt > request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedAt'])
+        && request.resource.data.usedBy == request.auth.uid;
+    }
+
+    match /linkCodes/{code} {
+      allow create: if signedIn() && code.matches('^[ACDEFGHJKLMNPQRTUVWXY34679]{4}$')
+        && request.resource.data.keys().hasOnly(['uid', 'at'])
+        && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if false;
+    }
+
+    match /profiles/{vkey} {
+      allow read: if true;
+      allow create, update: if isMine(vkey)
+        && request.resource.data.keys().hasOnly(['mbti', 'birthday', 'food', 'color', 'hobby', 'message', 'wantJob', 'updatedAt'])
+        && (!('mbti' in request.resource.data) || shortStr(request.resource.data.mbti, 4))
+        && (!('birthday' in request.resource.data) || (request.resource.data.birthday is string && request.resource.data.birthday.matches('^[01][0-9]-[0-3][0-9]$')))
+        && (!('food' in request.resource.data) || shortStr(request.resource.data.food, 20))
+        && (!('color' in request.resource.data) || (request.resource.data.color is string && request.resource.data.color.matches('^#[0-9a-f]{6}$')))
+        && (!('hobby' in request.resource.data) || shortStr(request.resource.data.hobby, 20))
+        && (!('message' in request.resource.data) || shortStr(request.resource.data.message, 40))
+        && (!('wantJob' in request.resource.data) || request.resource.data.wantJob in ['伐採', '採掘', '農業', '建築', '商い']);
+      allow delete: if isMine(vkey);
+    }
+
+    match /private/{vkey} {
+      // 今の項目はすべて公開なので空。公開しない項目を足したら、ここに名前を並べる
+      allow read, delete: if isMine(vkey);
+      allow create, update: if isMine(vkey) && request.resource.data.keys().hasOnly(['updatedAt']);
+    }
+  }
+}

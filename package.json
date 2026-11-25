@@ -1,0 +1,19 @@
+{
+  "name": "minna-no-machi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "インスタの参加者が村人になる「みんなで町づくり」",
+  "scripts": {
+    "skins": "node tools/gen_skins.js",
+    "reset": "node tools/init.js",
+    "demo": "node tools/init.js --demo && node tools/sim.js --demo --days 30",
+    "day": "node tools/sim.js",
+    "test": "node tests/run_tests.js",
+    "serve": "http-server . -p 8090 -c-1"
+  },
+  "devDependencies": {
+    "http-server": "14.1.1",
+    "puppeteer-core": "22.15.0",
+    "three": "0.160.0"
+  }
+}

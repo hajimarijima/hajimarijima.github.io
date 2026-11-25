@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>村人の一覧 | みんなで町づくり</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#7cb342">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="町づくり">
+<script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js"));</script>
+</head>
+<body>
+<main class="wrap">
+  <h1>村人の一覧</h1>
+  <p class="muted" id="count"></p>
+  <div class="people" id="list"></div>
+</main>
+<script type="module">
+import { loadAll, nav, esc, villagerUrl, JOB, faceCanvas, showError, emptyNote } from './js/common.js';
+nav('people.html');
+loadAll().then(async (D) => {
+  if (!D.active.length) document.getElementById('count').innerHTML = emptyNote(D.config);
+  else document.getElementById('count').textContent = `${D.active.length} 人が住んでいます。名前をえらぶと、くわしいページへ行けます。`;
+  const box = document.getElementById('list');
+  for (const v of D.active.slice().sort((a, b) => a.joinedDay - b.joinedDay)) {
+    const L = D.life[v.key] || {};
+    const a = document.createElement('a');
+    a.className = 'person'; a.href = villagerUrl(v);
+    a.append(await faceCanvas(v.skin, 32));
+    const s = document.createElement('span');
+    s.innerHTML = `<b>${esc(v.display)}</b><small>${esc(JOB[L.job] || '')}・${v.joinedDay}日目から</small>`;
+    a.append(s); box.append(a);
+  }
+}).catch(showError);
+</script>
+</body>
+</html>

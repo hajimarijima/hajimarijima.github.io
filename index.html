@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>みんなで町づくり</title>
+<meta name="description" content="インスタの参加者が村人になって、毎日すこしずつ町を育てます。">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#7cb342">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="町づくり">
+<script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js"));</script>
+</head>
+<body>
+<main>
+  <section class="map">
+    <div id="stage"></div>
+    <div class="hud" id="hud"></div>
+    <div class="vcard" id="card" hidden></div>
+    <div class="hint">ドラッグで回す・つまんで寄る</div>
+    <a class="scroll-more" href="#info">町のようす</a>
+  </section>
+  <div class="wrap" id="info">
+    <h1 id="dayline"></h1>
+    <div class="grid2">
+      <div class="card">
+        <h2 style="margin-top:0">今日のできごと</h2>
+        <ul class="list" id="today"></ul>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">次に建つもの</h2>
+        <p id="next"></p>
+        <h2>投票</h2>
+        <p id="votebox"></p>
+        <h2>村人になるには</h2>
+        <p id="join"></p>
+      </div>
+    </div>
+  </div>
+</main>
+<script type="module" src="js/town.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+node_modules/
+# インスタから読んだ生のコメントやフォロワー一覧（全員の名前が入っている）は公開しない
+data/inbox/
+data/import/
+*.log
+video/frames/
+video/check/
+video/audio.wav
+
+# 動画は大きいので上げない
+video/*.mp4

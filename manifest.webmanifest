@@ -1,0 +1,17 @@
+{
+  "name": "みんなで町づくり",
+  "short_name": "町づくり",
+  "description": "インスタの参加者が村人になって、毎日すこしずつ町を育てます。",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1d2b1f",
+  "theme_color": "#7cb342",
+  "lang": "ja",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

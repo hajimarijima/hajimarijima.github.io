@@ -1,0 +1,32 @@
+{
+ "title": "みんなで町づくり",
+ "seed": "machi-12",
+ "startDate": "2026-11-01",
+ "day": 0,
+ "date": "2026-10-31",
+ "demo": false,
+ "resources": {
+  "wood": 0,
+  "stone": 0,
+  "food": 10
+ },
+ "totals": {
+  "wood": 0,
+  "stone": 0,
+  "food": 0
+ },
+ "followers": 0,
+ "followerLog": [],
+ "reached": [],
+ "vote": null,
+ "decisions": [],
+ "queue": null,
+ "repeatIdx": 0,
+ "bonus": {
+  "wood": 0,
+  "stone": 0,
+  "food": 0
+ },
+ "weather": "晴れ",
+ "updated": null
+}
