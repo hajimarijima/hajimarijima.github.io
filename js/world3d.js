@@ -1,6 +1,7 @@
 // 町の地面・木・岩・建物を作る道具（トップの地図と動画で共通）
 import * as THREE from 'three';
-import { makeTreeBlocks, makeRockBlocks, makeSapling } from './blocks.js';
+import { makeTree as treeModel, makeRock as rockModel } from './blocks.js';
+import { makeFarm, makeCanal, makePen } from './farm3d.js';
 
 // ---------- 小さな道具 ----------
 const matCache = {};
@@ -20,12 +21,9 @@ export const LAMP_MAT = new THREE.MeshLambertMaterial({ color: 0xfff3a0 });
 export const shade = (hex, f) => { const c = new THREE.Color(hex); c.multiplyScalar(f); return c.getHex(); };
 
 // ---------- 地形・自然 ----------
-// 木と岩はブロックでできている（blocks.js）。切る・掘る時に 1 つずつ減らせる
-export function makeTree(t) {
-  if (t.state === 'sapling') return makeSapling(t);
-  return makeTreeBlocks(t); // 'tree' はそのまま、'stump' は幹を全部切った形
-}
-export function makeRock(r) { return makeRockBlocks(r); }
+// 木と岩は前の形（blocks.js）。岩はたたくたびに一段ずつ小さくなり、木は倒れて切り株が残る
+export const makeTree = (t) => treeModel(t);
+export const makeRock = (r) => rockModel(r);
 export function makeBush(b) {
   const g = new THREE.Group();
   box(1.4, 0.9, 1.4, 0x4a8a3c, 0, 0.45, 0, g);
@@ -151,6 +149,9 @@ export function makeSpecial(kind, b) {
     for (let i = 0; i < 5; i++) { box(0.25, 1.4, 0.25, 0x5e4026, 1.2, 0, i * 2 - 0.5, g); box(0.25, 1.4, 0.25, 0x5e4026, -1.2, 0, i * 2 - 0.5, g); }
     const boat = new THREE.Group(); box(1.4, 0.5, 3.2, 0xa0522d, 0, 0, 0, boat); box(1.1, 0.1, 2.8, 0xd2b48c, 0, 0.25, 0, boat); box(0.08, 2.2, 0.08, 0x5e4026, 0, 1.2, 0.2, boat); box(0.05, 1.4, 1.2, 0xf4f0e6, 0, 1.4, 0.8, boat);
     boat.position.set(2.6, 0.05, 4.5); g.add(boat); g.userData.boat = boat;
+  } else if (kind === 'farm') { g.add(makeFarm());
+  } else if (kind === 'canal') { const c = makeCanal(); g.add(c); g.userData.canal = c;
+  } else if (kind === 'pen') { g.add(makePen());
   } else if (kind === 'windmill') {
     const t = makeTower({ w: 3, h: 5, wall: '#efe6d2', roof: '#7a3b2e' }); g.add(t);
     const hub = new THREE.Group(); hub.position.set(0, 4.4, 1.7); g.add(hub);
@@ -207,6 +208,35 @@ export function makeSpecial(kind, b) {
     for (let y = 0.5; y < 3.6; y += 0.55) box(0.5, 0.08, 0.1, 0x8a5a33, 0, y, 1.15, g); // はしご
     box(0.08, 0.5, 0.08, 0x6b4628, 1.2, 4.1, -1.2, g); box(0.2, 0.22, 0.2, TORCH_MAT, 1.2, 4.42, -1.2, g).castShadow = false;
     g.userData.lights = [{ x: 1.2, y: 4.6, z: -1.2 }];
+  } else if (kind === 'storehouse') {
+    // 倉庫：石の土台・大きな両開きの戸・前に樽と木箱・荷を上げる腕木。家とは形を変える
+    const w = 5.2, d = 4, h = 2.6;
+    box(w + 0.4, 0.5, d + 0.4, 0x8d8b86, 0, 0.25, 0, g);
+    box(w, h, d, 0x9a7650, 0, 0.5 + h / 2, 0, g);
+    for (let x = -w / 2 + 0.4; x < w / 2; x += 0.55) box(0.06, h, 0.06, 0x7a5a38, x, 0.5 + h / 2, d / 2 + 0.03, g); // 縦板
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(0.24, h + 0.1, 0.24, 0x5e4026, sx * w / 2, 0.5 + h / 2, sz * d / 2, g);
+    box(2.0, 2.0, 0.1, 0x5a3a22, 0, 1.5, d / 2 + 0.06, g); // 戸
+    for (const x of [-0.5, 0.5]) { const r = box(0.08, 2.2, 0.06, 0x3a2614, x, 1.5, d / 2 + 0.12, g); r.rotation.z = x > 0 ? 0.72 : -0.72; }
+    box(2.2, 0.12, 0.14, 0x3a2614, 0, 2.55, d / 2 + 0.1, g);
+    // 屋根（低い切妻）と荷上げの腕木
+    roof(g, 'gable', w, d, 1.3, 0x6b4a2f, 0.5 + h);
+    box(0.18, 0.18, 1.6, 0x5e4026, 0, 0.5 + h + 0.95, d / 2 + 0.5, g); box(0.04, 0.9, 0.04, 0xd8c8a0, 0, 0.5 + h + 0.4, d / 2 + 1.2, g);
+    // 樽と木箱
+    for (const [x, z] of [[-w / 2 - 0.6, d / 2 - 0.2], [-w / 2 - 0.6, d / 2 - 1.1]]) { box(0.7, 0.9, 0.7, 0x8a5a2c, x, 0.45, z, g); box(0.74, 0.08, 0.74, 0x3a3a40, x, 0.7, z, g); box(0.74, 0.08, 0.74, 0x3a3a40, x, 0.2, z, g); }
+    box(0.8, 0.8, 0.8, 0xb08a52, w / 2 + 0.7, 0.4, d / 2 - 0.3, g); box(0.6, 0.6, 0.6, 0x9c7642, w / 2 + 0.7, 1.1, d / 2 - 0.3, g); box(0.7, 0.7, 0.7, 0xb08a52, w / 2 + 0.75, 0.35, d / 2 - 1.3, g);
+    box(1.4, 0.5, 0.06, 0xe8dcc0, 0, 2.95 + 0.25, d / 2 + 0.08, g); // 看板
+    box(0.08, 0.4, 0.08, 0x6b4628, 1.3, 1.9, d / 2 + 0.12, g); box(0.16, 0.18, 0.16, TORCH_MAT, 1.3, 2.18, d / 2 + 0.12, g).castShadow = false;
+    g.userData.lights = [{ x: 1.3, y: 2.3, z: d / 2 + 0.5 }];
+  } else if (kind === 'workbench') {
+    // 作業台：板の台に、のこぎりと金づち。小さな屋根の下
+    box(1.6, 0.9, 1.0, 0x9a6a3a, 0, 0.45, 0, g);
+    box(1.7, 0.12, 1.1, 0xc49a5c, 0, 0.96, 0, g);
+    for (let i = 0; i < 3; i++) box(0.04, 0.02, 1.08, 0x7d5a2e, -0.55 + i * 0.55, 1.03, 0, g);
+    box(0.7, 0.04, 0.22, 0xc8ced6, -0.35, 1.06, 0.2, g); box(0.25, 0.08, 0.1, 0x7a4f2a, -0.75, 1.07, 0.2, g); // のこぎり
+    box(0.08, 0.08, 0.5, 0x7a4f2a, 0.45, 1.07, -0.1, g); box(0.24, 0.14, 0.14, 0x55585e, 0.45, 1.1, -0.36, g); // 金づち
+    for (const [x, z] of [[-1.3, -0.9], [1.3, -0.9], [-1.3, 0.9], [1.3, 0.9]]) box(0.16, 2.2, 0.16, 0x6b4628, x, 1.1, z, g);
+    roof(g, 'gable', 2.8, 2.0, 0.8, 0x7a5a38, 2.2);
+    box(0.8, 0.5, 0.6, 0xb08a52, 1.6, 0.25, 0.5, g); box(0.5, 0.35, 0.5, 0x8a6a42, -1.7, 0.18, -0.4, g);
   } else if (kind === 'fountain') {
     box(6, 0.6, 6, 0xb8b2a4, 0, 0.3, 0, g); box(5.2, 0.1, 5.2, 0x6fb4d8, 0, 0.62, 0, g);
     box(1.6, 1.6, 1.6, 0xc9c3b5, 0, 1.1, 0, g); box(1.2, 0.1, 1.2, 0x6fb4d8, 0, 1.92, 0, g); box(0.5, 1.2, 0.5, 0xc9c3b5, 0, 2.5, 0, g);
@@ -229,7 +259,7 @@ export function makeBuilding(b, config) {
 
 
 // ---------- 通れない所（建物・木・岩）をよけて歩く ----------
-const R_SPECIAL = { plaza: 0, garden: 0, dock: 0, fence: 0, wall: 0, lamps: 0, watch: 1.8, well: 1.3, onsen: 3.8, windmill: 2.2, ranch: 5.6, market: 3.2, castle: 5.2, fountain: 3.4 };
+const R_SPECIAL = { storehouse: 3.6, workbench: 1.8, plaza: 0, garden: 0, dock: 0, fence: 0, wall: 0, lamps: 0, watch: 1.8, well: 1.3, onsen: 3.8, windmill: 2.2, ranch: 5.6, farm: 0, canal: 0, pen: 0, market: 3.2, castle: 5.2, fountain: 3.4 };
 export function footprint(b, config) {
   const L = config.buildings[b.type].look;
   if (L.kind === 'house') return Math.hypot(L.w, L.d) / 2 + 0.35;
@@ -239,8 +269,8 @@ export function footprint(b, config) {
 export function obstaclesFor(world, config, { trees = true } = {}) {
   const obs = [];
   for (const b of world.buildings) { const r = footprint(b, config); if (r > 0) obs.push({ x: b.x, z: b.z, r }); }
-  for (const r of world.rocks) if (r.hp > 0 && !r.far) obs.push({ x: r.x, z: r.z, r: 1.7 });
-  if (trees) for (const t of world.trees) if (t.state === 'tree' && !t.far) obs.push({ x: t.x, z: t.z, r: 0.75 * (t.size || 1) });
+  for (const r of world.rocks) if (r.hp > 0 && !r.far && !r.gone) obs.push({ x: r.x, z: r.z, r: 2.1 });
+  if (trees) for (const t of world.trees) if (t.state === 'tree' && !t.far && !t.gone) obs.push({ x: t.x, z: t.z, r: 0.75 * (t.size || 1) });
   return obs;
 }
 // a から b へ、障害物の円をよける折れ線（b をふくむ点の列）を返す

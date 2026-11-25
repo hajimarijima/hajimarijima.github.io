@@ -1,12 +1,19 @@
 // インスタのリール用の縦動画（1080x1920）。window.renderFrame(t) で t 秒のコマを描く。
 // tools/render_video.js がブラウザでこれを開いて、コマを書き出す。
-// 見本の村人の名前は動画に出さない（名札・コメント・字幕のどこにも）。顔と「村人」「見張り」だけで見せる。
+// 見せるのは 0 日目〜2 日目だけ。順番：だれもいない → 参加（「参加したい ピッケル」の人が木のつるはしを持って来る）
+// → 最初の道具を選べる → その人が岩を掘る → 整地 → 何を建てる？ → どこに建てる？ → 木を切る → 夜 → 道具を作る
+// → 建て始める → チェストの中 → 池で釣り（2 日目）→ これから（イメージ）：畑が育つ・柵の動物。
+// 歩く速さは人がふつうに歩くくらい（2.6／秒、背の高さ 3.8）。遠くへ行く所は歩かせずに場面を切りかえる。
+// 投票の結果・場所・チェストの中身・作った道具は、どれも tools/video_days.js が記録した sim.js の結果のまま。
+// 見本の村人の名前は出さない（顔と「村人」だけ）。敵は出さない（config.enemies.enabled=false）。
 import * as THREE from 'three';
-import { makeCharacter, animate, setTool, setCarry, setAccent, setShield } from '../js/character.js';
-import { mat, box, hash, rnd, makeTree, makeRock, makeBush, makeField, makeBuilding, obstaclesFor, routeAround, routeLength, pointAt, makeRoads } from '../js/world3d.js';
+import { makeCharacter, animate, setTool, setCarry, setAccent, fishCycle } from '../js/character.js';
+import { makePond, animatePond, makeBobber, makeAnimal, animateAnimal, animalPos, makeField, makeFarm, makeCanal, makePen } from '../js/farm3d.js';
+import { mat, box, hash, rnd, makeBush, makeTree, makeRock } from '../js/world3d.js';
 import { makeSky } from '../js/daynight.js';
-import { makeMob, animateMob, makeArrow, arrowAt } from '../js/mobs.js';
-import { makeForest, makeFx, makePile, setPile, PILE_MAX, setRockHp, setTreeCut, setCrack, strikeAt, breakTime, dropPos, chipList, LOGS, LOG, B, SHRINK, STAGES } from '../js/blocks.js';
+import { makeForest, makeRockField, makeFx, makePile, setPile, setRock, rockScale, setTreeState, setTreeFall, setTreeCrack, makeDebris, makeChest, setChestOpen, makeMarker, MARK_COL, strikeAt, breakTime, dropPos, chipList, FALL_END, TREE_LEN, TREE_LEAF_Y } from '../js/blocks.js';
+const _pv = new THREE.Vector3();
+const TREE_R = 3.4; // 葉の塊の半分の幅（横の小さな塊も入れて、大きさ 1 の木）
 
 const W = 1080, H = 1920, FPS = 30;
 const SAFE_TOP = H * 0.15, SAFE_BOTTOM = H * 0.85;
@@ -16,61 +23,53 @@ const lerp = (a, b, k) => a + (b - a) * k;
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const ease = (x) => { x = clamp01(x); return x * x * (3 - 2 * x); };
 const unit = (x, z) => { const l = Math.hypot(x, z) || 1; return { x: x / l, z: z / l }; };
+const backOut = (x) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const IT = config.items;
+const BN = (k) => config.buildings[k].name;
 
-// ---------- 何を見せるか（どれも sim.js の結果のまま） ----------
-const DEC = D.decisions[0];                     // はじめての投票
-const DD = DEC ? DEC.day : -1;
-const VB = DEC ? D.buildings.find((b) => b.type === DEC.build && b.day >= DEC.day) : null; // 投票で決まって建った建物
-const VBD = VB ? VB.day : D.days.length - 1;
-const LAST = Math.min(D.days.length - 1, VBD);   // それが建つ日まで見せる
-const NIGHTS = D.nights || {};
-const MOB_JA = { zombie: 'ゾンビ', skeleton: 'スケルトン', spider: 'クモ' };
-const FIND = D.history.find((h) => h.type === 'find' && h.item === 'iron' && h.day >= 2 && h.day <= LAST); // 鉄が出た日
-const IRON_D = FIND ? FIND.day : -1;
-const ATK = (() => { let best = null; for (let d = 2; d < LAST; d++) { const n = NIGHTS[d]; if (!n || n.quiet || !n.count) continue; const sc = n.count + (n.groups || []).length * 0.6 + (n.groups || []).some((g) => g.type === 'skeleton') * 1.5; if (!best || sc > best.sc) best = { d, sc, n }; } return best; })();
+// ---------- sim.js の結果 ----------
+const D1 = D.days[1], D2 = D.days[2];
+const WHAT = D.decisions.find((d) => d.kind === 'what'), WHERE = D.decisions.find((d) => d.kind === 'where');
+const SITE = D2.plan && D2.plan.site ? D2.plan.site : { x: WHERE.options.find((o) => o.key === WHERE.key).x, z: WHERE.options.find((o) => o.key === WHERE.key).z };
+const byAction = (day, a) => day.active.filter((k) => day.life[k][0] === a);
+const LEVELERS = byAction(D1, 'level').slice(0, 2);
+const KJ = D1.active.find((k) => D1.life[k][7] === 'pickaxe' && D1.life[k][0] === 'dig') || byAction(D1, 'dig')[0]; // 「参加したい ピッケル」の人（1 日目に岩を掘った）
+const KDG = KJ;
+const KCH = byAction(D1, 'chop')[0];                 // 1 日目に木を切った人
+const KFI = byAction(D2, 'fish')[0] || null;          // 2 日目、池で釣りをした人（村ではじめて魚を釣った）
+const FISH_KEY = KFI ? (D2.life[KFI][6] || []).find((k) => /^fish_/.test(k)) || 'fish_funa' : 'fish_funa';
+const toolKey = (kind, tier) => kind + ':' + (!tier || tier === 'hand' ? 'wood' : tier); // 道具の素材で色と形を変える
+const BUILDERS = [...byAction(D2, 'level'), ...byAction(D2, 'chop')].slice(0, 3);
+const TREE_SIM = D.trees.find((t) => t.id === D1.life[KCH][1]); // sim.js で切った木
+const ROCK0 = D.days[0].rocks.find((r) => r.id === D1.life[KJ][1]) || D.days[1].rocks.find((r) => r.id === D1.life[KJ][1]);
+const CH_TIER = D1.life[KCH][4] || 'hand'; // 木を切った人の斧（最初の道具が斧なら木の斧）
+// 最初の道具（sim.js の life の 8 番目）。コメントに道具の言葉があった人はその言葉、なければ自動
+const START = (k) => (D1.life[k] && D1.life[k][7]) || null;
+const START_AUTO = (k) => !!(D1.life[k] && D1.life[k][8]);
+const START_HAND = { pickaxe: 'pick', axe: 'axe', fishing_rod: 'rod', hoe: 'hoe' };
+const START_WORD = { pickaxe: 'ピッケル', axe: '斧', fishing_rod: '釣り', hoe: 'くわ' };
+const startTool = (k) => (START(k) ? START_HAND[START(k)] + ':wood' : null);
+// 2 日目にチェストの材料で作った道具（なければ、作り方の例として木の斧）
+const MADE = (() => { for (const k of D2.active) { const m = /(木のつるはし|木の斧)を作った/.exec(D2.life[k][5]); if (m) return m[1]; } return null; })();
+const MADE_KEY = MADE === '木のつるはし' ? 'wood_pickaxe' : 'wood_axe';
+const STORE = D2.store;
+const hm = (iso) => `${(new Date(iso).getUTCHours() + 9) % 24}時`;
 
-// ---------- 時間割：0 日目から 1 日ずつ。日が変わるたびに短い夜をはさむ ----------
-const T_JOIN = [3.6, 6.2], D1_END = 19.3, SEQ0 = 20.1;
-const DAY_LEN = 2.0, NIGHT_LEN = 0.6;
-const EXTRA = { iron: 4.4, vote: 2.6, atk: 4.8, last: 1.8 };
-const SEG = [{ d: 0, t0: 0, t1: 1.3, t2: T_JOIN[0] }, { d: 1, t0: T_JOIN[0], t1: D1_END, t2: SEQ0 }];
-{
-  let tt = SEQ0;
-  for (let d = 2; d <= LAST; d++) {
-    const dayLen = DAY_LEN + (d === IRON_D ? EXTRA.iron : 0) + (d === DD ? EXTRA.vote : 0) + (d === LAST ? EXTRA.last : 0);
-    const nightLen = d === LAST ? 0 : NIGHT_LEN + (ATK && d === ATK.d ? EXTRA.atk : 0);
-    SEG.push({ d, t0: tt, t1: tt + dayLen, t2: tt + dayLen + nightLen }); tt += dayLen + nightLen;
-  }
-}
-const T_END = SEG[SEG.length - 1].t2;
-const DURATION = Math.round((T_END + 5.2) * 10) / 10;
-const SC = { s1: [0, T_JOIN[0]], join: T_JOIN, s2: [T_JOIN[1], SEQ0] };
-const inS = (t, s) => t >= SC[s][0] && t < SC[s][1];
-const segAt = (t) => SEG.find((s) => t < s.t2) || SEG[SEG.length - 1];
-const atkSeg = ATK ? SEG.find((s) => s.d === ATK.d) : null;
-const inAtk = (t) => atkSeg && t >= atkSeg.t1 && t < atkSeg.t2;
-const ironSeg = IRON_D > 0 ? SEG.find((s) => s.d === IRON_D) : null;
-const IRON_WIN = ironSeg ? [ironSeg.t0 + 0.2, ironSeg.t0 + 0.2 + EXTRA.iron - 0.1] : null;
-const inIron = (t) => IRON_WIN && t >= IRON_WIN[0] && t < IRON_WIN[1];
-// その時の時刻（昼は 7〜17 時、夜は 17 時〜翌朝を早送り。敵の夜は明け方をゆっくり見せる）
+// ---------- 時間割 ----------
+const T = {
+  s0: 0, join: 2.0, pick: 6.4, rock: 9.2, level: 15.4, what: 20.8, where: 24.6, tree: 28.6, night: 35.0,
+  craft: 36.4, build: 39.4, chest: 42.6, fish: 46.4, farm: 49.6, ranch: 52.4, end: 55.2,
+};
+const DURATION = 58.2;
+const SC_ORDER = ['s0', 'join', 'pick', 'rock', 'level', 'what', 'where', 'tree', 'night', 'craft', 'build', 'chest', 'fish', 'farm', 'ranch', 'end'];
+const scene0 = (t) => { let s = 's0'; for (const k of SC_ORDER) if (t >= T[k]) s = k; return s; };
+const dayAt = (t) => (t < T.join ? 0 : t < T.night + 0.7 ? 1 : 2);
 function hourAt(t) {
-  const s = segAt(t);
-  if (t >= T_END) return lerp(15, 16.2, clamp01((t - T_END) / (DURATION - T_END)));
-  if (t < s.t1) return lerp(s.d === 0 ? 9 : 7, s.d === LAST ? 15 : 17, (t - s.t0) / (s.t1 - s.t0));
-  const f = (t - s.t1) / (s.t2 - s.t1);
-  if (atkSeg && s === atkSeg) return (f < 0.66 ? lerp(17, 27.4, f / 0.66) : lerp(28.9, 31.2, (f - 0.66) / 0.34)) % 24;
-  return lerp(17, 30.6, f) % 24;
-}
-// 札の日：夜がほとんど明けてから次の日へ（夜の字幕と重ならないように）
-function badgeDay(t) { const s = segAt(t); if (t >= s.t2 || t < s.t1) return s.d; return (t - s.t1) / (s.t2 - s.t1) > 0.93 ? Math.min(LAST, s.d + 1) : s.d; }
-// 建物はその日の昼の終わりごろに建つ（最後の日は早めに建てて、長く見せる）
-const popTime = (s) => (s.d === LAST ? s.t0 + 0.5 : s.t1 - 0.95);
-function dayFloatAt(t) {
-  const s = segAt(t);
-  if (s.d < 2) return s.d;
-  if (t >= s.t1) return s.d + 0.45;
-  const p = popTime(s);
-  return t < p ? s.d - 0.02 : s.d + Math.min(0.45, t - p);
+  if (t < T.join) return lerp(10, 11, t / T.join);
+  if (t < T.night) return lerp(8, 16.5, (t - T.join) / (T.night - T.join));
+  if (t < T.craft) return lerp(17, 30.6, (t - T.night) / (T.craft - T.night)) % 24;
+  if (t < T.end) return lerp(7, 15.5, (t - T.craft) / (T.end - T.craft));
+  return lerp(15.5, 16, (t - T.end) / (DURATION - T.end));
 }
 
 // ---------- three.js ----------
@@ -86,7 +85,7 @@ const ctx = out.getContext('2d');
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xbcd9ea);
-scene.fog = new THREE.Fog(0xbcd9ea, 130, 320);
+scene.fog = new THREE.Fog(0xbcd9ea, 110, 300);
 const camera = new THREE.PerspectiveCamera(50, W / H, 0.3, 700);
 const hemi = new THREE.HemisphereLight(0xf2f6ff, 0x6a7a4a, 1.1);
 scene.add(hemi);
@@ -95,7 +94,7 @@ scene.add(sun.target);
 sun.position.set(-30, 50, 25);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -62, right: 62, top: 62, bottom: -62, near: 1, far: 200 });
+Object.assign(sun.shadow.camera, { left: -55, right: 55, top: 55, bottom: -55, near: 1, far: 200 });
 sun.shadow.bias = -0.0005;
 scene.add(sun);
 {
@@ -107,653 +106,496 @@ scene.add(sun);
   sea.rotation.x = -Math.PI / 2; sea.position.set(0, 0.05, D.seaZ + 70); scene.add(sea);
   const R = rnd('flowers');
   const geo = new THREE.BoxGeometry(0.18, 0.25, 0.18);
+  const far = (x, z) => Math.hypot(x - D.square.x, z - D.square.z) > D.square.r + 2;
   for (const c of [0xf2f2f2, 0xf2d24a, 0xe2507a, 0x6a9cd8]) {
     const inst = new THREE.InstancedMesh(geo, mat(c), 80); const m4 = new THREE.Matrix4();
-    for (let i = 0; i < 80; i++) { m4.makeTranslation((R() - 0.5) * 150, 0.12, Math.min((R() - 0.5) * 130 - 10, D.seaZ - 4)); inst.setMatrixAt(i, m4); }
+    for (let i = 0; i < 80; i++) { let x, z; do { x = (R() - 0.5) * 150; z = Math.min((R() - 0.5) * 130 - 10, D.seaZ - 4); } while (!far(x, z)); m4.makeTranslation(x, 0.12, z); inst.setMatrixAt(i, m4); }
     scene.add(inst);
   }
-  const tufts = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.15, 0.5), mat(0x76a84c), 320); const m4 = new THREE.Matrix4();
-  for (let i = 0; i < 320; i++) { m4.makeTranslation((R() - 0.5) * 160, 0.07, Math.min((R() - 0.5) * 140 - 10, D.seaZ - 4)); tufts.setMatrixAt(i, m4); }
-  scene.add(tufts);
 }
 const fx = makeFx(scene);
-const v3 = new THREE.Vector3();
 
-// たき火（広場ができるまで）
+// たき火
 const fire = new THREE.Group();
 for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; box(0.35, 0.25, 0.35, 0x7d7a74, Math.cos(a) * 0.7, 0.12, Math.sin(a) * 0.7, fire); }
 box(0.6, 0.15, 0.15, 0x6b4628, 0, 0.12, 0, fire); box(0.15, 0.15, 0.6, 0x6b4628, 0, 0.18, 0, fire);
 const flame = box(0.4, 0.6, 0.4, 0xff9a2a, 0, 0.5, 0, fire); flame.castShadow = false;
 fire.position.set(D.campfire.x, 0, D.campfire.z); scene.add(fire);
 
+// 木を切る場面の木：村のまん中に近いふちの木で、横から引いて見た時に手前の木で画面がふさがらない木（イメージ）。
+// 森の木は消さない（穴をあけない）。sim.js で切った木が見やすければ、その木を使う
+const TREES0 = D.trees.filter((t, i) => D.days[0].trees[i] === 't');
+const ROCKS0 = D.days[0].rocks.filter((r) => r.hp > 0);
+// 木を切る場面の形：カメラは村のまん中の側から。打つ人は木の横に立ち（横顔が見える）、木は反対の横へ、少し手前（草地）に倒れる
+function treeGeo(t, side) {
+  const S = t.size || 1, toC = unit(D.square.x - t.x, D.square.z - t.z), perp = { x: -toC.z * side, z: toC.x * side };
+  const ws = { x: t.x + perp.x * (1.0 * S + 0.8) + toC.x * 0.4, z: t.z + perp.z * (1.0 * S + 0.8) + toC.z * 0.4 };
+  const from = { x: ws.x + perp.x * 2.0, z: ws.z + perp.z * 2.0 }; // 2.0 を 0.8 秒（人の歩く速さ）
+  const fdir = unit(-perp.x * 0.85 + toC.x * 0.5, -perp.z * 0.85 + toC.z * 0.5);
+  const cam = [t.x + toC.x * 22 + perp.x * 2.0, 6.5, t.z + toC.z * 22 + perp.z * 2.0, t.x + toC.x * 1.0 - perp.x * 0.6, 5.5, t.z + toC.z * 1.0 - perp.z * 0.6];
+  return { S, toC, perp, ws, from, fdir, cam };
+}
+const TREE_PICK = (() => {
+  let best = null;
+  for (const t of TREES0) {
+    const dSq = Math.hypot(t.x - D.square.x, t.z - D.square.z); if (dSq > 34) continue;
+    for (const side of [1, -1]) {
+      const G = treeGeo(t, side);
+      let cost = frameCost(G.cam, TREES0, ROCKS0, [t.id]) + (t.id === TREE_SIM.id ? -0.5 : 0) + dSq * 0.01;
+      // 倒れる所と打つ人の所に、ほかの木や岩がないこと
+      for (const r of ROCKS0) for (let k = 0; k < 0.75; k += 0.05) if (Math.hypot(r.x - lerp(G.cam[0], t.x, k), r.z - lerp(G.cam[2], t.z, k)) < 3.2) { cost += 3; break; } // 手前の岩
+      for (const o of TREES0) if (o.id !== t.id && Math.hypot(o.x - t.x, o.z - t.z) < 7) cost += 0.3; // となりの木と葉が重なって見分けにくい
+      for (const o of [...TREES0, ...ROCKS0]) { if (o.id === t.id) continue; for (let k = 1.5; k <= 13; k += 1.5) if (Math.hypot(o.x - (t.x + G.fdir.x * k), o.z - (t.z + G.fdir.z * k)) < 2.4) { cost += 0.6; break; } if (Math.hypot(o.x - G.ws.x, o.z - G.ws.z) < 2.0) cost += 1; }
+      if (!best || cost < best.cost) best = { cost, t, side };
+    }
+  }
+  return best || { t: TREE_SIM, side: 1 };
+})();
+const TREE = TREE_PICK.t;
+
+// ---------- 自然：日ごとの森と岩（動画で動かす木 1 本と岩 1 つは別に作る） ----------
+const STATE = { t: 'tree', s: 'stump', p: 'sapling' };
+function natureFor(snap, skip = () => false) {
+  const g = new THREE.Group();
+  const trees = [];
+  D.trees.forEach((t, i) => {
+    if (t.id === TREE.id || skip(t)) return;
+    const st = snap.trees[i];
+    if (st === 't') trees.push({ ...t, state: 'tree' });
+    else if (st === 's' || st === 'p') g.add(makeTree({ ...t, state: STATE[st] }));
+  });
+  const forest = makeForest(trees); g.add(forest);
+  const rocks = snap.rocks.filter((r) => r.id !== ROCK0.id && !skip(r, true));
+  g.add(makeRockField(rocks));
+  g.visible = false; scene.add(g);
+  return { g, trees, forest, rocks: rocks.filter((r) => r.hp > 0) };
+}
+// 1 日目は 0 日目の終わり、2 日目は 1 日目の終わりのようす。建て始めた後は 2 日目の終わり（場所をならした）
+// 木を切る場面だけは、切る木の奥と横の木を間引いて、明るい空き地で撮る（人が森にまぎれないように。イメージ）
+const TG = treeGeo(TREE, TREE_PICK.side);
+const inClearing = (o, rock) => { if (rock) { const dx = o.x - TREE.x, dz = o.z - TREE.z; return Math.hypot(dx, dz) < 18 && dx * TG.toC.x + dz * TG.toC.z > -2; } // 手前の岩もどける
+  const dx = o.x - TREE.x, dz = o.z - TREE.z, d = Math.hypot(dx, dz), along = dx * TG.toC.x + dz * TG.toC.z; return d < 20 && along < 3 && (d > 4 || along < 0) || (d < 9 && along >= 3); };
+const NAT = [natureFor(D.days[0]), natureFor(D.days[1]), natureFor(D.days[2]), natureFor(D.days[0], inClearing)];
+const natIdx = (t) => (t >= T.tree && t < T.night ? 3 : t < T.night + 0.7 ? 0 : t < T.build ? 1 : 2);
+for (const b of D.bushes) scene.add(makeBush({ ...b, ready: true }));
+const treeObj = makeTree({ ...TREE, state: 'tree' }); scene.add(treeObj);
+const rockObj = makeRock({ ...ROCK0, hp: 99 }); scene.add(rockObj);
+const rockBits = makeDebris([0, 1, 2, 3].map((i) => ({ x: ROCK0.x + Math.cos(i * 1.7) * (0.6 + i * 0.25), z: ROCK0.z + Math.sin(i * 1.7) * (0.6 + i * 0.25), k: 'stone', s: 0.42 - i * 0.05 })));
+scene.add(rockBits);
+// 整地する前の草と小石
+const debris = makeDebris(D.debris); scene.add(debris);
+// チェスト
+const chest = makeChest(); chest.position.set(D1.chest.x, 0, D1.chest.z); chest.rotation.y = Math.atan2(-D1.chest.x, -(D1.chest.z + 1)) + Math.PI; scene.add(chest);
+// 「どこに建てる？」の旗
+const markers = WHERE.options.map((o) => { const m = makeMarker(o.key); m.position.set(o.x, 0, o.z); m.scale.setScalar(1.6); m.visible = false; scene.add(m); return { o, m }; });
+// 建て始めた所：ならした地面と足場、材料の山
+const site = new THREE.Group();
+{
+  const w = 2.4;
+  box(w * 2 + 1.2, 0.05, w * 2 + 1.2, 0xb59a72, 0, 0.025, 0, site);
+  const sc = new THREE.Group(); site.add(sc);
+  for (const [x, z] of [[-w, -w], [w, -w], [-w, w], [w, w]]) box(0.24, 3.2, 0.24, 0x9b6b3d, x, 1.6, z, sc);
+  for (const y of [1.1, 2.5]) { box(w * 2 + 0.3, 0.18, 0.18, 0x8a5a33, 0, y, -w, sc); box(w * 2 + 0.3, 0.18, 0.18, 0x8a5a33, 0, y, w, sc); box(0.18, 0.18, w * 2 + 0.3, 0x8a5a33, -w, y, 0, sc); box(0.18, 0.18, w * 2 + 0.3, 0x8a5a33, w, y, 0, sc); }
+  const base = box(w * 2, 0.5, w * 2, 0x8d9196, 0, 0.25, 0, site); // 倉庫の石の土台から
+  site.userData = { sc, base };
+}
+site.position.set(SITE.x, 0, SITE.z); site.rotation.y = Math.atan2(-SITE.x, -(SITE.z + 1)); site.visible = false; scene.add(site);
+const pileW = makePile('log'), pileS = makePile('cobble');
+{ const toC = unit(-SITE.x, -SITE.z), sd = { x: -toC.z, z: toC.x }; pileW.position.set(SITE.x + toC.x * 4.2 + sd.x * 2.6, 0, SITE.z + toC.z * 4.2 + sd.z * 2.6); pileS.position.set(SITE.x + toC.x * 4.2 - sd.x * 2.6, 0, SITE.z + toC.z * 4.2 - sd.z * 2.6); }
+setPile(pileW, Math.min(12, STORE.log || 0)); setPile(pileS, Math.min(12, STORE.cobble || 0));
+scene.add(pileW, pileS);
+
+// ---------- 池・野の動物・これからの畑と柵（イメージ） ----------
+const pond = makePond(D.pond); scene.add(pond);
+const wild = (D.animals || []).map((a) => { const o = makeAnimal(a.kind); scene.add(o); return { a, o }; });
+const FA = { x: -37, z: 4 }, PN = { x: -37, z: -7.5 };
+const farmG = new THREE.Group(); farmG.position.set(FA.x, 0, FA.z); scene.add(farmG);
+farmG.add(makeFarm());
+{ const c = makeCanal(); c.position.set(4.4, 0, 0); farmG.add(c); farmG.userData.canal = c; }
+const CROPS = config.farming.crops, CROP_KEYS = Object.keys(CROPS);
+const tiles = [];
+for (let i = 0; i < 6; i++) {
+  const lx = ((i % 3) - 1) * 2.3, lz = (Math.floor(i / 3) - 0.5) * 2.5, crop = CROP_KEYS[i % 3], max = CROPS[crop].days;
+  const st = [];
+  for (let s = 0; s <= max; s++) { const f = makeField({ x: lx, z: lz, stage: s, max, crop, water: i % 3 === 2 ? 1 : 0 }); f.visible = false; farmG.add(f); st.push(f); }
+  tiles.push({ st, max, lx, lz, fast: i % 3 === 2 });
+}
+const penG = makePen(); penG.position.set(PN.x, 0, PN.z); scene.add(penG);
+const penAnimals = ['cow', 'sheep', 'pig', 'chicken', 'sheep', 'cow', 'pig', 'chicken'].map((kind, i) => { const a = { id: 'p' + i + 'x', kind, x: PN.x + ((i % 4) - 1.5) * 1.6, z: PN.z + (Math.floor(i / 4) - 0.5) * 2.0 }; const o = makeAnimal(kind); scene.add(o); return { a, o }; });
+const bob = makeBobber(); scene.add(bob);
+const fishLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xffffff })); scene.add(fishLine);
+
 // ---------- 村人 ----------
 const VIL = Object.fromEntries(D.villagers.map((v) => [v.key, v]));
+const CREW = [KJ, ...D1.active.filter((k) => k !== KJ)].slice(0, 5); // 先頭は「参加したい ピッケル」の人
 const chars = {};
-for (const v of D.villagers) { const ch = makeCharacter('../skins/skin_' + String(v.skin).padStart(3, '0') + '.png', { scale: 1.9 }); if (v.profile && v.profile.color) setAccent(ch, v.profile.color); ch.visible = false; scene.add(ch); chars[v.key] = ch; }
-const objPos = (id, day) => {
-  if (!id) return null;
-  if (id[0] === 't') return D.trees.find((x) => x.id === id);
-  if (id[0] === 'b') return D.bushes.find((x) => x.id === id);
-  const snap = D.days[day];
-  return snap.rocks.find((x) => x.id === id) || snap.fields.find((x) => x.id === id) || D.buildings.find((x) => x.id === id);
-};
-const POSE = { chop: 'chop', dig: 'dig', dig_last: 'dig', till: 'dig', berry: 'gather', harvest: 'gather', tend: 'gather', forage: 'gather' };
-const TOOL = { chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', berry: 'basket', harvest: 'basket', tend: 'hoe', forage: 'basket' };
-const workSpot = (key, action, tg) => {
-  const ang = (hash(key) % 360) * Math.PI / 180;
-  const off = action && action.startsWith('dig') ? 2.3 : action === 'chop' ? 1.25 * ((tg && tg.size) || 1) + 0.6 : 1.3;
-  return tg ? { x: tg.x + Math.cos(ang) * off, z: tg.z + Math.sin(ang) * off, fx: tg.x, fz: tg.z } : { x: -14 + (hash(key) % 9), z: 12 + (hash(key) % 5), fx: null };
-};
-function pushOut(p, obs) {
-  for (let n = 0; n < 4; n++) {
-    let moved = false;
-    for (const o of obs) {
-      const dx = p.x - o.x, dz = p.z - o.z, d = Math.hypot(dx, dz);
-      if (d < o.r + 0.5) { const k = (o.r + 0.6) / (d || 1); p.x = o.x + (d ? dx : 1) * k; p.z = o.z + (d ? dz : 0) * k; moved = true; }
-    }
-    if (!moved) break;
+for (const key of new Set([...CREW, ...D2.active])) {  // 釣りをした人も D2.active に入っている
+  const v = VIL[key];
+  const ch = makeCharacter('../skins/skin_' + String(v.skin).padStart(3, '0') + '.png', { scale: 1.9 });
+  if (v.profile && v.profile.color) setAccent(ch, v.profile.color);
+  ch.visible = false; scene.add(ch); chars[key] = ch;
+}
+function hideAll() { for (const k in chars) chars[k].visible = false; }
+function put(key, p, face, pose, at, tool = null, carry = null, s = 1, toolScale = 1) {
+  const ch = chars[key]; if (!ch) return;
+  ch.visible = true; ch.scale.setScalar(1.9 * s);
+  ch.position.set(p.x, 0, p.z); if (face != null) ch.rotation.y = face;
+  setTool(ch, tool); setCarry(ch, carry); animate(ch, pose, at);
+  if (ch.userData.parts.tool) ch.userData.parts.tool.scale.setScalar(toolScale * (ch.userData.parts.tool.userData.base || 1));
+}
+const WALK = 2.6; // 歩く速さ（town.js の SPEED と同じ。1 秒に 2 歩くらい）
+const faceTo = (a, b) => Math.atan2(b.x - a.x, b.z - a.z);
+const SQ = D.square;
+// 見る所より手前の木（葉の塊と幹）が、画面をどれだけふさぐか（0 = ふさがない）。木は消さずに、カメラの向きで避ける
+function frameCost(c, trees, rocks, skipIds = [], extra = []) {
+  camera.position.set(c[0], c[1], c[2]); camera.lookAt(c[3], c[4], c[5]); camera.updateMatrixWorld(true);
+  const far = Math.hypot(c[3] - c[0], c[5] - c[2]) - 1.5;
+  let cost = 0;
+  const boxes = [];
+  for (const t of [...trees, ...extra]) {
+    if (skipIds.includes(t.id)) continue;
+    const s = t.size || 1, d = Math.hypot(t.x - c[0], t.z - c[2]);
+    if (d > far + TREE_R * s) continue;
+    if (d < TREE_R * s + 0.6 && c[1] > TREE_LEAF_Y * s - 0.5 && c[1] < TREE_LEN * s + 0.5) return 99; // カメラが葉の中
+    boxes.push([t, TREE_R * s, TREE_LEAF_Y * s, TREE_LEN * s, 1], [t, 0.7 * s, 0, TREE_LEAF_Y * s, 0.6]);
   }
-  return p;
-}
-const obsCache = {};
-function obsForDay(day) {
-  if (obsCache[day]) return obsCache[day];
-  const snap = D.days[day];
-  return (obsCache[day] = obstaclesFor({ buildings: D.buildings.filter((b) => b.day <= day), rocks: snap.rocks, trees: [] }, config));
-}
-function hideAll() { for (const k in chars) { const ch = chars[k]; ch.visible = false; setShield(ch, false); ch.userData.block = false; } }
-
-// ---------- 1 日目の場面：岩を掘る・木を切る・運ぶ（台本どおりに動く） ----------
-const RD = { rate: 2.0, phase: 0.65 };            // 動画では少し速くたたく（1 秒に 2 回）
-const RC = { rate: 1.6, phase: 0.75 }, CH = 4;     // 木はふつうの速さで、4 回で幹 1 つ
-const animAt = (u, pose) => (pose === 'dig' ? u * RD.rate / 1.3 : u * RC.rate / 1.6); // 振りと打つ時を合わせる
-const S2 = (() => {
-  const d0 = D.days[0];
-  // 1 日目の寄りでは、上の 2 つが石か石炭の岩を掘る（鉄やダイヤは sim.js で見つかった日に見せる）
-  const plain = (r) => !/[igd]/.test((r.blocks || '').slice(0, 2));
-  const near0 = d0.rocks.filter((r) => !r.far && plain(r));
-  const anchor = near0.slice().sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0];
-  const toward = unit(-anchor.x, -anchor.z);
-  const side = { x: -toward.z, z: toward.x };
-  const U = (p) => (p.x - anchor.x) * toward.x + (p.z - anchor.z) * toward.z;
-  const V = (p) => (p.x - anchor.x) * side.x + (p.z - anchor.z) * side.z;
-  const rock2 = near0.filter((r) => r !== anchor).sort((a, b) => Math.hypot(a.x - anchor.x, a.z - anchor.z) - Math.hypot(b.x - anchor.x, b.z - anchor.z))[0];
-  const trees = D.trees.map((t, i) => ({ ...t, i })).filter((t, i) => !t.far && d0.trees[i] === 't' && d0.rocks.every((r) => Math.hypot(r.x - t.x, r.z - t.z) > 3.6) && U(t) > -6)
-    .sort((a, b) => Math.hypot(a.x - anchor.x, a.z - anchor.z) - Math.hypot(b.x - anchor.x, b.z - anchor.z)).slice(0, 5);
-  const crew = D.days[1].active.slice(0, 5);
-  const jobs = [['dig', anchor], ['chop', trees[0]], ['dig', rock2], ['chop', trees[1]], ['chop', trees[2]]];
-  const obstacles = obstaclesFor({ buildings: [], rocks: d0.rocks.filter((r) => !r.far), trees: D.trees.filter((t) => !t.far).map((t) => ({ ...t, state: 'tree' })) }, config);
-  const at = (u, v) => ({ x: anchor.x + toward.x * u + side.x * v, z: anchor.z + toward.z * u + side.z * v });
-  const chopT = jobs.filter((j) => j[0] === 'chop').map((j) => j[1]);
-  const vWood = chopT.reduce((s, t) => s + V(t), 0) / chopT.length, uWood = Math.max(...chopT.map(U)) + 2.6;
-  const vStone = (V(anchor) + V(rock2)) / 2, uStone = Math.max(U(anchor), U(rock2)) + 3.4;
-  const woodPile = pushOut(at(uWood, vWood), obstacles), stonePile = pushOut(at(uStone, vStone), obstacles);
-  const placedWs = [];
-  const plans = crew.map((key, i) => {
-    const [action, tg] = jobs[i];
-    const pile = action === 'chop' ? woodPile : stonePile;
-    const off = action === 'dig' ? 2.3 : 1.25 * (tg.size || 1) + 0.6;
-    const a = Math.atan2(toward.z, toward.x) + (action === 'dig' ? (i % 2 ? 0.75 : -0.75) : (i % 2 ? 0.3 : -0.3));
-    const ws = { x: tg.x + Math.cos(a) * off, z: tg.z + Math.sin(a) * off };
-    pushOut(ws, obstacles.filter((o) => Math.hypot(o.x - tg.x, o.z - tg.z) > 0.2));
-    for (const q of placedWs) { const dx = ws.x - q.x, dz = ws.z - q.z, d = Math.hypot(dx, dz); if (d < 1.8) { ws.x = q.x + (dx / (d || 1)) * 1.8; ws.z = q.z + (dz / (d || 1)) * 1.8; } }
-    placedWs.push(ws);
-    const spawn = pushOut(at(Math.max(...[anchor, rock2, ...trees.slice(0, 3)].map(U)) + 4.2 + (i % 2) * 1.2, (vWood + vStone) / 2 + (i - 2) * 2.1), obstacles);
-    const dv = action === 'chop' ? [0, -1.6, 0, 1.6, 0][i] : (i === 0 ? -1.0 : 1.0), du = 1.3;
-    const drop = { x: pile.x + toward.x * du + side.x * dv, z: pile.z + toward.z * du + side.z * dv };
-    const tg2 = action === 'chop' ? (trees[3 + (i % 2)] || tg) : tg;
-    let ws2 = ws;
-    if (tg2 !== tg) { const a2 = Math.atan2(toward.z, toward.x) + (i % 2 ? -0.6 : 0.6); const o2 = 1.25 * (tg2.size || 1) + 0.6; ws2 = pushOut({ x: tg2.x + Math.cos(a2) * o2, z: tg2.z + Math.sin(a2) * o2 }, obstacles.filter((o) => Math.hypot(o.x - tg2.x, o.z - tg2.z) > 0.2)); }
-    const r1 = routeAround(spawn, ws, obstacles), r2 = routeAround(ws, drop, obstacles), r3 = routeAround(drop, ws2, obstacles);
-    const enter = SC.s2[0] + i * 0.15;
-    const appear = SC.join[0] + 0.3 + i * 0.42; // 「参加したい」が届いて現れる
-    const speed = 4.2;
-    const t1 = enter + routeLength(spawn, r1) / speed;
-    // 岩は 2 ブロック、木は幹 4 つを壊して、落ちた物を拾い終わるまで
-    const work = action === 'dig' ? breakTime(1, RD) + SHRINK + 1.3 + 0.25 : breakTime(LOGS - 1, RC, CH) + SHRINK + 1.3 + 0.25;
-    const t2 = t1 + work;
-    const t3 = t2 + routeLength(ws, r2) / speed;
-    const t4 = t3 + 0.6;
-    const t5 = t4 + routeLength(drop, r3) / speed;
-    return { key, i, action, tg, ws, tg2, ws2, spawn, drop, r1, r2, r3, enter, appear, t1, t2, t3, t4, t5, speed, gain: action === 'dig' ? 2 : LOGS };
-  });
-  const pts = [...plans.map((p) => p.ws), ...plans.map((p) => p.tg), woodPile, stonePile];
-  const vMin = Math.min(...pts.map(V)), vMax = Math.max(...pts.map(V)), uMid = (Math.min(...pts.map(U)) + Math.max(...pts.map(U))) / 2;
-  const center = at(uMid + 0.5, (vMin + vMax) / 2);
-  const dist = Math.max(18, (vMax - vMin + 3.5) / 0.5246);
-  return { anchor, rock2, plans, toward, side, trees, woodPile, stonePile, center, dist };
-})();
-window.S2 = S2;
-
-// ---------- 自然（日ごとに入れかえ。変わらない木はまとめて描く） ----------
-const STATE = { t: 'tree', s: 'stump', p: 'sapling' };
-const dynTree = new Set(S2.trees.map((t) => t.i));
-D.trees.forEach((t, i) => { for (let d = 0; d <= LAST; d++) if (D.days[d].trees[i] !== 't') { dynTree.add(i); break; } });
-scene.add(makeForest(D.trees.filter((t, i) => !dynTree.has(i)).map((t) => ({ ...t, state: 'tree' }))));
-const treeObjs = D.trees.map(() => ({ state: null, obj: null }));
-function setTree(i, st) {
-  const o = treeObjs[i];
-  if (o.state === st) return o.obj;
-  if (o.obj) scene.remove(o.obj);
-  o.obj = makeTree({ ...D.trees[i], state: st }); o.state = st; scene.add(o.obj);
-  return o.obj;
-}
-const bushObjs = D.bushes.map(() => ({ ready: null, obj: null }));
-const rockObjs = {}; const fieldObjs = {};
-function syncNature(day, override = {}) {
-  const snap = D.days[Math.max(0, Math.min(30, day))];
-  for (const i of dynTree) { const st = override.trees?.[i] || STATE[snap.trees[i]]; const o = setTree(i, st); if (o.userData.tree) setTreeCut(o, st === 'tree' ? 0 : LOGS); }
-  D.bushes.forEach((b, i) => {
-    const r = snap.bushes[i] === '1'; const o = bushObjs[i];
-    if (o.ready !== r) { if (o.obj) scene.remove(o.obj); o.obj = makeBush({ ...b, ready: r }); o.ready = r; scene.add(o.obj); }
-  });
-  const seen = new Set();
-  for (const r of snap.rocks) {
-    const hp = override.rockHp?.[r.id] ?? r.hp;
-    seen.add(r.id);
-    let o = rockObjs[r.id];
-    if (!o) { const obj = makeRock(r); scene.add(obj); o = rockObjs[r.id] = { obj }; }
-    setRockHp(o.obj, hp); // ひび・縮みも毎回もどす
-  }
-  for (const id in rockObjs) rockObjs[id].obj.visible = seen.has(id);
-  const fs = new Set();
-  for (const f of snap.fields) {
-    fs.add(f.id);
-    const o = fieldObjs[f.id];
-    if (!o || o.stage !== f.stage) { if (o) scene.remove(o.obj); const obj = makeField(f); scene.add(obj); fieldObjs[f.id] = { stage: f.stage, obj }; }
-  }
-  for (const id in fieldObjs) fieldObjs[id].obj.visible = fs.has(id);
-  return snap;
-}
-
-// ---------- 掘る・切るの見た目（たたく → ひび → 壊れる → 落ちる → 拾う） ----------
-const ITEM_NAME = { cobble: '丸石', coal: '石炭', iron: '鉄鉱石', gold: '金鉱石', diamond: 'ダイヤ', log: '原木' };
-const ITEM_COL = { iron: '#ffc69a', gold: '#ffe25a', diamond: '#7ffff4', coal: '#e0e0e0' };
-const ORE = { c: 'coal', i: 'iron', g: 'gold', d: 'diamond' };
-const RARE = new Set(['iron', 'gold', 'diamond']);
-const CHIP_COL = { s: 0x8a8d91, c: 0x3a3a3e, i: 0xd49d74, g: 0xf0cb36, d: 0x45dcd6 };
-const PICK = 0.8; // 落ちてから拾うまで
-// 落ちた物：はねて回る → 人の手へ → 頭の上に「+1 丸石」
-function itemLife(kind, o, seed, age, toward, who, t, big = 1.7) {
-  if (age < 0) return 0;
-  const head = { x: lerp(who.x, o.x, 0.45), y: 3.0, z: lerp(who.z, o.z, 0.45) }; // 人と岩の間の上（画面の上の札と重ねない）
-  if (age < PICK) {
-    const d = dropPos(o, seed, age, toward);
-    fx.item(kind, d.x, d.y, d.z, d.rot, big);
-    if (RARE.has(kind)) fx.glow(kind, d.x, d.y + 0.05, d.z, 1, t, 1.3 * big);
-    else fx.glow('coal', d.x, d.y + 0.05, d.z, 0.55, t, 0.8 * big); // ふつうの物も、うすく光らせて見つけやすく
-    return 0;
-  }
-  if (age < PICK + 0.3) {
-    const d = dropPos(o, seed, PICK, toward), k = (age - PICK) / 0.3;
-    fx.item(kind, lerp(d.x, who.x, k), lerp(d.y, 1.6, k) + Math.sin(k * Math.PI) * 0.5, lerp(d.z, who.z, k), age * 3, big * (1 - k * 0.5));
-    return 0;
-  }
-  if (age < PICK + 1.5) {
-    const k = (age - PICK - 0.3) / 1.2;
-    fx.plus('+1 ' + ITEM_NAME[kind], head.x, head.y + k * 0.7, head.z, k < 0.75 ? 1 : (1 - k) * 4, ITEM_COL[kind] || '#fff6c8', 1.05);
-    if (RARE.has(kind)) fx.glow(kind, who.x, 2.6, who.z, (1 - k) * 0.9, t, 1.1);
-  }
-  return 1;
-}
-// 岩：blocks の順に 1 つずつ。u は掘り始めてからの秒。戻り値は拾った数
-function digView(rockObj, blocks, u, who, seed, t, sp = RD) {
-  const R = rockObj.userData.rock; if (!R) return 0;
-  const s = strikeAt(u, sp);
-  let got = 0;
-  blocks.forEach((bi, i) => {
-    const mesh = R.meshes[bi]; if (!mesh) return;
-    mesh.getWorldPosition(v3);
-    const o = { x: v3.x, y: v3.y, z: v3.z };
-    const dir = unit(who.x - o.x, who.z - o.z), face = { x: o.x + dir.x * B * 0.5, y: o.y, z: o.z + dir.z * B * 0.5 };
-    const kind = R.kinds[bi];
-    if (i < s.broken) {
-      const a = u - breakTime(i, sp);
-      if (a < SHRINK) { mesh.visible = true; mesh.scale.setScalar(1 - 0.3 * (a / SHRINK)); setCrack(mesh, STAGES - 1); }
-      else { mesh.visible = false; setCrack(mesh, -1); }
-      fx.chips(chipList(face, dir, seed + 'b' + bi, a, 14), CHIP_COL[kind] || CHIP_COL.s);
-      got += itemLife(ORE[kind] || 'cobble', o, seed + bi, a - SHRINK, unit(camera.position.x - o.x, camera.position.z - o.z), who, t, kind === 's' ? 2.0 : 2.3);
-    } else {
-      mesh.visible = true; mesh.scale.setScalar(1);
-      if (i === s.broken) { setCrack(mesh, s.stage); if (s.n && s.inBlk) fx.chips(chipList(face, dir, seed + s.n, s.since, 9), CHIP_COL[kind] || CHIP_COL.s); }
-      else setCrack(mesh, -1);
-    }
-  });
-  return got;
-}
-// 木：下の幹から 1 つずつ。切ると上が 1 段落ちる。最後は葉が散る
-function chopView(treeObj, u, who, seed, t) {
-  const T = treeObj.userData.tree; if (!T) return 0;
-  const s = strikeAt(u, RC, CH);
-  const n = Math.min(LOGS, s.broken);
-  let fall = 0;
-  if (n > 0 && n < LOGS) { const a = u - breakTime(n - 1, RC, CH); fall = a < 0.22 ? 1 - (a / 0.22) * (a / 0.22) : 0; }
-  setTreeCut(treeObj, n, fall);
-  T.logs.forEach((l, i) => setCrack(l, i === n && n < LOGS ? s.stage : -1));
-  const S = T.size, g = treeObj.position;
-  const dir = unit(who.x - g.x, who.z - g.z);
-  const base = { x: g.x, y: (0.3 + LOG / 2) * S, z: g.z };
-  if (n < LOGS && s.n && s.inBlk) fx.chips(chipList({ x: base.x + dir.x * LOG * 0.5 * S, y: base.y, z: base.z + dir.z * LOG * 0.5 * S }, dir, seed + 't' + s.n, s.since, 9), 0x8a6238);
-  let got = 0;
-  for (let i = 0; i < n; i++) {
-    const a = u - breakTime(i, RC, CH);
-    if (a < SHRINK) { // 壊れた幹が少し縮んで消える（下に残像を出す）
-      fx.item('log', base.x, base.y, base.z, 0, (LOG * S / 0.3) * (1 - 0.3 * a / SHRINK));
-    }
-    got += itemLife('log', base, seed + 'log' + i, a - SHRINK, unit(camera.position.x - base.x, camera.position.z - base.z), who, t);
-  }
-  if (n >= LOGS) {
-    const a = u - breakTime(LOGS - 1, RC, CH);
-    const top = { x: g.x, y: (0.3 + 0.8) * S, z: g.z };
-    for (let k = 0; k < 3; k++) fx.chips(chipList(top, { x: (k - 1) * 0.7, z: 0.3 }, seed + 'leaf' + k, a * 0.8, 12).map((q) => ({ ...q, s: q.s * 2.4 })), new THREE.Color(T.leafCol).getHex());
-  }
-  return got;
-}
-
-// 置き場の山（置くたびに高くなる）
-const pileS = makePile('cobble'), pileW = makePile('log');
-pileS.position.set(S2.stonePile.x, 0, S2.stonePile.z); pileW.position.set(S2.woodPile.x, 0, S2.woodPile.z);
-scene.add(pileS, pileW);
-const resPile = { wood: makePile('log'), stone: makePile('cobble') };
-resPile.wood.position.set(D.campfire.x + 3.2, 0, D.campfire.z - 2.6);
-resPile.stone.position.set(D.campfire.x - 3.0, 0, D.campfire.z - 2.8);
-scene.add(resPile.wood, resPile.stone);
-function syncResPile(day) {
-  const r = D.days[day].resources;
-  setPile(resPile.wood, Math.min(PILE_MAX, Math.ceil((r.wood || 0) / 6)));
-  setPile(resPile.stone, Math.min(PILE_MAX, Math.ceil((r.stone || 0) / 6)));
-  resPile.wood.visible = resPile.stone.visible = true;
-}
-
-function scene2(t) {
-  const over = { trees: {}, rockHp: {} };
-  for (const p of S2.plans) { if (p.action === 'chop') over.trees[p.tg.i] = 'tree'; else over.rockHp[p.tg.id] = p.tg.max; }
-  syncNature(0, over);
-  let nw = 0, ns = 0;
-  const pops = [];
-  const live = [];
-  for (const p of S2.plans) {
-    const ch = chars[p.key];
-    const rockObj = p.action === 'dig' ? rockObjs[p.tg.id].obj : null, treeObj = p.action === 'chop' ? treeObjs[p.tg.i].obj : null;
-    // 岩・木の見た目（掘る前・途中・後）
-    const wu = t - p.t1;
-    if (t >= p.t1) {
-      if (rockObj) digView(rockObj, [0, 1], Math.min(wu, 50), p.ws, p.key, t);
-      else chopView(treeObj, Math.min(wu, 50), p.ws, p.key, t);
-    }
-    ch.visible = t >= p.appear;
-    if (!ch.visible) continue;
-    let pose = 'walk', pos, tool = TOOL[p.action], carry = null, face = null, at = t + p.i;
-    ch.scale.setScalar(1.9 * backOut(clamp01((t - p.appear) / 0.35)));
-    if (t < p.enter) {
-      ch.position.set(p.spawn.x, 0, p.spawn.z); ch.rotation.y = Math.atan2(S2.toward.x, S2.toward.z);
-      setTool(ch, null); setCarry(ch, null); animate(ch, 'idle', t + p.i); live.push({ key: p.key, ch }); continue;
-    }
-    if (t < p.t1) { const q = pointAt(p.spawn, p.r1, (t - p.enter) * p.speed); pos = q; face = q.dir; }
-    else if (t < p.t2) { pos = p.ws; pose = POSE[p.action]; face = Math.atan2(p.tg.x - p.ws.x, p.tg.z - p.ws.z); at = animAt(wu, pose); }
-    else if (t < p.t3) { const q = pointAt(p.ws, p.r2, (t - p.t2) * p.speed); pos = q; face = q.dir; pose = 'carry'; tool = null; carry = p.action === 'chop' ? 'wood' : 'stone'; }
-    else if (t < p.t4) { pos = p.drop; pose = 'idle'; tool = null; face = Math.atan2((p.action === 'chop' ? S2.woodPile : S2.stonePile).x - p.drop.x, (p.action === 'chop' ? S2.woodPile : S2.stonePile).z - p.drop.z); }
-    else if (t < p.t5) { const q = pointAt(p.drop, p.r3, (t - p.t4) * p.speed); pos = q; face = q.dir; }
-    else { pos = p.ws2; pose = POSE[p.action]; face = Math.atan2(p.tg2.x - p.ws2.x, p.tg2.z - p.ws2.z); at = t - p.t5; }
-    if (t >= p.t3) { if (p.action === 'chop') nw += p.gain; else ns += p.gain; if (t < p.t3 + 1.3) pops.push({ pile: p.action === 'chop' ? pileW : pileS, n: p.gain, a: t - p.t3 }); }
-    setTool(ch, tool); setCarry(ch, carry);
-    ch.position.set(pos.x, 0, pos.z);
-    if (face !== null && face !== undefined) ch.rotation.y = face;
-    animate(ch, pose, at);
-    live.push({ key: p.key, ch });
-  }
-  setPile(pileS, Math.min(PILE_MAX, 3 + ns)); setPile(pileW, Math.min(PILE_MAX, 3 + nw));
-  pileS.visible = pileW.visible = true;
-  for (const q of pops) fx.plus('+' + q.n, q.pile.position.x, 2.4 + q.a * 0.7, q.pile.position.z, q.a < 1 ? 1 : (1.3 - q.a) / 0.3, '#fff6c8', 1.5);
-  return live;
-}
-
-// ---------- 鉄が出る場面（sim.js の「見つけた」の日・人・岩のまま） ----------
-const IRON = FIND ? (() => {
-  const key = FIND.who[0];
-  const prev = D.days[IRON_D - 1].rocks.find((r) => r.id === FIND.rock);
-  const rk = D.days[IRON_D].rocks.find((r) => r.id === FIND.rock) || prev;
-  const from = rk.max - prev.hp;
-  let bi = rk.blocks.indexOf('i', from); if (bi < 0) bi = rk.blocks.indexOf('i');
-  const toC = unit(-rk.x, -rk.z), sd = { x: -toC.z, z: toC.x };
-  const ws = { x: rk.x + toC.x * 2.3 * 0.8 + sd.x * 2.3 * 0.6, z: rk.z + toC.z * 2.3 * 0.8 + sd.z * 2.3 * 0.6 };
-  return { key, rk, bi, ws, toC, sd };
-})() : null;
-function ironScene(t) {
-  const u = t - IRON_WIN[0] - 0.15;
-  const o = rockObjs[IRON.rk.id].obj;
-  setRockHp(o, IRON.rk.max - IRON.bi); // 鉄のブロックがいちばん上に出ている
-  const ch = chars[IRON.key]; ch.visible = true; ch.scale.setScalar(1.9);
-  setTool(ch, 'pick'); setCarry(ch, null);
-  ch.position.set(IRON.ws.x, 0, IRON.ws.z); ch.rotation.y = Math.atan2(IRON.rk.x - IRON.ws.x, IRON.rk.z - IRON.ws.z);
-  const broke = u > breakTime(0, RD) + 0.4;
-  animate(ch, broke ? 'idle' : 'dig', broke ? t : animAt(Math.max(0, u), 'dig'));
-  digView(o, [IRON.bi], Math.max(-1, u), IRON.ws, 'iron', t);
-  return [{ key: IRON.key, ch }];
-}
-
-// ---------- 道 ----------
-let roadObj = null, roadN = -1;
-function syncRoads(dayF) {
-  const bs = D.buildings.filter((b) => b.day <= dayF);
-  if (bs.length === roadN) return;
-  if (roadObj) scene.remove(roadObj);
-  roadObj = makeRoads(bs, D.plots, config); scene.add(roadObj); roadN = bs.length;
-}
-
-// ---------- 建物 ----------
-const bObjs = D.buildings.map((b) => {
-  const g = makeBuilding(b, config);
-  const wrap = new THREE.Group(); wrap.add(g);
-  g.position.set(0, 0, 0); wrap.position.set(b.x, 0, b.z); wrap.rotation.y = b.rot || 0; g.rotation.y = 0;
-  scene.add(wrap);
-  g.updateMatrixWorld(true);
-  const emit = g.userData.steam ? [] : null;
-  if (emit) for (let k = 0; k < 6; k++) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), new THREE.MeshLambertMaterial({ color: g.userData.steam.dark ? 0x9a9a9a : 0xffffff, transparent: true, opacity: 0.6 }));
-    m.castShadow = false; wrap.add(m); emit.push(m);
-  }
-  return { b, wrap, g, emit, hands: g.userData.clockHand || [], cows: g.userData.cows || [] };
-});
-const backOut = (x) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
-function syncBuildings(dayF, t, popDays = 0.45) {
-  for (const o of bObjs) {
-    const p = (dayF - o.b.day) / popDays;
-    o.wrap.visible = p >= 0;
-    if (p < 0) continue;
-    const k = p >= 1 ? 1 : Math.max(0.001, backOut(clamp01(p)));
-    o.wrap.scale.set(lerp(0.6, 1, Math.min(1, k)), k, lerp(0.6, 1, Math.min(1, k)));
-    for (const h of o.hands) h.rotation.z = -t * 0.6;
-    o.cows.forEach((c, i) => { c.rotation.y = i + Math.sin(t * 0.5 + i) * 0.4; });
-    if (o.emit) {
-      const s = o.g.userData.steam;
-      o.emit.forEach((m, i) => {
-        const life = (t * 0.45 + i / o.emit.length) % 1;
-        const R = rnd(o.b.id + i);
-        m.position.set(s.x + (s.wide ? (R() - 0.5) * 2.4 : 0) + life * 0.6, s.y + life * 2.2, s.z + (s.wide ? (R() - 0.5) * 2.4 : 0));
-        m.scale.setScalar(1 + life * 1.2); m.material.opacity = 0.6 * (1 - life);
-      });
-    }
-  }
-  fire.visible = !D.buildings.some((b) => b.type === 'plaza' && b.day <= dayF);
-  flame.scale.y = 0.8 + Math.sin(t * 12) * 0.2;
-}
-
-// ---------- その日の町で働く・運ぶ村人 ----------
-const walkCache = {};
-function walkersFor(day) {
-  if (walkCache[day]) return walkCache[day];
-  const snap = D.days[day];
-  const obstacles = obsForDay(day);
-  const stores = D.buildings.filter((b) => b.day <= day && (b.type === 'storehouse' || b.type === 'plaza'));
-  const store = stores.pop() || { x: D.campfire.x, z: D.campfire.z + 3 };
-  const drop0 = pushOut({ x: store.x * 0.82, z: store.z * 0.82 }, obstacles);
-  return (walkCache[day] = snap.active.filter((k) => snap.life[k]).map((key) => {
-    const [action, target] = snap.life[key];
-    const tg = objPos(target, day);
-    const ws = workSpot(key, action, tg);
-    pushOut(ws, obstacles.filter((o) => !tg || Math.hypot(o.x - tg.x, o.z - tg.z) > 0.2));
-    const da = (hash(key + 'd') % 360) * Math.PI / 180, dr = 2 + (hash(key + 'r') % 30) / 10;
-    const drop = pushOut({ x: drop0.x + Math.cos(da) * dr, z: drop0.z + Math.sin(da) * dr }, obstacles);
-    const r2 = routeAround(ws, drop, obstacles), r4 = routeAround(drop, ws, obstacles);
-    const l2 = routeLength(ws, r2), l4 = routeLength(drop, r4);
-    const sp = 2.6, work = 6 + (hash(key) % 4);
-    const cyc = work + l2 / sp + 1.6 + l4 / sp;
-    return { key, action, tg, ws, drop, r2, r4, l2, l4, sp, work, cyc, off: (hash(key + 'o') % 1000) / 1000 * cyc, job: snap.life[key][3] };
-  }));
-}
-let NEAR_CUT = 12;
-function sceneDay(t, day, skip = new Set()) {
-  const live = [];
-  for (const p of walkersFor(day)) {
-    if (skip.has(p.key)) continue;
-    const ch = chars[p.key];
-    let u = (t + p.off) % p.cyc, pose, pos, face = null, tool = TOOL[p.action], carry = null;
-    if (u < p.work) { pos = p.ws; pose = POSE[p.action] || 'gather'; if (p.tg) face = Math.atan2(p.tg.x - p.ws.x, p.tg.z - p.ws.z); }
-    else if ((u -= p.work) < p.l2 / p.sp) { const q = pointAt(p.ws, p.r2, u * p.sp); pos = q; face = q.dir; pose = 'carry'; tool = null; carry = p.job; }
-    else if ((u -= p.l2 / p.sp) < 1.6) { pos = p.drop; pose = 'idle'; tool = null; }
-    else { u -= 1.6; const q = pointAt(p.drop, p.r4, u * p.sp); pos = q; face = q.dir; pose = 'walk'; }
-    if (Math.hypot(pos.x - camera.position.x, pos.z - camera.position.z) < NEAR_CUT) continue;
-    ch.visible = true;
-    setTool(ch, tool); setCarry(ch, carry);
-    ch.position.set(pos.x, 0, pos.z); if (face !== null && face !== undefined) ch.rotation.y = face;
-    animate(ch, pose, t + (hash(p.key) % 100) / 10);
-    live.push({ key: p.key, ch });
-  }
-  return live;
-}
-
-// ---------- 工事の足場 ----------
-function makeScaffold(w) {
-  const g = new THREE.Group();
-  for (const [x, z] of [[-w, -w], [w, -w], [-w, w], [w, w]]) box(0.25, 3.2, 0.25, 0x9b6b3d, x, 1.6, z, g);
-  for (const y of [1.2, 2.6]) { box(w * 2 + 0.3, 0.2, 0.2, 0x8a5a33, 0, y, -w, g); box(w * 2 + 0.3, 0.2, 0.2, 0x8a5a33, 0, y, w, g); box(0.2, 0.2, w * 2 + 0.3, 0x8a5a33, -w, y, 0, g); box(0.2, 0.2, w * 2 + 0.3, 0x8a5a33, w, y, 0, g); }
-  box(w * 2, 0.15, w * 2, 0xb08a5a, 0, 0.08, 0, g);
-  scene.add(g); g.visible = false; return g;
-}
-const H0 = D.buildings.filter((b) => b.type !== 'plaza').sort((a, b) => a.day - b.day)[0];
-const scaf0 = makeScaffold(1.6), scafVB = makeScaffold(1.8);
-const stacks = { w0: makePile('log'), s0: makePile('cobble'), wV: makePile('log'), sV: makePile('cobble') };
-for (const k in stacks) { setPile(stacks[k], 12); stacks[k].visible = false; scene.add(stacks[k]); }
-function placeSite(b, scaf, sw, ss) {
-  if (!b) return;
-  const toC = unit(-b.x, -b.z), side = { x: -toC.z, z: toC.x };
-  scaf.position.set(b.x, 0, b.z); scaf.rotation.y = b.rot || 0;
-  sw.position.set(b.x + toC.x * 2.8 + side.x * 3.4, 0, b.z + toC.z * 2.8 + side.z * 3.4);
-  ss.position.set(b.x + toC.x * 2.6 - side.x * 3.6, 0, b.z + toC.z * 2.6 - side.z * 3.6);
-}
-placeSite(H0, scaf0, stacks.w0, stacks.s0);
-placeSite(VB, scafVB, stacks.wV, stacks.sV);
-const VB_START = DD >= 0 ? DD + 1 : VBD - 2;
-function syncSites(dayF) {
-  const on0 = H0 && dayF >= H0.day - 2 && dayF < H0.day;
-  scaf0.visible = !!on0; if (on0) scaf0.scale.y = clamp01(0.4 + 0.6 * (1 - (H0.day - dayF) / 2));
-  stacks.w0.visible = stacks.s0.visible = !!(H0 && dayF >= H0.day - 2 && dayF < H0.day + 0.3);
-  const onV = VB && VB !== H0 && dayF >= VB_START && dayF < VBD;
-  scafVB.visible = !!onV;
-  stacks.wV.visible = stacks.sV.visible = !!(onV || (VB && VB !== H0 && dayF >= VB_START && dayF < VBD + 0.3));
-  return { on0, onV };
-}
-function siteCrew(t, day, dayF, skip) {
-  const live = [];
-  const act = new Set(D.days[day].active);
-  const put = (b, n, r) => {
-    const toC = unit(-b.x, -b.z), base = Math.atan2(toC.z, toC.x);
-    (b.builders || []).filter((k) => act.has(k)).slice(0, n).forEach((key, i) => {
-      const a = base + [-1.1, 1.1, 0][i], p = { x: b.x + Math.cos(a) * r, z: b.z + Math.sin(a) * r };
-      const ch = chars[key]; ch.visible = true; ch.scale.setScalar(1.9); ch.position.set(p.x, 0, p.z); ch.rotation.y = Math.atan2(b.x - p.x, b.z - p.z);
-      setCarry(ch, null); setTool(ch, i % 2 ? 'axe' : 'pick'); animate(ch, i % 2 ? 'chop' : 'dig', t + i * 0.37);
-      skip.add(key); live.push({ key, ch });
-    });
-  };
-  const s = syncSites(dayF);
-  if (s.on0) put(H0, 2, 3.3);
-  if (s.onV) put(VB, 3, 3.3);
-  return live;
-}
-
-// ---------- 夜の敵 ----------
-const mobPool = [];
-const getMob = (type, i) => { const k = type + i; let m = mobPool.find((x) => x.k === k); if (!m) { m = { k, g: makeMob(type) }; m.g.visible = false; scene.add(m.g); mobPool.push(m); } return m.g; };
-const arrowPool = [];
-const getArrow = (i) => { while (arrowPool.length <= i) { const a = makeArrow(); a.scale.setScalar(1.7); a.visible = false; scene.add(a); arrowPool.push(a); } const a = arrowPool[i]; a.visible = true; return a; };
-function hideMobs() { for (const m of mobPool) m.g.visible = false; for (const a of arrowPool) a.visible = false; }
-// 0 日目の夜：だれもいない平地の向こうを、ゾンビがうろつくだけ
-function wanderMobs(t, n) {
-  if (n < 0.45) return;
-  const tw = S2.toward, sd = S2.side, C = S2.center;
-  for (let i = 0; i < 3; i++) {
-    const g = getMob('zombie', i);
-    g.scale.setScalar(1.7); g.position.y = 0;
-    const base = { x: C.x + tw.x * (1 + (i % 2) * 2.5) + sd.x * (i - 1) * 3.8, z: C.z + tw.z * (1 + (i % 2) * 2.5) + sd.z * (i - 1) * 3.8 };
-    const s = Math.sin(t * 0.45 + i * 2.1) * 1.8, ds = Math.cos(t * 0.45 + i * 2.1);
-    g.position.set(base.x + sd.x * s, 0, base.z + sd.z * s);
-    g.rotation.y = Math.atan2(sd.x * Math.sign(ds), sd.z * Math.sign(ds));
-    animateMob(g, 'walk', t);
-  }
-}
-// 敵が来た夜：ゾンビとクモは近くまで来て、たいまつで追い払われる。スケルトンは離れた所から弓を射る。見張りは盾で受ける
-const ATKV = ATK ? (() => {
-  const n = ATK.n, f = unit(n.from.x, n.from.z), fs = { x: -f.z, z: f.x };
-  const act = new Set(D.days[ATK.d].active);
-  const gk = (n.guards || []).filter((k) => act.has(k)).slice(0, 3);
-  const obs = obsForDay(ATK.d);
-  const posts = gk.map((key, i) => ({ key, p: pushOut({ x: f.x * 23 + fs.x * (i - (gk.length - 1) / 2) * 2.8, z: f.z * 23 + fs.z * (i - (gk.length - 1) / 2) * 2.8 }, obs) }));
-  const list = [];
-  for (const g of n.groups || []) for (let k = 0; k < g.n; k++) list.push(g.type);
-  const cnt = list.length;
-  const mobs = list.map((type, i) => {
-    const o = (i - (cnt - 1) / 2);
-    const r = type === 'skeleton' ? 31.5 : 26.4;
-    return { type, i, start: { x: f.x * 42 + fs.x * o * 3.2, z: f.z * 42 + fs.z * o * 3.2 }, goal: { x: f.x * r + fs.x * o * 2.0, z: f.z * r + fs.z * o * 2.0 } };
-  });
-  const cam = { x: f.x * 10 + fs.x * 12.5, y: 9.5, z: f.z * 10 + fs.z * 12.5 }, tgt = { x: f.x * 27.5, y: 1.2, z: f.z * 27.5 };
-  const text0 = `${ATK.d}日目の夜`;
-  const text1 = `${(n.groups || []).map((g) => `${MOB_JA[g.type]} ${g.n} 体`).join('と')}`;
-  const text2 = n.result === 'repelled' ? '見張りが追い払った' : '見張りが戦って追い返した';
-  const archers = list.includes('skeleton');
-  return { f, fs, posts, mobs, cam, tgt, text0, text1, text2, archers };
-})() : null;
-const SHOT = 0.9; // 弓を引いて放つ 1 回
-function attackScene(t) {
-  const u = t - atkSeg.t1, live = [];
-  const fight = u >= 2.2 && u < 3.5, shooting = ATKV.archers && u >= 2.0 && u < 3.5;
-  for (const { key, p } of ATKV.posts) {
-    const ch = chars[key]; ch.visible = true; ch.scale.setScalar(1.9); ch.position.set(p.x, 0, p.z); ch.rotation.y = Math.atan2(ATKV.f.x, ATKV.f.z);
-    setCarry(ch, null); setTool(ch, 'torch'); setShield(ch, true); ch.userData.block = shooting;
-    animate(ch, fight && !shooting ? 'chop' : fight ? 'chop' : 'idle', t + (hash(key) % 10) * 0.1);
-    live.push({ key, ch });
-  }
-  const dawn = u >= 3.5;
-  let ai = 0;
-  for (const mb of ATKV.mobs) {
-    const g = getMob(mb.type, 10 + mb.i);
-    g.scale.setScalar(1.7); g.position.y = 0;
-    if (u < 0.6) continue;
-    const face = Math.atan2(mb.goal.x - mb.start.x, mb.goal.z - mb.start.z);
-    if (u < 2.0) { const k = ease((u - 0.6) / 1.4) * 0.6 + ((u - 0.6) / 1.4) * 0.4; g.position.set(lerp(mb.start.x, mb.goal.x, k), 0, lerp(mb.start.z, mb.goal.z, k)); g.rotation.y = face; animateMob(g, 'walk', t); }
-    else if (!dawn) {
-      g.position.set(mb.goal.x, 0, mb.goal.z); g.rotation.y = face;
-      if (mb.type === 'skeleton') {
-        const k = ((u - 2.0) % SHOT) / SHOT; animateMob(g, 'shoot', t, k);
-        // 放った矢：飛んで、見張りの手前の地面に刺さる（刺さったまま残る）
-        const target = ATKV.posts[mb.i % Math.max(1, ATKV.posts.length)];
-        for (let j = 0; j < 2; j++) {
-          const rel = u - 2.0 - j * SHOT - 0.6 * SHOT; if (rel < 0) continue;
-          const tp = target ? target.p : { x: ATKV.f.x * 23, z: ATKV.f.z * 23 };
-          const dx = mb.goal.x - tp.x, dz = mb.goal.z - tp.z, dl = Math.hypot(dx, dz) || 1;
-          const to = { x: tp.x + (dx / dl) * (1.4 + j * 0.9) + (j - 0.5) * 1.2 * (-dz / dl), y: 0.15, z: tp.z + (dz / dl) * (1.4 + j * 0.9) + (j - 0.5) * 1.2 * (dx / dl) };
-          const fr = { x: mb.goal.x - (dx / dl) * 0.8, y: 2.7, z: mb.goal.z - (dz / dl) * 0.8 };
-          arrowAt(getArrow(ai++), fr, to, rel / 0.35, 1.2);
-        }
-      } else animateMob(g, 'hit', t, ((u - 2.2) % 0.55) / 0.55);
-    } else {
-      // 朝：ゾンビは日に焼かれて燃え（火と煙）、ほかは森へ逃げる。刺さった矢は残る
-      for (let j = 0; j < 2 && mb.type === 'skeleton'; j++) {
-        const target = ATKV.posts[mb.i % Math.max(1, ATKV.posts.length)], tp = target ? target.p : { x: ATKV.f.x * 23, z: ATKV.f.z * 23 };
-        const dx = mb.goal.x - tp.x, dz = mb.goal.z - tp.z, dl = Math.hypot(dx, dz) || 1;
-        const to = { x: tp.x + (dx / dl) * (1.4 + j * 0.9) + (j - 0.5) * 1.2 * (-dz / dl), y: 0.15, z: tp.z + (dz / dl) * (1.4 + j * 0.9) + (j - 0.5) * 1.2 * (dx / dl) };
-        arrowAt(getArrow(ai++), { x: mb.goal.x - (dx / dl) * 0.8, y: 2.7, z: mb.goal.z - (dz / dl) * 0.8 }, to, 1, 1.2);
+  for (const r of rocks) if (!skipIds.includes(r.id) && Math.hypot(r.x - c[0], r.z - c[2]) < far) boxes.push([r, 2.2, 0, 3.0, 3]); // 手前の岩は大きく見えるので重く
+  for (const [t, r, y0, y1, w] of boxes) {
+    {
+      let x0 = 9, x1 = -9, ya = 9, yb = -9, behind = false;
+      for (const dx of [-r, r]) for (const dz of [-r, r]) for (const y of [y0, y1]) {
+        _pv.set(t.x + dx, y, t.z + dz).applyMatrix4(camera.matrixWorldInverse);
+        if (_pv.z > -0.3) { behind = true; continue; }
+        _pv.applyMatrix4(camera.projectionMatrix);
+        x0 = Math.min(x0, _pv.x); x1 = Math.max(x1, _pv.x); ya = Math.min(ya, _pv.y); yb = Math.max(yb, _pv.y);
       }
-      const k = clamp01((u - 3.5) / 1.0);
-      if (mb.type === 'zombie') { g.position.set(mb.goal.x, 0, mb.goal.z); g.rotation.y = face; const b = clamp01((u - 3.55) / 1.45); animateMob(g, 'burn', t, b); g.visible = b < 1; }
-      else { g.position.set(lerp(mb.goal.x, mb.start.x, k), 0, lerp(mb.goal.z, mb.start.z, k)); g.rotation.y = face + Math.PI; animateMob(g, 'flee', t); g.visible = k < 1; }
+      if (behind) { if (x1 < x0) continue; x0 = -1; x1 = 1; } // カメラのすぐ横をまたぐ物は、画面の横いっぱい
+      const ox = Math.max(0, Math.min(1, x1) - Math.max(-1, x0)), oy = Math.max(0, Math.min(1, yb) - Math.max(-1, ya));
+      cost += (ox * oy) / 4 * w * 10;
     }
   }
-  return live;
+  return cost;
+}
+// 引きのカメラ：まわりをぐるっと回って、手前の木で画面がふさがらない向きを選ぶ
+function bestAngle(cx, cz, r, natI = 0, pref = 0.4, h = 13, ty = 0.8) {
+  let best = null;
+  for (let k = 0; k < 72; k++) {
+    const a = (k / 72) * Math.PI * 2;
+    const c = [cx + Math.sin(a) * r, h, cz + Math.cos(a) * r, cx, ty, cz];
+    const cost = Math.abs(Math.atan2(Math.sin(a - pref), Math.cos(a - pref))) * 0.2 + frameCost(c, NAT[natI].trees, NAT[natI].rocks, [], [TREE]);
+    if (!best || cost < best.cost) best = { cost, a };
+  }
+  return best.a;
+}
+const A0 = bestAngle(SQ.x, SQ.z, 21, 0, 0.4, 27);
+// 参加して最初に立つ所（広場のまわり、カメラの側）
+const JOIN_AT = CREW.map((k, i) => {
+  const a = A0 + (i - 2) * 0.42, p = { x: SQ.x + Math.sin(a) * 3.8, z: SQ.z + Math.cos(a) * 3.8 };
+  const d = Math.hypot(p.x - D.campfire.x, p.z - D.campfire.z);
+  if (d < 1.8) { const u = unit(p.x - D.campfire.x, p.z - D.campfire.z); p.x = D.campfire.x + u.x * 1.8; p.z = D.campfire.z + u.z * 1.8; }
+  return p;
+});
+const T_APPEAR = CREW.map((k, i) => (i === 0 ? T.join + 0.35 : T.join + 1.55 + (i - 1) * 0.42));
+
+// ---------- 整地：2 人が 3 か所ずつ回って、草と石をどける ----------
+const LV = (() => {
+  const stops = [];
+  const R0 = 3.0; // 止まる所の円（となりの所まで 3.0、歩いて 1.15 秒）
+  LEVELERS.forEach((key, li) => { for (let s = 0; s < 3; s++) { const a = (li * 3 + s) / 6 * Math.PI * 2 + 0.5; stops.push({ key, li, s, a, p: { x: SQ.x + Math.cos(a) * R0, z: SQ.z + Math.sin(a) * R0 } }); } });
+  const t0 = T.level + 0.35, stopLen = 0.8, walk = 2 * R0 * Math.sin(Math.PI / 6) / WALK;
+  const ang = (d) => { const a = Math.atan2(d.z - SQ.z, d.x - SQ.x) - 0.5; return ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2); };
+  const gone = D.debris.map((d, i) => {
+    const sec = Math.min(5, Math.floor(ang(d) / (Math.PI * 2 / 6)));
+    const li = Math.floor(sec / 3), s = sec % 3;
+    const same = D.debris.map((e, j) => j).filter((j) => Math.min(5, Math.floor(ang(D.debris[j]) / (Math.PI * 2 / 6))) === sec);
+    const order = same.indexOf(i);
+    return t0 + s * (stopLen + walk) + 0.25 + (order + 0.5) * (stopLen - 0.35) / same.length + li * 0.12;
+  });
+  return { stops, t0, stopLen, walk, gone, done: t0 + 3 * (stopLen + walk) };
+})();
+function levelScene(t) {
+  const items = debris.userData.items;
+  D.debris.forEach((d, i) => {
+    const a = t - LV.gone[i], o = items[i];
+    o.visible = a < 0.25;
+    if (a >= 0 && a < 0.25) o.scale.setScalar((d.s || 1) * (1 - a / 0.25));
+    else o.scale.setScalar(d.s || 1);
+    if (a >= 0 && a < 0.6) fx.chips(chipList({ x: d.x, y: 0.3, z: d.z }, { x: 0, z: 0 }, 'deb' + i, a, 9), d.k === 'grass' ? 0x5e9a3c : 0x8d9196);
+  });
+  LEVELERS.forEach((key, li) => {
+    const u = t - LV.t0;
+    const my = LV.stops.filter((s) => s.li === li);
+    const i = Math.max(0, Math.min(2, Math.floor(u / (LV.stopLen + LV.walk))));
+    const w = u - i * (LV.stopLen + LV.walk);
+    let p = my[i].p, pose = 'dig';
+    if (u < 0) pose = 'idle'; // 場面が変わった時には、もう最初の所にいる（遠くから歩かせない）
+    else if (w > LV.stopLen && i < 2) { const k = (w - LV.stopLen) / LV.walk; p = { x: lerp(my[i].p.x, my[i + 1].p.x, k), z: lerp(my[i].p.z, my[i + 1].p.z, k) }; pose = 'walk'; }
+    else if (u > 3 * (LV.stopLen + LV.walk)) pose = 'idle';
+    const away = { x: SQ.x + Math.cos(my[i].a) * 7, z: SQ.z + Math.sin(my[i].a) * 7 };
+    put(key, p, faceTo(p, away), pose === 'dig' ? 'gather' : pose, t + li, null); // 手で草をぬく
+  });
+  // ほかの人は、それぞれの仕事へ（森へ歩いていく）
+  CREW.filter((k) => !LEVELERS.includes(k) && k !== KJ).forEach((key, i) => {
+    const p0 = JOIN_AT[CREW.indexOf(key)], tg = D1.life[key][1];
+    const to = (D.trees.find((x) => x.id === tg) || D.days[0].rocks.find((x) => x.id === tg) || D.bushes.find((x) => x.id === tg) || { x: p0.x * 3, z: p0.z * 3 });
+    const d = unit(to.x - p0.x, to.z - p0.z), s = Math.max(0, t - T.level - 0.2 - i * 0.3) * WALK;
+    if (s > 12) return;
+    const p = { x: p0.x + d.x * s, z: p0.z + d.z * s };
+    put(key, p, Math.atan2(d.x, d.z), s > 0 ? 'walk' : 'idle', t + i, startTool(key));
+  });
 }
 
-// ---------- 明かり ----------
-const lightAll = [];
-for (const o of bObjs) { o.wrap.updateMatrixWorld(true); for (const l of o.g.userData.lights || []) { const p = new THREE.Vector3(l.x, l.y, l.z).applyMatrix4(o.g.matrixWorld); lightAll.push({ x: p.x, y: p.y, z: p.z, day: o.b.day }); } }
-const sky = makeSky(scene, { hemi, sun, sunDist: 60, radius: 200, maxLights: 8, nightBoost: 0.45 });
+// ---------- 木を切る（素手）：何回もたたくと倒れて、原木が落ち、切り株が残る ----------
+const VC = { rate: 3.2, phase: 0.75 }, VD = { rate: 3.0, phase: 0.65 };
+const TIERS = config.crafting.tiers;
+const TR = (() => {
+  const { S, ws, from } = treeGeo(TREE, TREE_PICK.side);
+  const t1 = T.tree + 0.85, hits = TIERS[CH_TIER].hits;
+  const tFell = t1 + breakTime(0, VC, hits);
+  return { S, ws, from, t1, hits, tFell, FALL: 1.3, VAN: 1.3 * FALL_END + 0.35 }; // VAN：倒れ始めてから消えるまで
+})();
+// 人と相手のまん中を、横から見るカメラ。手前の木や岩で人がかくれず、葉が画面をふさがない向きを選ぶ
+function clearCam(a, b, dist, h, ty, natI, skipIds = []) {
+  const nat = NAT[natI];
+  const rocks = nat.rocks.filter((r) => !skipIds.includes(r.id)).map((r) => ({ x: r.x, z: r.z, r: 2.0 }));
+  const c = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+  const ax = Math.atan2(b.z - a.z, b.x - a.x);
+  let best = null;
+  for (let k = 0; k < 36; k++) {
+    const ang = ax + Math.PI / 2 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 18);
+    const p = { x: c.x + Math.cos(ang) * dist, z: c.z + Math.sin(ang) * dist };
+    const cam = [p.x, h, p.z, c.x, ty, c.z];
+    let cost = Math.abs(Math.sin(ang - ax - Math.PI / 2)) * 1.2 + frameCost(cam, NAT[natI].trees, NAT[natI].rocks, skipIds);
+    for (const q of [a, b]) for (let s = 0.06; s < 0.97; s += 0.04) { const x = lerp(p.x, q.x, s), z = lerp(p.z, q.z, s); for (const o of rocks) if (Math.hypot(x - o.x, z - o.z) < o.r) cost += 1; }
+    if (!best || cost < best.cost) best = { cost, cam };
+  }
+  return best.cam;
+}
+// 木は人の 3 倍以上高いので、横から大きく引いて、低い所から見上げる（倒れる木が画面に収まる）
+const CAM_TREE = treeGeo(TREE, TREE_PICK.side).cam;
+// 倒れる向き：カメラから見て横（打つ人と反対の側）、少しだけ奥へ
+const FDIR = treeGeo(TREE, TREE_PICK.side).fdir;
+const LOGS_N = 3;
+const logPos = (i) => ({ x: TREE.x + FDIR.x * (2.2 + i * 2.8) * TR.S, y: 0.45, z: TREE.z + FDIR.z * (2.2 + i * 2.8) * TR.S }); // 横たわった幹のあと
+const CH_TOOL = CH_TIER === 'hand' ? null : toolKey('axe', CH_TIER);
+function treeScene(t, after) {
+  // after：倒れた後の場面（切り株だけ）
+  if (after) { setTreeState(treeObj, 'stump'); return; }
+  const u = t - TR.t1;
+  if (u < breakTime(0, VC, TR.hits)) {
+    setTreeState(treeObj, 'tree');
+    const s = strikeAt(Math.max(-1, u), VC, TR.hits);
+    setTreeCrack(treeObj, u > 0 ? s.stage : -1);
+    if (u > 0 && s.n) fx.chips(chipList({ x: TREE.x + (TR.ws.x - TREE.x) * 0.12, y: 0.9, z: TREE.z + (TR.ws.z - TREE.z) * 0.12 }, unit(TR.ws.x - TREE.x, TR.ws.z - TREE.z), 'tc' + s.n, s.since, 8), 0x8a6238);
+  } else {
+    const a = t - TR.tFell;
+    // 根元を軸に、ゆっくり傾き始めてだんだん速く倒れ、地面で少し弾んでから消える
+    setTreeFall(treeObj, a / TR.FALL, FDIR, a > TR.VAN - 0.15 ? Math.min(1, (a - TR.VAN + 0.15) / 0.3) : 0);
+    setTreeCrack(treeObj, -1);
+    if (a >= TR.VAN) {
+      const ag = a - TR.VAN;
+      // 消える時に葉が散る（葉の塊があった所から）
+      for (let k = 0; k < 4; k++) { const d = (TREE_LEAF_Y + 0.6 + k * 2.0) * TR.S; fx.chips(chipList({ x: TREE.x + FDIR.x * d, y: 1.2, z: TREE.z + FDIR.z * d }, { x: (k % 2 - 0.5) * 0.8, z: 0.4 }, 'leaf' + k, ag * 0.75, 14).map((q) => ({ ...q, s: q.s * 2.6 })), new THREE.Color(treeObj.userData.tree.leafCol).getHex()); }
+      // 原木：倒れた幹のあとに落ちて、低いところを通って打った人の足もとへ（顔の前を通らない）
+      const side = { x: TR.ws.x + FDIR.x * 0.9, z: TR.ws.z + FDIR.z * 0.9 };
+      for (let i = 0; i < LOGS_N; i++) {
+        const age = ag - i * 0.1, o = logPos(i);
+        if (age < 0) continue;
+        const pick = 0.8 + i * 0.1;
+        if (age < pick) { const d = dropPos(o, 'log' + i, age, FDIR); fx.item('log', d.x, d.y, d.z, d.rot, 1.9); fx.glow('coal', d.x, d.y + 0.05, d.z, 0.5, t, 0.9); }
+        else if (age < pick + 0.35) { const d = dropPos(o, 'log' + i, pick, null), k = (age - pick) / 0.35; fx.item('log', lerp(d.x, side.x, k), lerp(d.y, 0.7, k) + Math.sin(k * Math.PI) * 0.35, lerp(d.z, side.z, k), age * 3, 1.9 * (1 - 0.6 * k)); }
+      }
+      const pk = ag - 0.75;
+      if (pk > 0 && pk < 1.0) fx.plus(`+${LOGS_N} 原木`, logPos(1).x, 2.4 + pk * 0.5, logPos(1).z, pk < 0.75 ? 1 : (1.0 - pk) / 0.25, '#fff6c8', 1.3); // 倒れた木のあとの上（顔に重ならない）
+    }
+  }
+  // 打つ人
+  if (t < TR.t1) { const k = clamp01((t - T.tree) / (TR.t1 - T.tree)); const p = { x: lerp(TR.from.x, TR.ws.x, k), z: lerp(TR.from.z, TR.ws.z, k) }; put(KCH, p, faceTo(p, TREE), 'walk', t, CH_TOOL); }
+  else if (t < TR.tFell + 0.25) put(KCH, TR.ws, faceTo(TR.ws, TREE), 'chop', u * VC.rate / 1.6, CH_TOOL);
+  else put(KCH, TR.ws, faceTo(TR.ws, logPos(1)), t - TR.tFell > TR.VAN && t - TR.tFell < TR.VAN + 1.2 ? 'gather' : 'idle', t, CH_TOOL);
+}
+
+// ---------- 岩を掘る（木のつるはし）：決まった回数で 1 つ落ちる。形は変わらず、最後はくだけて消える ----------
+const RK = (() => {
+  const toC = unit(SQ.x - ROCK0.x, SQ.z - ROCK0.z), sd = { x: -toC.z, z: toC.x };
+  const ws = { x: ROCK0.x + toC.x * 3.0 + sd.x * 0.8, z: ROCK0.z + toC.z * 3.0 + sd.z * 0.8 };
+  const from = { x: ws.x + toC.x * 2.6, z: ws.z + toC.z * 2.6 }; // 2.6 を 1.0 秒
+  const t1 = T.rock + 1.1, hits = TIERS.wood.hits, N = 2;
+  const kinds = [...(ROCK0.blocks || 'sss').slice(0, 3)].map((c) => ({ c: 'coal', i: 'iron', g: 'gold', d: 'diamond' }[c] || 'cobble'));
+  return { ws, from, t1, hits, N, kinds };
+})();
+const CAM_ROCK = clearCam(RK.ws, ROCK0, 17.0, 4.6, 2.0, 0, [ROCK0.id]); // 縦長の画面は横が狭いので、人と岩が両方入るまで引く
+const CHIP_COL = { cobble: 0x8a8d91, coal: 0x3a3a3e, iron: 0xd49d74, gold: 0xf0cb36, diamond: 0x45dcd6 };
+function rockScene(t, state) {
+  // state：'full'（まだ）/'gone'（掘り終えた）/ undefined（掘っている）
+  rockBits.visible = state === 'gone';
+  if (state === 'full') { setRock(rockObj, RK.N); return; }
+  if (state === 'gone') { setRock(rockObj, 0); return; }
+  const u = t - RK.t1, s = strikeAt(Math.max(-1, u), VD, RK.hits);
+  const broken = Math.min(RK.N, u > 0 ? s.broken : 0);
+  const hp = RK.N - broken;
+  const dir = unit(RK.ws.x - ROCK0.x, RK.ws.z - ROCK0.z);
+  const face = { x: ROCK0.x + dir.x * 1.9, y: 1.2, z: ROCK0.z + dir.z * 1.9 };
+  const last = broken > 0 ? u - breakTime(broken - 1, VD, RK.hits) : 9;
+  setRock(rockObj, hp, hp > 0 && u > 0 ? s.stage : -1, last < 0.2 ? 1 - last / 0.2 : 0);
+  rockBits.visible = hp <= 0;
+  if (u > 0 && s.n && hp > 0) fx.chips(chipList(face, dir, 'rk' + s.n, s.since, 7), CHIP_COL.cobble);
+  for (let i = 0; i < broken; i++) {
+    const a = u - breakTime(i, VD, RK.hits), kind = RK.kinds[i];
+    fx.chips(chipList(face, dir, 'rb' + i, a, 12), CHIP_COL[kind]);
+    if (i === RK.N - 1) fx.chips(chipList({ x: ROCK0.x, y: 0.6, z: ROCK0.z }, { x: 0, z: 0 }, 'rend', a, 22).map((q) => ({ ...q, s: q.s * 2.6 })), CHIP_COL.cobble);
+    const o = { x: face.x, y: Math.max(0.5, face.y), z: face.z }, toward = unit(CAM_ROCK[0] - o.x, CAM_ROCK[2] - o.z);
+    if (a < 0.8) { const d = dropPos(o, 'ri' + i, a, toward); fx.item(kind, d.x, d.y, d.z, d.rot, 2.0); fx.glow(kind === 'cobble' ? 'coal' : kind, d.x, d.y + 0.05, d.z, kind === 'cobble' ? 0.5 : 0.9, t, 1.0); }
+    else if (a < 1.1) { const d = dropPos(o, 'ri' + i, 0.8, toward), q = (a - 0.8) / 0.3; fx.item(kind, lerp(d.x, RK.ws.x, q), lerp(d.y, 0.8, q) + Math.sin(q * Math.PI) * 0.3, lerp(d.z, RK.ws.z, q), a * 3, 2.0 * (1 - q * 0.6)); } // 足もとへ（顔の前を通らない）
+    else if (a < 2.2) { const q = (a - 1.1) / 1.1; fx.plus('+1 ' + IT[kind].name, ROCK0.x, 3.6 + q * 0.5, ROCK0.z, q < 0.75 ? 1 : (1 - q) * 4, kind === 'coal' ? '#e0e0e0' : '#fff6c8', 1.1); } // 岩の上（顔に重ならない）
+  }
+  const done = u > breakTime(RK.N - 1, VD, RK.hits) + 0.25;
+  if (u < 0) { const k = clamp01((t - T.rock) / 1.0); const p = { x: lerp(RK.from.x, RK.ws.x, k), z: lerp(RK.from.z, RK.ws.z, k) }; put(KJ, p, faceTo(p, ROCK0), k < 1 ? 'walk' : 'idle', t, 'pick:wood'); return; }
+  put(KJ, RK.ws, faceTo(RK.ws, ROCK0), done ? 'idle' : 'dig', done ? t : Math.max(0, u) * VD.rate / 1.3, 'pick:wood');
+}
+
+// ---------- 建て始める ----------
+function buildScene(t) {
+  site.visible = true;
+  const k = ease((t - T.build - 0.3) / 3.2);
+  site.userData.sc.scale.set(1, Math.max(0.05, k), 1);
+  site.userData.base.scale.set(1, Math.max(0.1, ease((t - T.build) / 1.2)), 1);
+  pileW.visible = pileS.visible = true;
+  const toC = unit(-SITE.x, -SITE.z), b0 = Math.atan2(toC.z, toC.x);
+  BUILDERS.forEach((key, i) => {
+    const a = b0 + [-0.9, 0.9, 0][i], p = { x: SITE.x + Math.cos(a) * 3.3, z: SITE.z + Math.sin(a) * 3.3 };
+    put(key, p, faceTo(p, SITE), i === 2 ? 'dig' : 'chop', t * 1.2 + i * 0.37, toolKey(i === 2 ? 'pick' : 'axe', D2.life[key][4]));
+  });
+}
+const CAM_BUILD = (() => { const toC = unit(-SITE.x, -(SITE.z + 1)), sd = { x: -toC.z, z: toC.x }; return [SITE.x + toC.x * 15 + sd.x * 5, 8.5, SITE.z + toC.z * 15 + sd.z * 5, SITE.x, 1.6, SITE.z]; })();
+
+// ---------- チェストへ運ぶ ----------
+const CH = (() => {
+  const c = D1.chest, ry = Math.atan2(-c.x, -(c.z + 1)) + Math.PI;
+  const F = { x: Math.sin(ry), z: Math.cos(ry) }, Sd = { x: Math.cos(ry), z: -Math.sin(ry) }; // 前（錠前の側）と横
+  const at = { x: c.x + F.x * 0.9 + Sd.x * 2.1, z: c.z + F.z * 0.9 + Sd.z * 2.1 }; // チェストの横に立つ（前の錠前をかくさない）
+  const dir = unit(F.x * 0.5 + Sd.x, F.z * 0.5 + Sd.z), from = { x: at.x + dir.x * 2.6, z: at.z + dir.z * 2.6 }; // 2.6 を 1.0 秒
+  return { c, F, Sd, at, from, arrive: T.chest + 1.0, open: T.chest + 1.15, gui: T.chest + 2.3 };
+})();
+const CAM_CHEST = [CH.c.x + CH.F.x * 10.5 - CH.Sd.x * 4.4, 4.8, CH.c.z + CH.F.z * 10.5 - CH.Sd.z * 4.4, CH.c.x + CH.Sd.x * 0.9, 1.7, CH.c.z + CH.Sd.z * 0.9];
+function chestScene(t) {
+  const a = t - CH.open;
+  setChestOpen(chest, a < 0 ? 0 : Math.min(1, a / 0.25));
+  if (t < CH.arrive) { const k = clamp01((t - T.chest) / (CH.arrive - T.chest)); const p = { x: lerp(CH.from.x, CH.at.x, k), z: lerp(CH.from.z, CH.at.z, k) }; put(KCH, p, faceTo(p, CH.c), 'carry', t, null, 'wood'); }
+  else put(KCH, CH.at, faceTo(CH.at, CH.c), a < 0.9 ? 'gather' : 'idle', t, null, null);
+  for (let i = 0; i < 3; i++) {
+    const q = (a - i * 0.18) / 0.45;
+    if (q < 0 || q > 1) continue;
+    const kind = i === 1 ? 'cobble' : 'log';
+    fx.item(kind, lerp(CH.at.x, CH.c.x, q), 1.5 + Math.sin(q * Math.PI) * 0.8 - q * 0.5, lerp(CH.at.z, CH.c.z, q), q * 4, 1.6 * (1 - q * 0.4));
+  }
+}
+
+// ---------- 2 日目：池で釣り（sim.js で、村ではじめて魚が釣れた日） ----------
+const FS = (() => {
+  const toV = unit(SQ.x - D.pond.x, SQ.z - D.pond.z);
+  const ws = { x: D.pond.x + toV.x * (D.pond.r + 0.9), z: D.pond.z + toV.z * (D.pond.r + 0.9) };
+  const bp = { x: ws.x - toV.x * 2.6, z: ws.z - toV.z * 2.6 };
+  return { ws, bp };
+})();
+const CAM_FISH = (() => { const v = unit(FS.bp.x - FS.ws.x, FS.bp.z - FS.ws.z), sd = { x: -v.z, z: v.x }; const m = { x: (FS.ws.x + FS.bp.x) / 2, z: (FS.ws.z + FS.bp.z) / 2 }; return [m.x + sd.x * 10.0 + v.x * 1.6, 4.4, m.z + sd.z * 10.0 + v.z * 1.6, m.x - v.x * 0.6, 1.4, m.z - v.z * 0.6]; })(); // 横から少し前寄り：顔と体の横が見える
+const _tip = new THREE.Vector3();
+function fishScene(t) {
+  const key = KFI || CREW[4];
+  const u = t - T.fish + 3.0, f = fishCycle(u);
+  put(key, FS.ws, faceTo(FS.ws, FS.bp), 'fish', u, 'rod:' + ((KFI && D2.life[KFI][4] !== 'hand' && D2.life[KFI][4]) || 'wood'));
+  const y = 0.1 + Math.sin(t * 2.2) * 0.02 - f.sink * 0.16 + f.reel * 0.6;
+  bob.visible = true; fishLine.visible = true;
+  bob.position.set(lerp(FS.bp.x, FS.ws.x, f.reel * 0.45), y, lerp(FS.bp.z, FS.ws.z, f.reel * 0.45));
+  bob.userData.ring.scale.setScalar(1 + f.sink * 1.6);
+  const ch = chars[key]; ch.updateMatrixWorld(true);
+  const tool = ch.userData.parts.tool;
+  if (tool && tool.userData.tip) { tool.userData.tip.getWorldPosition(_tip); fishLine.geometry.setFromPoints([_tip.clone(), bob.position.clone().setY(y + 0.25)]); }
+  if (f.caught) {
+    const q = clamp01((f.c - 0.74) / 0.1);
+    fx.item(FISH_KEY, bob.position.x, y + 0.3 + q * 0.5, bob.position.z, u * 5, 2.2);
+    if (f.c > 0.78) fx.plus('+1 ' + IT[FISH_KEY].name, FS.bp.x, 1.9 + (f.c - 0.78) * 1.5, FS.bp.z, 1, '#bfe8ff', 1.2);
+  }
+  if (f.sink > 0.2) fx.chips(chipList({ x: FS.bp.x, y: 0.12, z: FS.bp.z }, { x: 0, z: 0 }, 'splash', (f.c - 0.62) * 7, 8), 0xd8ecf8);
+}
+// ---------- これから（イメージ）：畑が育つ・柵の動物 ----------
+const CAM_FARM = [FA.x - 0.1, 6.6, FA.z + 19.5, FA.x - 0.1, 1.5, FA.z + 0.6];
+const FARM_GOLD = { x: FA.x - 2.5, z: FA.z + 2.0 }, FARM_DIA = { x: FA.x + 2.3, z: FA.z + 2.7 };
+function farmScene(t) {
+  const p = clamp01((t - T.farm - 0.2) / 2.3);
+  for (const tl of tiles) { const s = Math.min(tl.max, Math.floor(p * (tl.max + 0.99) * (tl.fast ? 1.35 : 1))); tl.st.forEach((m, i) => { m.visible = i === s; }); }
+  // 畑の左右のふちに立って、横向きで働く（道具がカメラから見える。少し大きめに見せる）
+  const key = CREW[1];
+  put(key, FARM_GOLD, faceTo(FARM_GOLD, { x: FA.x, z: FARM_GOLD.z }), 'chop', t * 1.1, 'hoe:gold', null, 1, 1.5);
+  const k2 = CREW[3];
+  if (k2) put(k2, FARM_DIA, faceTo(FARM_DIA, { x: FA.x + 4.4, z: FARM_DIA.z }), 'dig', t * 1.2 + 0.4, 'shovel:diamond', null, 1, 1.5);
+  const a = clamp01((t - T.farm - 0.3) / 0.3) * clamp01((T.ranch - t - 0.1) / 0.3);
+  fx.plus('金のくわ', FARM_GOLD.x + 0.8, 5.0, FARM_GOLD.z, a, '#ffe27a', 1.0);
+  if (k2) fx.plus('ダイヤのシャベル', FARM_DIA.x - 0.6, 5.0, FARM_DIA.z, a, '#a8f6f0', 1.8);
+  const c = farmG.userData.canal; for (const m of c.userData.flow) { const q = (t * 0.25 + m.userData.ph) % 1; m.position.z = -c.userData.len / 2 + q * c.userData.len; }
+}
+const CAM_PEN = [PN.x + 10.5, 6.4, PN.z + 4.5, PN.x, 0.6, PN.z];
+function ranchScene(t) {
+  for (const { a, o } of penAnimals) { const q = animalPos(a, t, true); o.visible = true; o.position.set(q.x, 0, q.z); o.rotation.y = q.face; animateAnimal(o, t, q.move, q.graze); }
+  const hen = penAnimals[3], hp = animalPos(hen.a, t, true); // カメラに近い列のニワトリ
+  const key = CREW[2], wp = { x: PN.x - 3.0, z: PN.z - 1.6 }; // 柵の奥（カメラから遠い側）。動物の後ろに立つ
+  put(key, wp, faceTo(wp, hp), 'gather', t, 'basket');
+  const a = t - T.ranch - 0.9;
+  if (a > 0 && a < 1.0) { const d = dropPos({ x: hp.x, y: 0.4, z: hp.z }, 'egg', a, unit(CAM_PEN[0] - hp.x, CAM_PEN[2] - hp.z)); fx.item('egg', d.x, d.y, d.z, d.rot, 2.0); }
+  if (a > 1.0 && a < 2.2) fx.plus('+1 たまご', hp.x + 0.9, 1.5 + (a - 1.0) * 0.4, hp.z + 0.5, 1, '#fff6c8', 1.2);
+}
+
+// ---------- 明かり・空 ----------
+const sky = makeSky(scene, { hemi, sun, sunDist: 60, radius: 200, maxLights: 8, nightBoost: 0.35 });
 
 // ---------- カメラ ----------
-function look(px, py, pz, tx, ty, tz) { camera.position.set(px, py, pz); camera.lookAt(tx, ty, tz); }
+let LASTC = null;
+function look(c) { LASTC = c; camera.position.set(c[0], c[1], c[2]); camera.lookAt(c[3], c[4], c[5]); }
 const lerpCam = (a, b, k) => a.map((v, i) => lerp(v, b[i], k));
-const s2cam = (k) => {
-  const tw = S2.toward, sd = S2.side, C = S2.center;
-  const d = S2.dist * lerp(0.9, 0.82, k), so = lerp(-1.5, 1.5, k);
-  return [C.x + tw.x * d + sd.x * so, d * 0.3, C.z + tw.z * d + sd.z * so, C.x - tw.x * 0.5, 1.8, C.z - tw.z * 0.5];
-};
-// 寄り：人と、掘っている物を横から
-const blockers = (day) => [...D.trees.filter((t, i) => D.days[day].trees[i] === 't' || (day === 0 && dynTree.has(i))).map((t) => ({ x: t.x, z: t.z, r: 1.7 * (t.size || 1) })), ...D.days[day].rocks.filter((r) => r.hp > 0).map((r) => ({ x: r.x, z: r.z, r: 1.4 }))];
-const sideCache = {};
-function sideCam(ws, tg, dist, h, ty = 1.4, bias = 0.5, day = 0) {
-  const fx = tg.x - ws.x, fz = tg.z - ws.z, fl = Math.hypot(fx, fz) || 1, tw = S2.toward;
-  const cx = lerp(ws.x, tg.x, bias), cz = lerp(ws.z, tg.z, bias);
-  const key = [ws.x, ws.z, tg.x, tg.z, dist, day].map((v) => Math.round(v * 10)).join(',');
-  if (!(key in sideCache)) {
-    // 左右どちらから見るか：カメラと見る所の間に木や岩が少ない方
-    const obs = blockers(day).filter((o) => Math.hypot(o.x - tg.x, o.z - tg.z) > 0.5);
-    // 横の向きを少しずつ回して、間に木や岩がいちばん少ない向きを選ぶ（同じなら真横）
-    const pref = (-fz / fl) * tw.x + (fx / fl) * tw.z >= 0 ? 1 : -1;
-    let best = null;
-    for (const s of [pref, -pref]) for (const r of [0, 0.45, -0.45, 0.85, -0.85]) {
-      const bx0 = (-fz / fl) * s, bz0 = (fx / fl) * s, c0 = Math.cos(r), s0 = Math.sin(r);
-      const bx = bx0 * c0 - bz0 * s0, bz = bx0 * s0 + bz0 * c0;
-      let c = Math.abs(r) * 0.5 + (s === pref ? 0 : 0.3);
-      for (let k = 0.12; k <= 1; k += 0.04) { const x = cx + bx * dist * k, z = cz + bz * dist * k; for (const o of obs) if (Math.hypot(x - o.x, z - o.z) < o.r) c += 1; }
-      if (!best || c < best.c) best = { c, bx, bz };
-    }
-    sideCache[key] = best;
+const orbit = (a, r, h, ty = 0.8, cx = SQ.x, cz = SQ.z) => [cx + Math.sin(a) * r, h, cz + Math.cos(a) * r, cx, ty, cz];
+// 「どこに建てる？」：旗 3 本が画面の上半分（カードの上）に入るまで引く
+const CAM_WHERE = (() => {
+  const pts = WHERE.options.map((o) => new THREE.Vector3(o.x, 8.2, o.z)).concat(WHERE.options.map((o) => new THREE.Vector3(o.x, 0, o.z)));
+  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length, cz = pts.reduce((s, p) => s + p.z, 0) / pts.length;
+  let best = null;
+  for (let dist = 24; dist < 170; dist += 3) for (let off = -12; off <= 24; off += 3) {
+    const c = [cx, dist * 0.95, cz - dist * 0.55, cx, 0, cz + off];
+    look(c); camera.updateMatrixWorld(true);
+    let bad = 0;
+    for (const p of pts) { const v = p.clone().project(camera); const x = (v.x + 1) / 2 * W, y = (1 - v.y) / 2 * H; bad += Math.max(0, 120 - x) + Math.max(0, x - (W - 120)) + Math.max(0, SAFE_TOP + 240 - y) + Math.max(0, y - 1010); }
+    const score = bad * 10 + dist; // 入るなかで、いちばん近いもの
+    if (!best || score < best.score) best = { score, c };
   }
-  const px = sideCache[key].bx, pz = sideCache[key].bz;
-  return [cx + px * dist, h, cz + pz * dist, cx, ty, cz];
-}
-const P0 = S2.plans[0];
-const CLOSE = [P0.t1 - 0.6, P0.t3 + 0.9]; // 1 人目の「たたく → … → 運ぶ」を寄りで
-const WIDE2 = [CLOSE[1] + 0.3, D1_END];
-function closeCam(t) {
-  const dig = sideCam(P0.ws, P0.tg, 9.0, 4.0, 1.8, 0.5);
-  const pile = S2.stonePile, carry = sideCam(P0.ws, pile, 11.0, 4.8, 1.6, 0.5);
-  const k = ease((t - P0.t2 + 0.2) / 1.0);
-  return lerpCam(dig, carry, k);
-}
-const focusAt = (dayF) => {
-  if (!H0 || !VB) return { x: 0, z: 0 };
-  const k = clamp01((dayF - (H0.day + 0.5)) / Math.max(1, VB_START - H0.day));
-  return { x: lerp(H0.x, VB.x, k) * 0.7, z: lerp(H0.z, VB.z, k) * 0.7 };
-};
-function orbitCam(t) {
-  const dayF = Math.min(LAST + 0.4, dayFloatAt(Math.min(t, T_END - 0.01)));
-  const F = focusAt(dayF);
-  const a = Math.atan2(F.x, F.z) + Math.sin(t * 0.13) * 0.25 + 0.15;
-  const r = Math.hypot(F.x, F.z) + 22;
-  return [Math.sin(a) * r, 14, Math.cos(a) * r, F.x * 0.75, 1.8, F.z * 0.75];
-}
-// 終わり：投票で建った建物を画面のまん中に
-const endCam = () => {
-  if (!VB) return orbitCam(T_END);
-  const toC = unit(-VB.x, -VB.z), sd = { x: -toC.z, z: toC.x };
-  return [VB.x + toC.x * 21 + sd.x * 6, 11, VB.z + toC.z * 21 + sd.z * 6, VB.x, 2.2, VB.z];
-};
-function ironCam() {
-  const o = { x: IRON.rk.x, z: IRON.rk.z };
-  return sideCam(IRON.ws, o, 8.6, 3.9, 1.7, 0.5, IRON_D);
-}
+  return best.c;
+})();
+const CAM_WIDE0 = orbit(A0 + 0.15, 26, 32), CAM_WIDE1 = orbit(A0, 21, 27);
+const A_END = bestAngle((SITE.x + SQ.x) / 2, (SITE.z + SQ.z) / 2, 27, 2, 0.4, 27);
 function cameraAt(t) {
-  if (t < SC.s2[0]) {
-    const k = ease(t / SC.s2[0]), e = s2cam(0), C = S2.center, m = lerp(1.3, 1, k);
-    return look(C.x + (e[0] - C.x) * m, e[1] * m, C.z + (e[2] - C.z) * m, e[3], e[4], e[5]);
+  const sc = scene0(t);
+  if (sc === 's0') return look(lerpCam(orbit(A0 + 0.3, 31, 36), CAM_WIDE0, ease(t / T.join)));
+  if (sc === 'join') return look(lerpCam(CAM_WIDE0, CAM_WIDE1, ease((t - T.join) / (T.pick - T.join))));
+  if (sc === 'pick') return look(lerpCam(CAM_WIDE1, orbit(A0 + 0.05, 19, 24), ease((t - T.pick) / (T.rock - T.pick))));
+  if (sc === 'level') return look(lerpCam(CAM_WIDE1, orbit(A0 - 0.15, 22, 26), ease((t - T.level) / 1.5)));
+  if (sc === 'what') return look(orbit(A0 - 0.15 - (t - T.what) * 0.03, 22, 26));
+  if (sc === 'where') return look(lerpCam(orbit(A0 - 0.26, 22, 26), CAM_WHERE, ease((t - T.where) / 1.2)));
+  if (sc === 'tree') {
+    // 打つ間は近くから人を大きく、倒れ始めたら引いて木全体を入れる
+    const c = CAM_TREE.slice(), v = unit(c[0] - c[3], c[2] - c[5]);
+    const near = [TR.ws.x + v.x * 11.5, 4.4, TR.ws.z + v.z * 11.5, TR.ws.x - TG.perp.x * 1.2, 3.4, TR.ws.z - TG.perp.z * 1.2];
+    const k = ease(clamp01((t - (TR.tFell - 0.2)) / 1.4));
+    return look(lerpCam(near, c, k));
   }
-  if (t < SEQ0) {
-    const wide = s2cam(clamp01((t - SC.s2[0]) / (SEQ0 - SC.s2[0])));
-    const kin = ease((t - CLOSE[0]) / 0.7) * (1 - ease((t - CLOSE[1]) / 0.8));
-    return look(...lerpCam(wide, closeCam(Math.min(t, CLOSE[1])), kin));
-  }
-  if (inIron(t)) { const k = ease((t - IRON_WIN[0]) / 0.5) * (1 - ease((t - IRON_WIN[1] + 0.45) / 0.45)); return look(...lerpCam(orbitCam(t), ironCam(), k)); }
-  if (inAtk(t)) {
-    const { cam, tgt } = ATKV; const u = (t - atkSeg.t1) / (atkSeg.t2 - atkSeg.t1);
-    const c = [cam.x - ATKV.f.x * u * 2, cam.y, cam.z - ATKV.f.z * u * 2, tgt.x, tgt.y, tgt.z];
-    const k = ease((t - atkSeg.t1) / 0.3) * (1 - ease((t - atkSeg.t2 + 0.3) / 0.3));
-    return look(...lerpCam(orbitCam(t), c, k));
-  }
-  const last = SEG[SEG.length - 1];
-  if (t >= last.t0 && VB) { const k = ease((t - last.t0 - 0.2) / 1.2); return look(...lerpCam(orbitCam(t), endCam(), k)); }
-  return look(...orbitCam(t));
+  if (sc === 'night') return look(orbit(A0 + (t - T.night) * 0.05, 24, 27));
+  if (sc === 'craft') return look(orbit(A0 + 0.1 + (t - T.craft) * 0.03, 22, 26));
+  if (sc === 'rock') { const k = (t - T.rock) / (T.level - T.rock); const c = CAM_ROCK.slice(); const v = unit(c[0] - c[3], c[2] - c[5]); c[0] -= v.x * k * 1.2; c[2] -= v.z * k * 1.2; return look(c); }
+  if (sc === 'build') { const k = (t - T.build) / (T.chest - T.build); const c = CAM_BUILD.slice(); c[0] += k * 1.5; return look(c); }
+  if (sc === 'fish') { const k = (t - T.fish) / (T.farm - T.fish); const c = CAM_FISH.slice(); c[1] -= k * 0.4; return look(c); }
+  if (sc === 'farm') { const k = (t - T.farm) / (T.ranch - T.farm); const c = CAM_FARM.slice(); c[2] -= k * 1.0; return look(c); }
+  if (sc === 'ranch') { const k = (t - T.ranch) / (T.end - T.ranch); const c = CAM_PEN.slice(); c[2] += k * 1.2; return look(c); }
+  if (sc === 'chest') return look(lerpCam(CAM_CHEST, [CAM_CHEST[3] + (CAM_CHEST[0] - CAM_CHEST[3]) * 0.9, 4.4, CAM_CHEST[5] + (CAM_CHEST[2] - CAM_CHEST[5]) * 0.9, CAM_CHEST[3], 1.6, CAM_CHEST[5]], ease((t - T.chest) / 2.3)));
+  const k = ease((t - T.end) / 3);
+  return look(lerpCam(orbit(A_END, 27, 27, 1.5, (SITE.x + SQ.x) / 2, (SITE.z + SQ.z) / 2), orbit(A_END + 0.12, 34, 33, 1.5, (SITE.x + SQ.x) / 2, (SITE.z + SQ.z) / 2), k));
 }
-
 // ---------- 文字 ----------
 function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 function caption(lines, y, size, alpha = 1, opts = {}) {
@@ -764,10 +606,8 @@ function caption(lines, y, size, alpha = 1, opts = {}) {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const lh = size * 1.28;
   const wmax = Math.max(...lines.map((l) => ctx.measureText(l).width));
-  if (opts.band !== false) {
-    ctx.fillStyle = opts.bg || 'rgba(24, 36, 28, 0.62)';
-    roundRect(W / 2 - wmax / 2 - 44, y - lh / 2 - 22, wmax + 88, lh * lines.length + 44, 34); ctx.fill();
-  }
+  ctx.fillStyle = opts.bg || 'rgba(24, 36, 28, 0.66)';
+  roundRect(W / 2 - wmax / 2 - 44, y - lh / 2 - 22, wmax + 88, lh * lines.length + 44, 34); ctx.fill();
   lines.forEach((l, i) => {
     const yy = y + i * lh;
     ctx.lineJoin = 'round'; ctx.lineWidth = size * 0.16; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.strokeText(l, W / 2, yy);
@@ -775,81 +615,43 @@ function caption(lines, y, size, alpha = 1, opts = {}) {
   });
   ctx.restore();
 }
-const fade = (t, a, b, f = 0.3) => Math.min(clamp01((t - a) / f), clamp01((b - t) / f));
-function dayBadge(day, alpha = 1) {
-  ctx.save(); ctx.globalAlpha = alpha;
+// 字幕の並び：続けて出る字幕どうしは消えずに入れかわる（場面の切れ目でちらつかない）
+const CAP = SAFE_BOTTOM - 190;
+const RB0 = RK.t1 + breakTime(0, VD, RK.hits), RB1 = RK.t1 + breakTime(1, VD, RK.hits);
+const CAPS = [
+  [0.4, T.join, ['まだ、だれもいない'], { y: H / 2 + 330, size: 84 }],
+  [T.join + 0.2, T.pick, ['「参加したい」のコメントで、', '村人が 1 人ずつ']],
+  [T.rock + 0.1, RB0 + 0.2, ['つるはしを選んだ人は、', 'まず岩を掘る']],
+  [RB0 + 0.2, RB1 + 0.6, ['決まった回数たたくと、1 つ落ちる']],
+  [RB1 + 0.6, T.level, ['最後は、くだけて消える']],
+  [T.level, T.level + 2.2, ['ほかの人は、村のまん中を整地']],
+  [T.level + 2.2, LV.done + 0.1, ['草をぬいて、石をどける']],
+  [LV.done + 0.1, T.what, ['集めた物を入れる、チェストを置いた']],
+  [T.tree + 0.1, TR.tFell, [CH_TIER === 'hand' ? '素手で木を切る。何回もたたくと' : '斧の人は木を切る。何回もたたくと']],
+  [TR.tFell, T.night, ['倒れて、原木が落ちる。切り株が残る']],
+  [T.night + 0.2, T.craft - 0.1, ['夜が明けて、2 日目']],
+  [T.build + 0.1, T.chest, [`投票で決まった${WHAT.name}を`, `${SITE.label || WHERE.name}に建て始めた`]],
+  [T.chest + 0.1, CH.gui, ['集めた物は、町のチェストへ']],
+  [T.fish + 0.1, T.farm, KFI ? ['池で釣り。うきが沈んだら釣り上げる', '村ではじめて魚が釣れた'] : ['池で釣り。うきが沈んだら釣り上げる']],
+  [T.farm + 0.1, T.ranch, ['これから：畑は何日かで実る', '金やダイヤの道具も作れる']],
+  [T.ranch, T.end, ['柵で動物を飼うと', 'たまご・ミルク・羊毛がもらえる']],
+];
+function captions(t) {
+  CAPS.forEach(([a, b, lines, o = {}], i) => {
+    if (t < a - 0.3 || t > b + 0.3) return;
+    const prev = CAPS[i - 1], next = CAPS[i + 1];
+    const inA = prev && Math.abs(prev[1] - a) < 0.05 ? (t >= a ? 1 : 0) : clamp01((t - a) / 0.25);
+    const outA = next && Math.abs(next[0] - b) < 0.05 ? (t < b ? 1 : 0) : clamp01((b - t) / 0.25);
+    caption(lines, o.y || CAP, o.size || 64, Math.min(inA, outA));
+  });
+}
+function dayBadge(day) {
+  ctx.save();
   ctx.font = `700 84px ${FONT}`; ctx.textBaseline = 'middle';
-  const txt = `${day}日目`; const w = ctx.measureText(txt).width;
+  const txt = day == null ? 'これから' : `${day}日目`; const w = ctx.measureText(txt).width;
   ctx.fillStyle = 'rgba(47, 74, 55, 0.92)'; roundRect(64, SAFE_TOP + 24, w + 72, 124, 62); ctx.fill();
   ctx.fillStyle = '#fff'; ctx.fillText(txt, 100, SAFE_TOP + 88);
   ctx.restore();
-}
-function voteCard(t, a, b) {
-  const appear = ease((t - a) / 0.35), leave = ease((b - t) / 0.35);
-  const k = Math.min(appear, leave);
-  if (k <= 0) return;
-  ctx.save();
-  ctx.fillStyle = `rgba(10, 16, 12, ${0.5 * k})`; ctx.fillRect(0, 0, W, H);
-  ctx.globalAlpha = k;
-  ctx.translate(W / 2, H / 2); ctx.scale(0.9 + 0.1 * k, 0.9 + 0.1 * k); ctx.translate(-W / 2, -H / 2);
-  const x = 80, y = 470, w = W - 160, h = 1010;
-  ctx.fillStyle = '#fffdf6'; roundRect(x, y, w, h, 44); ctx.fill();
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#6f6656'; ctx.font = `700 44px ${FONT}`; ctx.fillText(`${DD}日目の投票`, W / 2, y + 90);
-  ctx.fillStyle = '#2f2a22'; ctx.font = `700 84px ${FONT}`; ctx.fillText('次に何を作る？', W / 2, y + 190);
-  const total = DEC.votes.A + DEC.votes.B + DEC.votes.C;
-  const grow = lerp(0.3, 1, ease((t - a - 0.35) / 1.5));
-  const decided = t > a + 1.95;
-  const COLS = { A: '#d0603e', B: '#3f78b8', C: '#4b9a5e' };
-  DEC.options.forEach((o, i) => {
-    const ry = y + 320 + i * 200;
-    const win = decided && o.key === DEC.key;
-    if (win) { ctx.fillStyle = 'rgba(63, 120, 184, 0.12)'; roundRect(x + 30, ry - 80, w - 60, 172, 28); ctx.fill(); ctx.strokeStyle = COLS[o.key]; ctx.lineWidth = 6; ctx.stroke(); }
-    ctx.globalAlpha = k * (decided && !win ? 0.45 : 1);
-    ctx.fillStyle = COLS[o.key]; roundRect(x + 60, ry - 50, 100, 100, 22); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = `700 64px ${FONT}`; ctx.fillText(o.key, x + 110, ry + 2);
-    ctx.textAlign = 'left'; ctx.fillStyle = '#2f2a22'; ctx.font = `700 62px ${FONT}`; ctx.fillText(o.name, x + 190, ry - 20);
-    const n = Math.round(DEC.votes[o.key] * grow);
-    const bw = w - 190 - 210;
-    ctx.fillStyle = '#ece4d2'; roundRect(x + 190, ry + 30, bw, 26, 13); ctx.fill();
-    ctx.fillStyle = COLS[o.key]; roundRect(x + 190, ry + 30, Math.max(26, bw * (DEC.votes[o.key] / total) * grow), 26, 13); ctx.fill();
-    ctx.textAlign = 'right'; ctx.fillStyle = '#2f2a22'; ctx.font = `700 54px ${FONT}`; ctx.fillText(`${n}票`, x + w - 50, ry + 10);
-    ctx.textAlign = 'center'; ctx.globalAlpha = k;
-  });
-  if (decided) {
-    const s = ease((t - a - 1.95) / 0.3);
-    ctx.globalAlpha = k * s;
-    ctx.fillStyle = '#c0392b'; ctx.font = `700 76px ${FONT}`;
-    ctx.fillText(`${DEC.name}に決定`, W / 2, y + h - 90);
-  }
-  ctx.restore();
-}
-// 顔（スキンから）
-const skinImg = {};
-for (const v of D.villagers) { const im = new Image(); im.src = '../skins/skin_' + String(v.skin).padStart(3, '0') + '.png'; skinImg[v.key] = im; }
-function face(key, x, y, s) {
-  const im = skinImg[key]; if (!im || !im.complete) return;
-  ctx.imageSmoothingEnabled = false;
-  ctx.fillStyle = '#3b3326'; ctx.fillRect(x - 5, y - 5, s + 10, s + 10);
-  ctx.drawImage(im, 8, 8, 8, 8, x, y, s, s);
-  ctx.drawImage(im, 40, 8, 8, 8, x - s * 0.06, y - s * 0.06, s * 1.12, s * 1.12);
-  ctx.imageSmoothingEnabled = true;
-}
-
-// ---------- 「参加したい」のコメント（顔だけ。名前は出さない）と、村人の数 ----------
-const JOINS = [];
-for (const p of S2.plans) JOINS.push({ key: p.key, t: p.appear - 0.12 });
-for (const s of SEG) {
-  if (s.d < 2) continue;
-  const before = new Set(D.days[s.d - 1].active);
-  D.days[s.d].active.filter((k) => !before.has(k)).forEach((key, j) => JOINS.push({ key, t: s.t0 + 0.12 + j * 0.45 }));
-}
-function villagerCount(t) {
-  if (t < SC.join[0]) return 0;
-  let n = JOINS.filter((j) => j.t <= t).length;
-  const d1 = D.days[1].active.length;
-  if (t >= SC.s2[0]) n += Math.max(0, d1 - S2.plans.length);
-  return n;
 }
 function counterChip(n) {
   ctx.save(); ctx.font = `700 60px ${FONT}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'right';
@@ -865,118 +667,335 @@ function imageLabel() {
   ctx.fillStyle = '#fff'; ctx.fillText('イメージ', W - 82, SAFE_TOP + 179);
   ctx.restore();
 }
+// 顔（スキンから）
+const skinImg = {};
+for (const key in chars) { const im = new Image(); im.src = '../skins/skin_' + String(VIL[key].skin).padStart(3, '0') + '.png'; skinImg[key] = im; }
+function face(key, x, y, s) {
+  const im = skinImg[key]; if (!im || !im.complete) return;
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = '#3b3326'; ctx.fillRect(x - 5, y - 5, s + 10, s + 10);
+  ctx.drawImage(im, 8, 8, 8, 8, x, y, s, s);
+  ctx.drawImage(im, 40, 8, 8, 8, x - s * 0.06, y - s * 0.06, s * 1.12, s * 1.12);
+  ctx.imageSmoothingEnabled = true;
+}
 const CARD_TOP = SAFE_TOP + 230, CARD_H = 104;
 function commentCards(t) {
-  const shown = JOINS.filter((j) => t >= j.t && t < j.t + 1.9).slice(-3);
+  const shown = CREW.map((key, i) => ({ key, i, t: T_APPEAR[i] - 0.12, len: i === 0 ? 2.6 : 1.9 })).filter((j) => t >= j.t && t < j.t + j.len).slice(-3);
   shown.forEach((j, i) => {
-    const k = ease((t - j.t) / 0.25), out = ease((j.t + 1.9 - t) / 0.3);
-    const a = Math.min(k, out); if (a <= 0) return;
-    const w = 400, x = W - 64 - w + (1 - k) * 120, y = CARD_TOP + i * (CARD_H + 18);
-    ctx.save(); ctx.globalAlpha = a;
+    const k = ease((t - j.t) / 0.25), o = ease((j.t + j.len - t) / 0.3);
+    const a = Math.min(k, o); if (a <= 0) return;
+    const txt = commentText(j.key);
+    ctx.font = `700 44px ${FONT}`;
+    const w = Math.max(400, 150 + ctx.measureText(txt).width), x = W - 64 - w + (1 - a) * (w + 90), y = CARD_TOP + i * (CARD_H + 18); // 透けずに、横から入って横へ出る
+    ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.2)'; roundRect(x + 4, y + 6, w, CARD_H, 30); ctx.fill();
     ctx.fillStyle = '#fffdf7'; roundRect(x, y, w, CARD_H, 30); ctx.fill();
     face(j.key, x + 20, y + 18, 68);
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#2f2a22'; ctx.font = `700 44px ${FONT}`; ctx.fillText('参加したい', x + 116, y + CARD_H / 2 + 2);
+    ctx.fillStyle = '#2f2a22'; ctx.font = `700 44px ${FONT}`; ctx.fillText(txt, x + 116, y + CARD_H / 2 + 2);
     ctx.restore();
   });
+}
+function commentText(key) { const s = START(key); return s && !START_AUTO(key) ? `参加したい ${START_WORD[s]}` : '参加したい'; }
+const villagerCount = (t) => T_APPEAR.filter((a) => a - 0.12 <= t).length;
+
+// ---------- 投票カード（A/B/C・票が伸びる・決まる） ----------
+const COLS = { A: '#d0603e', B: '#3f78b8', C: '#4b9a5e' };
+function voteRows(dec, x, y, w, rowH, grow, decided, k, big = 1) {
+  const total = dec.votes.A + dec.votes.B + dec.votes.C || 1;
+  dec.options.forEach((o, i) => {
+    const ry = y + i * rowH;
+    const win = decided && o.key === dec.key;
+    ctx.globalAlpha = k;
+    if (win) { ctx.fillStyle = 'rgba(63, 120, 184, 0.10)'; roundRect(x + 20, ry - rowH * 0.42, w - 40, rowH * 0.86, 26); ctx.fill(); ctx.strokeStyle = COLS[o.key]; ctx.lineWidth = 6; ctx.stroke(); }
+    ctx.globalAlpha = k * (decided && !win ? 0.45 : 1);
+    const bs = 96 * big;
+    ctx.fillStyle = COLS[o.key]; roundRect(x + 50, ry - bs / 2, bs, bs, 22); ctx.fill();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff'; ctx.font = `700 ${62 * big}px ${FONT}`; ctx.fillText(o.key, x + 50 + bs / 2, ry + 2);
+    ctx.textAlign = 'left'; ctx.fillStyle = '#2f2a22'; ctx.font = `700 ${58 * big}px ${FONT}`; ctx.fillText(o.name, x + 80 + bs, ry - 20 * big);
+    const bw = w - (80 + bs) - 200;
+    ctx.fillStyle = '#ece4d2'; roundRect(x + 80 + bs, ry + 26 * big, bw, 24, 12); ctx.fill();
+    ctx.fillStyle = COLS[o.key]; roundRect(x + 80 + bs, ry + 26 * big, Math.max(24, bw * (dec.votes[o.key] / total) * grow), 24, 12); ctx.fill();
+    ctx.textAlign = 'right'; ctx.fillStyle = '#2f2a22'; ctx.font = `700 ${52 * big}px ${FONT}`; ctx.fillText(`${Math.round(dec.votes[o.key] * grow)}票`, x + w - 44, ry + 6);
+  });
+  ctx.globalAlpha = k;
+}
+// カードは半透明にしない：出る時は大きくなり、消える時は小さくなる（後ろの物と重なって透けない）
+function cardIn(t, a, b, cx, cy) {
+  const kin = clamp01((t - a) / 0.28), kout = clamp01((b - t) / 0.22);
+  if (kin <= 0 || kout <= 0) return 0;
+  const s = kin < 1 ? backOut(kin) : kout < 1 ? kout * kout : 1;
+  ctx.translate(cx, cy); ctx.scale(Math.max(0.001, s), Math.max(0.001, s)); ctx.translate(-cx, -cy);
+  return 1;
+}
+function whatCard(t, a, b) {
+  const k = Math.min(ease((t - a) / 0.35), ease((b - t) / 0.35)); if (k <= 0) return;
+  ctx.save();
+  ctx.fillStyle = `rgba(10, 16, 12, ${0.45 * k})`; ctx.fillRect(0, 0, W, H);
+  const x = 80, y = 470, w = W - 160, h = 1000;
+  if (!cardIn(t, a, b, W / 2, y + h / 2)) { ctx.restore(); return; }
+  ctx.fillStyle = '#fffdf6'; roundRect(x, y, w, h, 44); ctx.fill();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#6f6656'; ctx.font = `700 42px ${FONT}`; ctx.fillText(`1日目の投票（${hm(WHAT.opensAt)}〜${hm(WHAT.closesAt)}）`, W / 2, y + 86);
+  ctx.fillStyle = '#2f2a22'; ctx.font = `700 92px ${FONT}`; ctx.fillText('何を建てる？', W / 2, y + 190);
+  const grow = lerp(0.15, 1, ease((t - a - 0.4) / 1.6)), decided = t > a + 2.3;
+  voteRows(WHAT, x, y + 340, w, 196, grow, decided, 1);
+  ctx.textAlign = 'center';
+  if (decided) { ctx.globalAlpha = 1; ctx.fillStyle = '#c0392b'; ctx.font = `700 76px ${FONT}`; ctx.fillText(`${WHAT.name}に決定`, W / 2, y + h - 80); }
+  ctx.restore();
+}
+function whereCard(t, a, b) {
+  ctx.save();
+  const x = 64, h = 560, y = SAFE_BOTTOM - h - 10, w = W - 128;
+  if (!cardIn(t, a, b, W / 2, y + h / 2)) { ctx.restore(); return; }
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'; roundRect(x + 4, y + 8, w, h, 40); ctx.fill();
+  ctx.fillStyle = '#fffdf6'; roundRect(x, y, w, h, 40); ctx.fill();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#2f2a22'; ctx.font = `700 70px ${FONT}`; ctx.fillText(`${WHAT.name}を、どこに建てる？`, W / 2, y + 74);
+  ctx.fillStyle = '#6f6656'; ctx.font = `700 36px ${FONT}`; ctx.fillText(`地図の旗 A・B・C から（${hm(WHERE.opensAt)}〜${hm(WHERE.closesAt)}）`, W / 2, y + 140);
+  const grow = lerp(0.15, 1, ease((t - a - 0.5) / 1.6)), decided = t > a + 2.4;
+  voteRows(WHERE, x, y + 236, w, 118, grow, decided, 1, 0.72);
+  ctx.restore();
+}
+function whereMarkers(t) {
+  const a = T.where + 0.6, decided = t > a + 2.4;
+  for (const { o, m } of markers) {
+    const pop = backOut(clamp01((t - T.where - 0.3 - 'ABC'.indexOf(o.key) * 0.2) / 0.4));
+    const win = o.key === WHERE.key;
+    m.visible = pop > 0.01 && (!decided || win || t < a + 2.9);
+    m.scale.setScalar(1.6 * Math.max(0.01, pop) * (decided && win ? 1 + 0.12 * Math.sin((t - a) * 8) * Math.exp(-(t - a - 2.4)) : 1) * (decided && !win ? Math.max(0.01, 1 - (t - a - 2.4) / 0.5) : 1));
+    m.userData.flag.rotation.y = Math.sin(t * 0.8 + o.x) * 0.3;
+  }
+}
+
+// ---------- 道具作り（マインクラフト風の作業台） ----------
+const ICON = {};
+for (const k of ['log', 'planks', 'stick', 'cobble', 'coal', 'iron', 'gold', 'diamond', 'berry', 'wheat', 'apple', 'sapling', 'seeds', 'wood_pickaxe', 'wood_axe', 'wood_fishing_rod', 'wood_hoe', 'flower_r', 'flower_y', 'fish_funa', 'fish_masu', 'fish_koi', 'fish_namazu', 'egg', 'carrot', 'potato']) { const im = new Image(); im.src = '../icons/' + k + '.png'; ICON[k] = im; }
+const PATTERN = { wood_pickaxe: { planks: [[0, 0], [0, 1], [0, 2]], stick: [[1, 1], [2, 1]] }, wood_axe: { planks: [[0, 0], [0, 1], [1, 0]], stick: [[1, 1], [2, 1]] } };
+function mcPanel(x, y, w, h) {
+  ctx.fillStyle = '#c6c6c6'; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(x, y, w, 6); ctx.fillRect(x, y, 6, h);
+  ctx.fillStyle = '#555555'; ctx.fillRect(x, y + h - 6, w, 6); ctx.fillRect(x + w - 6, y, 6, h);
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+}
+// 奥まった枠：上と左に濃い影（2 段）、下と右に光
+function mcSlot(x, y, s) {
+  ctx.fillStyle = '#8b8b8b'; ctx.fillRect(x, y, s, s);
+  ctx.fillStyle = '#7a7a7a'; ctx.fillRect(x + 4, y + 4, s - 8, 10); ctx.fillRect(x + 4, y + 4, 10, s - 8);
+  ctx.fillStyle = '#373737'; ctx.fillRect(x, y, s, 5); ctx.fillRect(x, y, 5, s);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(x, y + s - 4, s, 4); ctx.fillRect(x + s - 4, y, 4, s);
+}
+function mcIcon(k, x, y, s, alpha = 1) {
+  const im = ICON[k]; if (!im || !im.complete || !im.width) return;
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.imageSmoothingEnabled = false; ctx.drawImage(im, x, y, s, s); ctx.restore();
+}
+function mcCount(n, x, y, size) {
+  ctx.save(); ctx.font = `700 ${size}px ${FONT}`; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#3f3f3f'; ctx.fillText(String(n), x + 4, y + 4);
+  ctx.fillStyle = '#ffffff'; ctx.fillText(String(n), x, y);
+  ctx.restore();
+}
+// mode 'fail'：足りない（材料は薄く）/ 'ok'：材料が入って、道具ができる
+function craftCard(t, a, b, mode) {
+  const k = Math.min(ease((t - a) / 0.3), ease((b - t) / 0.3)); if (k <= 0) return;
+  const key = MADE_KEY;
+  ctx.save();
+  ctx.fillStyle = `rgba(10, 16, 12, ${0.45 * k})`; ctx.fillRect(0, 0, W, H);
+  const x = 90, y = 520, w = W - 180, h = 860;
+  if (!cardIn(t, a, b, W / 2, y + h / 2)) { ctx.restore(); return; }
+  ctx.fillStyle = '#fffdf6'; roundRect(x, y, w, h, 44); ctx.fill();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#2f2a22'; ctx.font = `700 76px ${FONT}`;
+  ctx.fillText(mode === 'fail' ? `${IT[key].name}を作りたい` : '道具を作る', W / 2, y + 96);
+  // 作業台の窓
+  const S = 112, gx = x + 90, gy = y + 200;
+  mcPanel(gx - 30, gy - 30, S * 3 + 60 + 300, S * 3 + 60);
+  const P = PATTERN[key], cells = [];
+  for (const it of ['planks', 'stick']) for (const [r, c] of P[it]) cells.push({ it, r, c });
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) mcSlot(gx + c * S, gy + r * S, S - 6);
+  cells.forEach((q, i) => {
+    const tIn = a + 0.4 + i * 0.22;
+    const s = mode === 'fail' ? 1 : ease((t - tIn) / 0.25);
+    if (s <= 0) return;
+    mcIcon(q.it, gx + q.c * S + 12, gy + q.r * S + 12 - (1 - s) * 40, S - 30, mode === 'fail' ? 0.3 : s);
+  });
+  // 矢印と、できる物
+  const ax = gx + S * 3 + 40, ay = gy + S * 1.5;
+  ctx.fillStyle = '#8b8b8b'; ctx.fillRect(ax, ay - 14, 90, 28); ctx.beginPath(); ctx.moveTo(ax + 90, ay - 36); ctx.lineTo(ax + 136, ay); ctx.lineTo(ax + 90, ay + 36); ctx.closePath(); ctx.fill();
+  const rx = ax + 156, ry = gy + S * 0.85;
+  mcSlot(rx - 10, ry - 10, S + 26);
+  // できる物の枠には、いつも道具の絵を出す（足りない時は灰色の幕と小さな × 、できたら大きくはずむ）
+  if (mode === 'fail') {
+    mcIcon(key, rx + 8, ry + 8, S - 10, 1);
+    ctx.fillStyle = 'rgba(70, 70, 70, 0.45)'; ctx.fillRect(rx - 6, ry - 6, S + 18, S + 18);
+    const bx = rx + S - 34, by = ry + S - 34;
+    ctx.fillStyle = '#c0392b'; roundRect(bx - 6, by - 6, 52, 52, 12); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(bx + 6, by + 6); ctx.lineTo(bx + 34, by + 34); ctx.moveTo(bx + 34, by + 6); ctx.lineTo(bx + 6, by + 34); ctx.stroke();
+  } else {
+    const tr = a + 0.4 + cells.length * 0.22 + 0.25, q = clamp01((t - tr) / 0.35), s = q > 0 ? 1 + Math.sin(q * Math.PI) * 0.18 : 1;
+    const c = rx + 8 + (S - 10) / 2;
+    mcIcon(key, c - (S - 10) * s / 2, ry + 8 + (S - 10) / 2 - (S - 10) * s / 2, (S - 10) * s, 1);
+    if (q <= 0) { ctx.fillStyle = 'rgba(70, 70, 70, 0.45)'; ctx.fillRect(rx - 6, ry - 6, S + 18, S + 18); }
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const r = config.crafting.recipes[key].from;
+  ctx.fillStyle = '#2f2a22'; ctx.font = `700 56px ${FONT}`;
+  ctx.fillText(`${IT.planks.name} ${r.planks} ＋ ${IT.stick.name} ${r.stick} → ${IT[key].name}`, W / 2, y + 640);
+  if (mode === 'fail') {
+    ctx.fillStyle = '#c0392b'; ctx.font = `700 60px ${FONT}`; ctx.fillText('材料が足りない', W / 2, y + 740);
+  } else {
+    ctx.fillStyle = '#6f6656'; ctx.font = `700 40px ${FONT}`;
+    ctx.fillText('原木 1 → 板 4・板 2 → 棒 4（チェストの材料で）', W / 2, y + 724);
+    ctx.fillText('良い道具ほど、早く・多く取れて、長持ち', W / 2, y + 784);
+  }
+  ctx.restore();
+}
+
+// ---------- 最初の道具を選べる ----------
+const PICK_OPTS = [['wood_pickaxe', 'つるはし', '岩を掘る', 'ピッケル'], ['wood_axe', '斧', '木を切る', '斧'], ['wood_fishing_rod', '釣りざお', '池で釣り', '釣り'], ['wood_hoe', 'くわ', '畑を作る', 'くわ']];
+function pickCard(t, a, b) {
+  const k = Math.min(ease((t - a) / 0.3), ease((b - t) / 0.3)); if (k <= 0) return;
+  ctx.save();
+  ctx.fillStyle = `rgba(10, 16, 12, ${0.45 * k})`; ctx.fillRect(0, 0, W, H);
+  const x = 80, y = 470, w = W - 160, h = 1000;
+  if (!cardIn(t, a, b, W / 2, y + h / 2)) { ctx.restore(); return; }
+  ctx.fillStyle = '#fffdf6'; roundRect(x, y, w, h, 44); ctx.fill();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#2f2a22'; ctx.font = `700 84px ${FONT}`; ctx.fillText('最初の道具を選べる', W / 2, y + 110);
+  ctx.fillStyle = '#6f6656'; ctx.font = `700 40px ${FONT}`; ctx.fillText('木の道具を 1 つ持って、その仕事を先にする', W / 2, y + 190);
+  const S = 150, rowH = 170;
+  PICK_OPTS.forEach(([icon, name, job, word], i) => {
+    const ry = y + 260 + i * rowH, s = ease((t - a - 0.3 - i * 0.15) / 0.25);
+    ctx.globalAlpha = s;
+    mcSlot(x + 60, ry, S); mcIcon(icon, x + 60 + 18, ry + 18, S - 36, 1);
+    ctx.textAlign = 'left'; ctx.fillStyle = '#2f2a22'; ctx.font = `700 60px ${FONT}`; ctx.fillText(name, x + 250, ry + 52);
+    ctx.fillStyle = '#6f6656'; ctx.font = `700 40px ${FONT}`; ctx.fillText(`${job}・「参加したい ${word}」`, x + 250, ry + 116);
+    ctx.globalAlpha = 1;
+  });
+  ctx.textAlign = 'center'; ctx.fillStyle = '#6f6656'; ctx.font = `700 36px ${FONT}`;
+  ctx.fillText('書かなければ、人の少ない仕事の道具になる', W / 2, y + h - 52);
+  ctx.restore();
+}
+
+// ---------- 町のチェスト（マインクラフト風の中身） ----------
+const ORDER = ['log', 'planks', 'stick', 'cobble', 'coal', 'iron', 'gold', 'diamond', 'berry', 'wheat', 'apple', 'fish_funa', 'fish_masu', 'fish_koi', 'fish_namazu', 'sapling', 'seeds', 'flower_r', 'flower_y'];
+const STORE_ROWS = ORDER.filter((k) => STORE[k] > 0).concat(Object.keys(STORE).filter((k) => STORE[k] > 0 && !ORDER.includes(k)));
+function chestGui(t, a) {
+  const k = ease((t - a) / 0.35); if (k <= 0) return;
+  ctx.save();
+  ctx.fillStyle = `rgba(10, 16, 12, ${0.4 * k})`; ctx.fillRect(0, 0, W, H);
+  const cols = 4, S = 196, gw = cols * S, rows = Math.ceil(STORE_ROWS.length / cols);
+  const pw = gw + 80, ph = rows * S + 210, px = (W - pw) / 2, py = 560;
+  if (!cardIn(t, a, 1e9, W / 2, py + ph / 2)) { ctx.restore(); return; }
+  mcPanel(px, py, pw, ph);
+  ctx.fillStyle = '#3f3f3f'; ctx.font = `700 54px ${FONT}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('町のチェスト（2日目）', px + 44, py + 70);
+  STORE_ROWS.forEach((it, i) => {
+    const r = Math.floor(i / cols), c = i % cols;
+    const x = px + 40 + c * S, y = py + 130 + r * S;
+    mcSlot(x, y, S - 12);
+    const s = ease((t - a - 0.3 - i * 0.12) / 0.25);
+    if (s <= 0) return;
+    mcIcon(it, x + 34, y + 14 - (1 - s) * 30, S - 80, s);
+    mcCount(STORE[it], x + S - 26, y + S - 64, 50);
+    ctx.globalAlpha = s;
+    ctx.fillStyle = '#ffffff'; ctx.font = `700 30px ${FONT}`; ctx.textAlign = 'center';
+    ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(40,40,40,0.8)'; ctx.strokeText(IT[it].name, x + (S - 12) / 2, y + S - 34); ctx.fillText(IT[it].name, x + (S - 12) / 2, y + S - 34);
+    ctx.globalAlpha = 1;
+  });
+  ctx.restore();
 }
 
 // ---------- 1 コマ ----------
 window.renderFrame = (t) => {
-  hideAll(); hideMobs(); fx.begin();
-  pileS.visible = pileW.visible = false;
-  scaf0.visible = scafVB.visible = false;
-  for (const k in stacks) stacks[k].visible = false;
-  resPile.wood.visible = resPile.stone.visible = false;
-  const seg = segAt(t), dayF = dayFloatAt(t), bd = badgeDay(t);
+  hideAll(); fx.begin();
+  const sc = scene0(t), day = dayAt(t);
   cameraAt(t);
-  sky.set(hourAt(t), { x: camera.position.x * 0.5, z: camera.position.z * 0.5 });
-  let live = [];
-  if (t < SEQ0) {
-    syncBuildings(-1, t); syncRoads(-1);
-    if (t >= SC.join[0]) live = scene2(t); else { syncNature(0); wanderMobs(t, sky.n); }
-    fire.visible = t >= SC.join[0];
-  } else {
-    const d = Math.min(LAST, seg.d);
-    syncNature(d); syncBuildings(dayF, t); syncRoads(dayF); syncResPile(d);
-    if (inAtk(t)) { syncSites(dayF); live = attackScene(t); }
-    else if (sky.n > 0.6) syncSites(dayF);
-    else {
-      const skip = new Set();
-      if (inIron(t)) { live = ironScene(t); skip.add(IRON.key); NEAR_CUT = 9; } else NEAR_CUT = 14;
-      live = live.concat(siteCrew(t, d, dayF, skip)); live = live.concat(sceneDay(t, Math.max(1, d), skip));
-    }
+  const hour = hourAt(t);
+  sky.set(hour, { x: camera.position.x * 0.5, z: camera.position.z * 0.5 });
+  const ni = natIdx(t);
+  NAT.forEach((n, i) => { n.g.visible = i === ni; });
+  // 木と岩（動画で動かす物）
+  const treeDone = t >= T.night;
+  if (sc === 'tree') treeScene(t, false); else setTreeState(treeObj, treeDone ? 'stump' : 'tree');
+  if (sc === 'rock') rockScene(t); else rockScene(t, t >= T.level ? 'gone' : 'full');
+  // 整地の前の草と石
+  debris.visible = t < LV.done + 0.3;
+  if (sc === 's0' || sc === 'join') for (const [i, o] of debris.userData.items.entries()) { o.visible = true; o.scale.setScalar(D.debris[i].s || 1); }
+  // チェスト（整地のあとに置く）
+  const chestPop = clamp01((t - LV.done - 0.05) / 0.4);
+  chest.visible = chestPop > 0; chest.scale.setScalar(1.3 * (chestPop > 0 ? Math.max(0.01, backOut(chestPop)) : 1));
+  if (sc !== 'chest') setChestOpen(chest, 0);
+  site.visible = t >= T.build; pileW.visible = pileS.visible = t >= T.build;
+  for (const { m } of markers) m.visible = false;
+  fire.visible = t >= T.join; flame.scale.y = 0.8 + Math.sin(t * 12) * 0.2;
+  animatePond(pond, t);
+  bob.visible = false; fishLine.visible = false;
+  const future = sc === 'farm' || sc === 'ranch';
+  farmG.visible = future; penG.visible = future;
+  for (const { o } of penAnimals) o.visible = false;
+  for (const { a, o } of wild) {
+    o.visible = !future || Math.hypot(a.x - FA.x, a.z - (FA.z + PN.z) / 2) > 16; // これからの畑と柵のまわりの野の動物は、柵の中へ入ったつもりで出さない
+    const q = animalPos(a, t, false); o.position.set(q.x, 0, q.z); o.rotation.y = q.face; animateAnimal(o, t, q.move, q.graze);
   }
-  sky.anchors = lightAll.filter((l) => l.day <= dayF);
-  if (fire.visible) sky.anchors.push({ x: D.campfire.x, y: 1.4, z: D.campfire.z });
-  if (inAtk(t)) for (const { p } of ATKV.posts) sky.anchors.push({ x: p.x, y: 2.6, z: p.z });
+
+  if (sc === 'join' || sc === 'pick') {
+    // 参加した人は、選んだ（または自動で決まった）木の道具を手に持って現れる
+    CREW.forEach((key, i) => { const s = backOut(clamp01((t - T_APPEAR[i]) / 0.35)); if (s <= 0.001) return; const p = JOIN_AT[i]; put(key, p, faceTo(p, { x: camera.position.x, z: camera.position.z }), 'idle', t + i, startTool(key), null, Math.max(0.01, s)); });
+  } else if (sc === 'level') levelScene(t);
+  else if (sc === 'what' || sc === 'where') {
+    // みんな広場のまわりで投票中（スマホを見ているつもりで、立っている）
+    CREW.forEach((key, i) => { const p = { x: SQ.x + Math.sin(i * 1.25 + 0.3) * 3.2, z: SQ.z + Math.cos(i * 1.25 + 0.3) * 3.2 }; put(key, p, faceTo(p, SQ), 'idle', t + i); });
+    if (sc === 'where') whereMarkers(t);
+  } else if (sc === 'craft') CREW.forEach((key, i) => { const p = { x: SQ.x + Math.sin(i * 1.25) * 3.4, z: SQ.z + Math.cos(i * 1.25) * 3.4 }; put(key, p, faceTo(p, D1.chest), 'idle', t + i); });
+  else if (sc === 'rock') { /* rockScene が人も置く */ }
+  else if (sc === 'build') buildScene(t);
+  else if (sc === 'chest') chestScene(t);
+  else if (sc === 'fish') fishScene(t);
+  else if (sc === 'farm') farmScene(t);
+  else if (sc === 'ranch') ranchScene(t);
+  else if (sc === 'end') buildScene(t);
+  // 夜は村人を出さない（暗い中に「+1」だけ浮かないように、fx も出さない）
+  if (sc === 'night') { hideAll(); fx.begin(); }
+
+  sky.anchors = fire.visible ? [{ x: D.campfire.x, y: 1.4, z: D.campfire.z }] : [];
   sky.placeLights(camera.position);
   fx.end();
   renderer.render(scene, camera);
   ctx.drawImage(renderer.domElement, 0, 0, W, H);
 
   // 文字（上下 15% はあける）
-  const CAP = SAFE_BOTTOM - 190;
-  const ending = t >= T_END;
-  if (!ending) dayBadge(bd);
+  const ending = t >= T.end;
+  if (!ending) dayBadge(sc === 'farm' || sc === 'ranch' ? null : day);
   counterChip(villagerCount(t));
-  if (t >= SC.join[0]) imageLabel();
+  if (t >= T.join) imageLabel();
   commentCards(t);
-  if (t < SC.join[0]) caption(['まだ、だれもいない'], H / 2 + 330, 84, fade(t, 0.4, SC.join[0] - 0.2, 0.35));
-  if (inS(t, 'join')) caption(['「参加したい」のコメントで、', '村人が 1 人ずつ'], CAP, 66, fade(t, SC.join[0] + 0.3, SC.join[1] - 0.1));
-  if (t >= SC.s2[0] && t < SEQ0) {
-    const b0 = P0.t1 + breakTime(0, RD), b1 = P0.t1 + breakTime(1, RD);
-    caption(['みんなで、木を切って岩を掘る'], CAP, 64, fade(t, SC.s2[0] + 0.1, CLOSE[0] + 0.3));
-    caption(['たたくたびに、ひびが入る'], CAP, 66, fade(t, P0.t1 + 0.2, b0 + 0.05, 0.2));
-    caption(['こわれて、落ちる'], CAP, 66, fade(t, b0 + 0.15, b0 + 1.3, 0.2));
-    caption(['もう 1 つ'], CAP, 66, fade(t, b0 + 1.4, b1 + 0.1, 0.2));
-    caption(['拾って、運ぶ'], CAP, 66, fade(t, b1 + 0.2, P0.t3 + 0.9, 0.2));
-    caption(['木は、下から 1 つずつ'], CAP, 64, fade(t, WIDE2[0] + 0.2, D1_END - 0.1, 0.25));
-  }
-  if (t >= SEQ0 && !ending) {
-    const s = seg, inDay = t < s.t1;
-    if (inAtk(t)) {
-      const u = t - atkSeg.t1;
-      caption(['夜は、森から敵がやって来る'], CAP, 62, fade(u, 0.3, 1.95, 0.25));
-      caption([ATKV.text0, ATKV.text1, ATKV.text2], CAP - 70, 54, fade(u, 2.05, 3.45, 0.2));
-      caption(['朝日で、ゾンビは燃えて消える'], CAP, 60, fade(u, 3.6, (atkSeg.t2 - atkSeg.t1) * 0.92, 0.2));
-    } else if (inDay) {
-      const busy = (s.d === IRON_D && inIron(t)) || (s.d === DD);
-      if (s.d === 2 && !busy) caption(['1 日ずつ、町が育つ'], CAP, 66, fade(t, s.t0 + 0.1, s.t1 - 0.05, 0.2));
-      if (inIron(t)) {
-        const bt = IRON_WIN[0] + 0.15 + breakTime(0, RD);
-        caption(['ときどき、岩から鉱石が出る'], CAP, 62, fade(t, IRON_WIN[0] + 0.2, bt + 0.05, 0.2));
-        caption(['村人が鉄鉱石を見つけた'], CAP, 66, fade(t, bt + 0.15, IRON_WIN[1], 0.2), { color: '#ffd9b8' });
-      }
-      if (H0 && s.d === H0.day) caption([`${H0.day}日目　はじめての${config.buildings[H0.type].name}`], CAP, 64, fade(t, popTime(s) + 0.2, s.t1 + 0.2, 0.15));
-      if (s.d === DD) voteCard(t, (s.d === IRON_D ? IRON_WIN[1] : s.t0) + 0.15, s.t1 - 1.05);
-      if (s.d === LAST && VB) caption([`${VBD}日目　投票で決まった`, `${config.buildings[VB.type].name}が建った`], SAFE_BOTTOM - 260, 62, fade(t, popTime(s) + 0.5, T_END, 0.3));
-    }
-  }
+  captions(t);
+  if (sc === 'what') whatCard(t, T.what + 0.1, T.where - 0.05);
+  if (sc === 'where') whereCard(t, T.where + 0.6, T.tree - 0.05);
+  if (sc === 'pick') pickCard(t, T.pick + 0.1, T.rock - 0.05);
+  if (sc === 'craft') craftCard(t, T.craft + 0.1, T.rock - 0.05, 'ok');
+  if (sc === 'chest') chestGui(t, CH.gui);
   if (ending) {
-    // 建物が見えるよう、暗くしすぎない。文字は上と下に分ける
-    const k = ease((t - T_END) / 0.6);
+    const k = ease((t - T.end) / 0.6);
     ctx.fillStyle = `rgba(12, 20, 14, ${0.22 * k})`; ctx.fillRect(0, 0, W, H);
-    caption(['あなたが', '最初の村人に。'], SAFE_TOP + 250, 100, fade(t, T_END + 0.2, DURATION + 1, 0.35));
-    caption(['コメントに', '『参加したい』'], SAFE_BOTTOM - 210, 94, fade(t, T_END + 0.9, DURATION + 1, 0.35), { color: '#ffe08a' });
+    caption(['あなたが', '最初の村人に。'], SAFE_TOP + 250, 100, clamp01((t - T.end - 0.2) / 0.35));
+    caption(['コメントに', '『参加したい』'], SAFE_BOTTOM - 210, 94, clamp01((t - T.end - 0.9) / 0.35), { color: '#ffe08a' });
   }
 };
 
 // 打つ音の時刻（見た目と同じ式から出す）
 const SFX = [];
-for (const p of S2.plans) {
-  const sp = p.action === 'dig' ? RD : RC, n = p.action === 'dig' ? 10 : LOGS * CH;
-  for (let k = 0; k < n; k++) SFX.push({ t: p.t1 + (k + sp.phase) / sp.rate, type: p.action, gain: 1 });
-  for (let k = 0; ; k++) { const tt = p.t5 + (k + (p.action === 'dig' ? 0.65 : 0.75)) / (p.action === 'dig' ? 1.3 : 1.6); if (tt >= D1_END) break; SFX.push({ t: tt, type: p.action, gain: 0.7 }); }
-}
-if (IRON) for (let k = 0; k < 5; k++) SFX.push({ t: IRON_WIN[0] + 0.15 + (k + RD.phase) / RD.rate, type: 'dig', gain: 1 });
+for (let k = 0; k < TR.hits; k++) SFX.push({ t: TR.t1 + (k + VC.phase) / VC.rate, type: 'chop', gain: 1 });
+for (let k = 0; k < RK.hits * RK.N; k++) SFX.push({ t: RK.t1 + (k + VD.phase) / VD.rate, type: 'dig', gain: 1 });
+for (let k = 0; T.build + 0.5 + k * 0.83 < T.chest; k++) SFX.push({ t: T.build + 0.5 + k * 0.83, type: 'chop', gain: 0.5 });
 window.SFX = SFX.filter((s) => s.t < DURATION);
 
-// スキンの画像が読み終わるまで待つ
+// スキンと絵の読み込みを待つ
 async function waitTextures() {
   for (let i = 0; i < 200; i++) {
-    let ok = true;
+    let ok = Object.values(ICON).every((im) => im.complete) && Object.values(skinImg).every((im) => im.complete);
     for (const k in chars) chars[k].traverse((o) => { if (o.isMesh && o.material.map && !(o.material.map.image && o.material.map.image.complete && o.material.map.image.width)) ok = false; });
     if (ok) return true;
     await new Promise((r) => setTimeout(r, 50));
@@ -995,5 +1014,5 @@ window.sendAll = async () => {
   window.SEND.done = await r.text();
   return window.SEND;
 };
-window.REEL = { W, H, FPS, DURATION, ready: true, SEG, ATK: ATK && ATK.d, LAST, DD, VBD, IRON_D, CLOSE, WIDE2, IRON_WIN, T_END, P0: { t1: P0.t1, t2: P0.t2, t3: P0.t3 } };
+window.REEL = { W, H, FPS, DURATION, ready: true, T, TR: { t1: TR.t1, tFell: TR.tFell, van: TR.tFell + TR.VAN }, RK: { t1: RK.t1, b: [0, 1, 2].map((i) => RK.t1 + breakTime(i, VD, RK.hits)) }, LV: { done: LV.done }, CH: { arrive: CH.arrive, gui: CH.gui }, KEYS: { KJ: !!KJ, KCH: !!KCH, KFI: !!KFI, L: LEVELERS.length, B: BUILDERS.length, MADE, CH_TIER } };
 window.renderFrame(0);

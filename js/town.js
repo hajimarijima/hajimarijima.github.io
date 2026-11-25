@@ -2,12 +2,13 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { makeCharacter, animate, setTool, setCarry, setAccent, setShield } from './character.js';
-import { mat, box, hash, rnd, makeTree, makeRock, makeBush, makeField, makeBuilding, makeHouse, obstaclesFor, routeAround, declutter, makeRoads } from './world3d.js';
+import { makeCharacter, animate, setTool, setCarry, setAccent, setShield, fishCycle } from './character.js';
+import { mat, box, hash, rnd, makeTree, makeRock, makeBush, makeBuilding, makeHouse, obstaclesFor, routeAround, declutter, makeRoads } from './world3d.js';
+import { makeField, makePond, animatePond, makeBobber, makeAnimal, animateAnimal, animalPos } from './farm3d.js';
 import { loadAll, nav, esc, skinUrl, villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote } from './common.js';
 import { makeSky, jstHour, parseTime, phaseName } from './daynight.js';
 import { makeMob, animateMob, makeArrow, arrowAt } from './mobs.js';
-import { makeForest, makeRockField, makeFx, makePile, setPile, PILE_MAX, setRockHp, setTreeCut, setCrack, strikeAt, breakTime, dropPos, chipList, DIG, CHOP, HITS, LOGS, LOG, B, SHRINK, STAGES } from './blocks.js';
+import { makeForest, makeRockField, makeFx, setRock, rockScale, setTreeState, setTreeFall, setTreeCrack, makeDebris, makeChest, setChestOpen, makeMarker, strikeAt, breakTime, dropPos, chipList, DIG, CHOP, FALL_END } from './blocks.js';
 
 // 時刻：ふだんは日本時間の今。?time=morning / day / evening / night や ?time=21:30 で切りかえて確かめられる
 const FIXED_H = parseTime(new URLSearchParams(location.search).get('time'));
@@ -104,24 +105,30 @@ async function main() {
   }
 
   const objById = {};
-  // 今日だれかが切る木・掘る岩だけは 1 本ずつ作る（ブロックを 1 つずつ減らせるように）。ほかはまとめて描く
+  // 今日だれかが切る木・掘る岩だけは 1 本ずつ作る（たたくたびに小さくする・倒すため）。ほかはまとめて描く
   const workIds = new Set(active.map((v) => (life[v.key] || {}).target).filter(Boolean));
   const loneTrees = [], loneRocks = [];
   for (const t of world.trees) {
+    if (t.gone) continue;
     if (t.state === 'tree' && !workIds.has(t.id)) { loneTrees.push(t); objById[t.id] = { ...t, obj: null }; continue; }
     const o = makeTree(t); scene.add(o); objById[t.id] = { ...t, obj: o };
   }
   for (const r of world.rocks) {
-    if (r.hp === r.max && !workIds.has(r.id)) { loneRocks.push(r); objById[r.id] = { ...r, obj: null }; continue; }
-    const o = makeRock(r); scene.add(o); objById[r.id] = { ...r, obj: o };
+    if (workIds.has(r.id)) { const o = makeRock(r); scene.add(o); objById[r.id] = { ...r, obj: o }; continue; }
+    if (r.hp > 0) loneRocks.push(r);
+    objById[r.id] = { ...r, obj: null };
   }
   scene.add(makeForest(loneTrees)); scene.add(makeRockField(loneRocks));
   for (const b of world.bushes) { const o = makeBush(b); scene.add(o); objById[b.id] = { ...b, obj: o }; }
   for (const f of world.fields) { const o = makeField(f); scene.add(o); objById[f.id] = { ...f, obj: o }; }
+  // 池と、森や野原を歩く動物（柵に入った動物は柵の中を歩く）
+  let pondObj = null;
+  if (world.pond) { pondObj = makePond(world.pond); scene.add(pondObj); }
+  const animals = (world.animals || []).filter((a) => Math.hypot(a.x, a.z) < 70).map((a) => { const o = makeAnimal(a.kind); scene.add(o); return { a, o }; });
   const emitters = [];
   const btags = [];
   const lightAnchors = [];
-  const anim = { blades: [], boats: [], cows: [], lamps: [], hands: [] };
+  const anim = { blades: [], boats: [], cows: [], lamps: [], hands: [], canals: [] };
   for (const b of world.buildings) {
     const o = makeBuilding(b, config); scene.add(o);
     objById[b.id] = { ...b, obj: o };
@@ -130,6 +137,7 @@ async function main() {
     if (o.userData.blades) anim.blades.push(o.userData.blades);
     if (o.userData.boat) anim.boats.push(o.userData.boat);
     if (o.userData.cows) anim.cows.push(...o.userData.cows);
+    if (o.userData.canal) anim.canals.push(o.userData.canal);
     if (o.userData.clockHand) anim.hands.push(...o.userData.clockHand);
     for (const l of o.userData.lights || []) { const p = new THREE.Vector3(l.x, l.y, l.z).applyMatrix4(o.matrixWorld); lightAnchors.push({ x: p.x, y: p.y, z: p.z }); }
     // 名前札（今日できた建物は目立たせる）
@@ -154,6 +162,34 @@ async function main() {
     emitters.push({ wx: camp.x, wy: 1.2, wz: camp.z, dark: true, thin: true, t: 0 });
     lightAnchors.push({ x: camp.x, y: 1.4, z: camp.z });
   }
+  // 整地する前の村のまん中（草と小石）
+  if (!world.square || !world.square.leveled) scene.add(makeDebris(world.debris || []));
+  // チェスト（集めた物が入る）
+  let chestObj = null;
+  if (world.chest && world.chest.day) {
+    chestObj = makeChest(); chestObj.position.set(world.chest.x, 0, world.chest.z); chestObj.rotation.y = Math.atan2(-world.chest.x, -(world.chest.z + 1)); chestObj.scale.setScalar(1.3); scene.add(chestObj);
+    const tag = document.createElement('a'); tag.className = 'btag chesttag'; tag.href = '#chestcard'; tag.textContent = '町のチェスト'; tag.style.pointerEvents = 'auto';
+    const lo = new CSS2DObject(tag); lo.position.set(world.chest.x, 2.6, world.chest.z); scene.add(lo); btags.push(lo);
+  }
+  // 建てている所（投票で決まった物・場所。整地が終わったら足場）
+  const plan = state.plan;
+  if (plan && plan.site && plan.leveled && plan.site.plot !== 'ring') {
+    const g = new THREE.Group();
+    const w = 2.2;
+    box(w * 2 + 0.6, 0.06, w * 2 + 0.6, 0xb59a72, 0, 0.03, 0, g);
+    for (const [x, z] of [[-w, -w], [w, -w], [-w, w], [w, w]]) box(0.22, 3.0, 0.22, 0x9b6b3d, x, 1.5, z, g);
+    for (const y of [1.1, 2.4]) { box(w * 2 + 0.3, 0.18, 0.18, 0x8a5a33, 0, y, -w, g); box(w * 2 + 0.3, 0.18, 0.18, 0x8a5a33, 0, y, w, g); box(0.18, 0.18, w * 2 + 0.3, 0x8a5a33, -w, y, 0, g); box(0.18, 0.18, w * 2 + 0.3, 0x8a5a33, w, y, 0, g); }
+    box(w * 2, 0.5, w * 2, 0x9a7650, 0, 0.3, 0, g);
+    g.position.set(plan.site.x, 0, plan.site.z); g.rotation.y = Math.atan2(-plan.site.x, -(plan.site.z + 1)); scene.add(g);
+    const tag = document.createElement('div'); tag.className = 'btag new'; tag.textContent = '建てている：' + config.buildings[plan.build].name;
+    const lo = new CSS2DObject(tag); lo.position.set(plan.site.x, 4.2, plan.site.z); scene.add(lo); btags.push(lo);
+  }
+  // 「どこに建てる？」の投票中は、A/B/C の場所に旗
+  const markers = [];
+  for (const v of state.votes || []) {
+    if (v.kind !== 'where') continue;
+    for (const o of v.options) { const m = makeMarker(o.key); m.position.set(o.x, 0, o.z); scene.add(m); markers.push(m); }
+  }
   // 昼と夜
   const sky = makeSky(scene, { hemi, sun, sunDist: 60, lightAnchors, maxLights: small ? 4 : 8 });
   sky.set(hourNow(), { x: 0, z: 0 });
@@ -171,8 +207,7 @@ async function main() {
   });
 
   // ---------- 村人 ----------
-  const store = world.buildings.find((b) => b.type === 'storehouse') || world.buildings.find((b) => b.type === 'plaza');
-  const drop = store ? { x: store.x * 0.86, z: store.z * 0.86 } : { x: camp.x + 1.5, z: camp.z + 1.5 };
+  const drop = world.chest && world.chest.day ? { x: world.chest.x, z: world.chest.z } : { x: camp.x + 1.5, z: camp.z + 1.5 };
   const people = [];
   const clickables = [];
   const obstacles = obstaclesFor(world, config).concat(Object.values(tentPos).map((p) => ({ x: p.x, z: p.z, r: 0 })));
@@ -186,13 +221,17 @@ async function main() {
     ch.traverse((o) => { if (o.isMesh) { o.userData.owner = ch; clickables.push(o); } });
     const homeB = L.home && objById[L.home];
     const home = homeB ? { x: homeB.x + Math.sin(homeB.rot || 0) * (footR(homeB) + 0.6), z: homeB.z + Math.cos(homeB.rot || 0) * (footR(homeB) + 0.6) } : (tentPos[v.key] || { x: camp.x, z: camp.z + 2 });
-    const tg = L.target && objById[L.target];
+    const tg = L.target === 'square' ? world.square : L.target === 'site' ? state.plan && state.plan.site : L.target === 'pond' ? world.pond : L.target && objById[L.target];
     const ang = (hash(v.key) % 360) * Math.PI / 180;
     // 木を切る人は葉の外に立つ（頭が葉に入らないように）、掘る人は岩の外に立つ
-    const off = L.action && L.action.startsWith('dig') ? 2.3 : L.action === 'chop' ? 1.25 * ((tg && tg.size) || 1) + 0.6 : 1.2;
+    const off = L.action === 'fish' ? world.pond.r + 0.9 : L.action === 'ranch' ? 3.4 : L.action === 'level' ? 2 + (hash(v.key + 'lv') % 40) / 10 : L.action && L.action.startsWith('dig') ? 2.6 : L.action === 'chop' ? 1.25 * ((tg && tg.size) || 1) + 0.6 : 1.2;
     const work = tg ? { x: tg.x + Math.cos(ang) * off, z: tg.z + Math.sin(ang) * off, fx: tg.x, fz: tg.z } : { x: -12 + (hash(v.key) % 9), z: 12 + (hash(v.key) % 5), fx: null };
-    const pose = { chop: 'chop', dig: 'dig', dig_last: 'dig', berry: 'gather', harvest: 'gather', tend: 'gather', till: 'dig', forage: 'gather' }[L.action] || 'gather';
-    const tool = { chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', berry: 'basket', harvest: 'basket', tend: 'hoe', forage: 'basket' }[L.action] || null;
+    const pose = { level: 'dig', chop: 'chop', dig: 'dig', dig_last: 'dig', berry: 'gather', harvest: 'gather', tend: 'gather', till: 'dig', forage: 'gather', fish: 'fish', ranch: 'gather' }[L.action] || 'gather';
+    let tool = { level: 'hoe', chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', berry: 'basket', harvest: 'basket', tend: 'hoe', forage: 'basket', fish: 'rod', ranch: 'basket' }[L.action] || null;
+    // 持っている道具の素材（木・石・鉄・金・ダイヤ）で色と形を変える。素手で切る・掘る人は何も持たない
+    const tier = L.toolTier || 'hand';
+    if ((tool === 'axe' || tool === 'pick') && tier === 'hand') tool = null;
+    const toolKey = tool && ['axe', 'pick', 'hoe', 'rod'].includes(tool) ? tool + ':' + (tier === 'hand' ? 'wood' : tier) : tool;
     const tagEl = document.createElement('div');
     tagEl.className = 'nametag' + (v.hidden ? ' hiddenname' : '');
     tagEl.textContent = v.display;
@@ -202,8 +241,8 @@ async function main() {
     label.position.set(0, 1.0, 0); // キャラの頭の上（scale 1.9 の中）
     ch.add(label);
     const da = (hash(v.key + 'd') % 360) * Math.PI / 180, dr = 2 + (hash(v.key + 'r') % 30) / 10;
-    const myDrop = { x: drop.x + Math.cos(da) * dr, z: drop.z + Math.sin(da) * dr };
-    const p = { v, ch, home, work, drop: myDrop, pose, tool, job: L.job, label: tagEl, phase: 0, ri: 0, t: (hash(v.key) % 1000) / 100, pos: { ...home } };
+    const myDrop = { x: drop.x + Math.cos(da) * (dr * 0.6 + 0.8), z: drop.z + Math.sin(da) * (dr * 0.6 + 0.8) };
+    const p = { v, ch, home, work, drop: myDrop, pose, tool, toolKey, job: L.job, label: tagEl, phase: 0, ri: 0, t: (hash(v.key) % 1000) / 100, pos: { ...home } };
     // 建物・木・岩をよける道（折れ線）を先に作っておく
     p.routes = { 0: routeAround(home, work, obstacles), 2: routeAround(work, myDrop, obstacles), 4: routeAround(myDrop, work, obstacles) };
     // 最初はばらばらの所から
@@ -211,56 +250,40 @@ async function main() {
     p.phase = start === 3 ? 0 : start; p.pos = start === 1 || start === 2 ? { x: work.x, z: work.z } : { ...home };
     ch.position.set(p.pos.x, 0, p.pos.z);
     p.rest = L.action === 'rest'; // ゆうべのケガで休んでいる人は家の前にいる
-    if (p.rest) { p.pos = { ...home }; p.phase = 1; p.work = { ...home, fx: null }; p.pose = 'idle'; p.tool = null; }
+    if (p.rest) { p.pos = { ...home }; p.phase = 1; p.work = { ...home, fx: null }; p.pose = 'idle'; p.tool = null; p.toolKey = null; }
     people.push(p);
   });
 
-  // ---------- 掘る・切る：ブロックを 1 つずつ壊し、落ちた物を拾って、倉庫の山へ運ぶ ----------
+  // ---------- 掘る・切る：決まった回数たたくと 1 つ落ちる。岩は一段ずつ小さくなり、木は倒れる。拾ってチェストへ ----------
   const fx = makeFx(scene);
   const ITEM_NAME = { cobble: '丸石', coal: '石炭', iron: '鉄鉱石', gold: '金鉱石', diamond: 'ダイヤ', log: '原木', apple: 'りんご', sapling: '苗木' };
   const ITEM_COL = { iron: '#ffc69a', gold: '#ffe25a', diamond: '#7ffff4', coal: '#d0d0d0', apple: '#ff9a92', sapling: '#b8ff9a' };
   const ORE = { c: 'coal', i: 'iron', g: 'gold', d: 'diamond' };
   const RARE = new Set(['iron', 'gold', 'diamond', 'apple', 'sapling']);
   const CHIP_COL = { s: 0x8a8d91, c: 0x3a3a3e, i: 0xd49d74, g: 0xf0cb36, d: 0x45dcd6 };
-  const rockPlans = {}, treePlans = {};
+  const TIERS = config.crafting.tiers;
+  const QUOTA = 3; // 1 回で運ぶ数（岩）
   for (const p of people) {
     if (p.rest) continue;
     const L = life[p.v.key] || {};
     const o = L.target && objById[L.target];
-    if (!o) continue;
-    if (p.tool === 'pick' && o.obj && o.obj.userData.rock) (rockPlans[L.target] = rockPlans[L.target] || { o, miners: [] }).miners.push(p);
-    if (p.tool === 'axe' && o.obj && o.obj.userData.tree) (treePlans[L.target] = treePlans[L.target] || { o, cutters: [] }).cutters.push(p);
+    if (!o || !o.obj) continue;
+    const hits = (TIERS[L.toolTier || 'hand'] || TIERS.hand).hits;
+    if (p.tool === 'pick' && o.obj.userData.rock) {
+      // 今日掘った分をもどして見せ、そこから 1 つずつ（最後の 1 つで消える）
+      const H0 = Math.min(o.max, Math.max(1, o.hp + QUOTA));
+      p.mine = { kind: 'rock', o, H0, n: Math.min(QUOTA, H0), hits, blocks: o.blocks || '' };
+      setRock(o.obj, H0);
+    } else if (p.tool === 'axe' && o.obj.userData.tree) {
+      setTreeState(o.obj, 'tree');
+      p.mine = { kind: 'tree', o, hits, logs: 3 };
+    }
   }
-  for (const id in rockPlans) {
-    // 今日掘った分（1 人 2 ブロック）をもどして見せ、そこから 1 つずつ掘る
-    const P = rockPlans[id], R = P.o.obj.userData.rock;
-    P.shown = Math.min(R.max, Math.max(0, P.o.hp) + 2 * P.miners.length);
-    const gone0 = R.max - P.shown;
-    P.miners.forEach((p, j) => { p.mine = { kind: 'rock', P, idx: [gone0 + 2 * j, gone0 + 2 * j + 1].filter((i) => i < R.max) }; });
-    setRockHp(P.o.obj, P.shown);
-  }
-  for (const id in treePlans) {
-    // 今日切った木は、切る前の姿から下の幹を 1 つずつ切って見せる
-    const P = treePlans[id];
-    scene.remove(P.o.obj); P.o.obj = makeTree({ ...P.o, state: 'tree' }); scene.add(P.o.obj);
-    P.cutters.forEach((p, j) => { p.mine = { kind: 'tree', P, lead: j === 0 }; });
-  }
-  // 倉庫（なければたき火）の前の山。置くたびに 1 つずつ高くなる
-  const piles = {};
-  {
-    const res = state.resources || {};
-    const l = Math.hypot(drop.x, drop.z) || 1, side = { x: -drop.z / l, z: drop.x / l };
-    [['log', 'wood', -1.1], ['cobble', 'stone', 1.1]].forEach(([k, rk, s]) => {
-      const g = makePile(k); g.position.set(drop.x + side.x * s, 0, drop.z + side.z * s); scene.add(g);
-      piles[k] = { g, n: active.length ? Math.min(PILE_MAX - 12, Math.floor((res[rk] || 0) / 25)) : 0, pop: null };
-      setPile(g, piles[k].n);
-    });
-  }
-  const wpos = new THREE.Vector3();
   const animOff = (p) => (hash(p.v.key) % 100) / 10;
+  const FALL = 1.3, VAN = FALL * FALL_END + 0.35; // 倒れる時間・倒れ始めてから消えるまで
   function workLen(p) {
     const m = p.mine; if (!m) return 7 + (hash(p.v.key) % 4);
-    return m.kind === 'rock' ? breakTime(m.idx.length - 1, DIG) + 1.9 : breakTime(LOGS - 1, CHOP) + 2.1;
+    return m.kind === 'rock' ? breakTime(m.n - 1, DIG, m.hits) + 1.9 : breakTime(0, CHOP, m.hits) + VAN + 2.0;
   }
   // 今の仕事の時刻（振り下ろしと、ひびが入る時を合わせる）
   function workU(p, time) {
@@ -268,108 +291,100 @@ async function main() {
     if (p.w0 == null) p.w0 = Math.ceil(at * r) / r;
     return at - p.w0;
   }
-  // 落ちた物を拾う：壊れてから少しはねて、人の手へ吸いこまれる
+  // 落ちた物：はねて回る → 人の手へ → 頭の上に「+1」
   function itemLife(p, kind, o, seed, age, toward, time) {
-    if (age < 0) return;
-    const head = { x: p.pos.x, y: 2.6, z: p.pos.z };
+    if (age < 0) return 0;
+    const head = { x: p.pos.x, y: 4.5, z: p.pos.z }; // 名前の札と顔より上に出す
     if (age < 1.0) {
       const d = dropPos(o, seed, age, toward);
-      fx.item(kind, d.x, d.y, d.z, d.rot);
+      fx.item(kind, d.x, d.y, d.z, d.rot, 1.4);
       if (RARE.has(kind)) fx.glow(kind, d.x, d.y + 0.05, d.z, 0.9, time, 1.1);
-    } else if (age < 1.3) {
+      return 0;
+    }
+    if (age < 1.3) {
       const d = dropPos(o, seed, 1.0, toward), k = (age - 1.0) / 0.3;
-      fx.item(kind, d.x + (p.pos.x - d.x) * k, d.y + (1.4 - d.y) * k + Math.sin(k * Math.PI) * 0.4, d.z + (p.pos.z - d.z) * k, age * 3, 1 - k * 0.5);
-    } else if (age < 2.4) {
+      fx.item(kind, d.x + (p.pos.x - d.x) * k, d.y + (1.4 - d.y) * k + Math.sin(k * Math.PI) * 0.4, d.z + (p.pos.z - d.z) * k, age * 3, 1.4 * (1 - k * 0.5));
+      return 0;
+    }
+    if (age < 2.4) {
       const k = (age - 1.3) / 1.1;
       fx.plus('+1 ' + ITEM_NAME[kind], head.x, head.y + k * 1.0, head.z, k < 0.75 ? 1 : (1 - k) * 4, ITEM_COL[kind] || '#fff6c8', 1.4);
-      if (RARE.has(kind)) fx.glow(kind, head.x, 1.9, head.z, (1 - k) * 0.8, time, 0.9);
     }
+    return 1;
   }
   function updateWork(p, time) {
     const m = p.mine; if (!m || p.mode !== 'day') return;
+    const g = m.o.obj;
+    const mining = p.phase === 1, done = p.phase === 2 || p.phase === 3;
     if (m.kind === 'rock') {
-      const R = m.P.o.obj.userData.rock;
-      const mining = p.phase === 1, done = p.phase === 2 || p.phase === 3;
-      const u = mining ? workU(p, time) : 0;
-      const s = mining ? strikeAt(u, DIG) : null;
-      m.idx.forEach((bi, i) => {
-        const mesh = R.meshes[bi];
-        if (done) { mesh.visible = false; return; }
-        if (!mining) { mesh.visible = true; mesh.scale.setScalar(1); setCrack(mesh, -1); return; }
-        mesh.getWorldPosition(wpos);
-        const o = { x: wpos.x, y: wpos.y, z: wpos.z };
-        const dx = p.pos.x - o.x, dz = p.pos.z - o.z, dl = Math.hypot(dx, dz) || 1, dir = { x: dx / dl, z: dz / dl };
-        const kind = R.kinds[bi];
-        if (i < s.broken) {
-          const tb = breakTime(i, DIG), a = u - tb;
-          if (a < SHRINK) { mesh.visible = true; mesh.scale.setScalar(1 - 0.28 * (a / SHRINK)); setCrack(mesh, STAGES - 1); }
-          else { mesh.visible = false; setCrack(mesh, -1); }
-          fx.chips(chipList({ x: o.x + dir.x * B * 0.5, y: o.y, z: o.z + dir.z * B * 0.5 }, dir, p.v.key + 'b' + bi, a, 12), CHIP_COL[kind] || CHIP_COL.s);
-          itemLife(p, ORE[kind] || 'cobble', o, p.v.key + bi, a - SHRINK, dir, time);
-        } else {
-          mesh.visible = true; mesh.scale.setScalar(1);
-          if (i === s.broken) {
-            setCrack(mesh, s.stage);
-            if (s.n) fx.chips(chipList({ x: o.x + dir.x * B * 0.5, y: o.y, z: o.z + dir.z * B * 0.5 }, dir, p.v.key + s.n, s.since), CHIP_COL[kind] || CHIP_COL.s);
-          } else setCrack(mesh, -1);
-        }
-      });
-      if (mining) p.carryN = m.idx.filter((bi, i) => u - breakTime(i, DIG) - SHRINK >= 1.3).length;
+      if (!mining) { setRock(g, done ? m.H0 - m.n : m.H0); return; }
+      const u = workU(p, time), s = strikeAt(u, DIG, m.hits);
+      const broken = Math.min(m.n, s.broken);
+      const dir = (() => { const dx = p.pos.x - g.position.x, dz = p.pos.z - g.position.z, l = Math.hypot(dx, dz) || 1; return { x: dx / l, z: dz / l }; })();
+      const k = rockScale(m.H0 - broken, m.o.max) || 0.35;
+      const face = { x: g.position.x + dir.x * 1.1 * k, y: 0.9 * k, z: g.position.z + dir.z * 1.1 * k };
+      const last = broken > 0 ? u - breakTime(broken - 1, DIG, m.hits) : 9;
+      setRock(g, m.H0 - broken, broken < m.n ? s.stage : -1, last < 0.18 ? 1 - last / 0.18 : 0);
+      if (s.n && broken < m.n) fx.chips(chipList(face, dir, p.v.key + s.n, s.since, 7), CHIP_COL.s);
+      let got = 0;
+      for (let i = 0; i < broken; i++) {
+        const a = u - breakTime(i, DIG, m.hits);
+        const blk = m.blocks[m.o.max - (m.H0 - i)] || 's';
+        fx.chips(chipList(face, dir, p.v.key + 'b' + i, a, 12), CHIP_COL[blk] || CHIP_COL.s);
+        if (m.H0 - i - 1 <= 0) fx.chips(chipList({ x: g.position.x, y: 0.5, z: g.position.z }, { x: 0, z: 0 }, p.v.key + 'end', a, 18).map((q) => ({ ...q, s: q.s * 2.4 })), CHIP_COL.s);
+        got += itemLife(p, ORE[blk] || 'cobble', face, p.v.key + i, a, dir, time);
+      }
+      p.carryN = got;
       return;
     }
-    // 木：下の幹から 1 つずつ切る。切ると上が 1 段落ちる。最後は葉が散る
-    const g = m.P.o.obj, T = g.userData.tree;
-    if (!m.lead) return;
-    const mining = p.phase === 1, done = p.phase === 2 || p.phase === 3;
-    if (!mining) { setTreeCut(g, done ? LOGS : 0); if (!done) for (const l of T.logs) setCrack(l, -1); return; }
-    const u = workU(p, time), s = strikeAt(u, CHOP);
-    const n = Math.min(LOGS, s.broken);
-    let fall = 0;
-    if (n > 0 && n < LOGS) { const a = u - breakTime(n - 1, CHOP); fall = a < 0.24 ? 1 - (a / 0.24) * (a / 0.24) : 0; }
-    setTreeCut(g, n, fall);
-    T.logs.forEach((l, i) => setCrack(l, i === n && n < LOGS ? s.stage : -1));
-    const S = T.size;
+    // 木：たたき終わると倒れて、原木が落ち、切り株が残る
+    const T = g.userData.tree;
+    if (!mining) { if (done) setTreeState(g, 'stump'); else setTreeState(g, 'tree'); return; }
+    const u = workU(p, time), s = strikeAt(u, CHOP, m.hits);
     const dx = p.pos.x - g.position.x, dz = p.pos.z - g.position.z, dl = Math.hypot(dx, dz) || 1, dir = { x: dx / dl, z: dz / dl };
-    const base = { x: g.position.x, y: (0.3 + LOG / 2) * S, z: g.position.z };
-    if (n < LOGS && s.n) fx.chips(chipList({ x: base.x + dir.x * LOG * 0.5 * S, y: base.y, z: base.z + dir.z * LOG * 0.5 * S }, dir, p.v.key + 't' + s.n, s.since), 0x7a5230);
-    let got = 0;
-    for (let i = 0; i < n; i++) {
-      const a = u - breakTime(i, CHOP) - SHRINK;
-      itemLife(p, 'log', base, p.v.key + 'log' + i, a, dir, time);
-      if (a >= 1.3) got++;
+    const tFell = breakTime(0, CHOP, m.hits);
+    const S = T.size;
+    if (u < tFell) {
+      setTreeState(g, 'tree'); setTreeCrack(g, s.stage);
+      if (s.n) fx.chips(chipList({ x: g.position.x + dir.x * 0.3 * S, y: 0.6 * S, z: g.position.z + dir.z * 0.3 * S }, dir, p.v.key + 't' + s.n, s.since, 8), 0x8a6238);
+      p.carryN = 0; return;
     }
-    if (n >= LOGS) { // 葉が散る。たまにりんごか苗木
-      const a = u - breakTime(LOGS - 1, CHOP);
-      const top = { x: g.position.x, y: (0.3 + LOG * 0.5 + 0.3) * S, z: g.position.z };
-      for (let k = 0; k < 3; k++) fx.chips(chipList(top, { x: (k - 1) * 0.6, z: 0.3 }, p.v.key + 'leaf' + k, a * 0.8, 10).map((q) => ({ ...q, s: q.s * 2.2 })), new THREE.Color(T.leafCol).getHex());
-      const bonus = hash(p.v.key + state.day) % 6 === 0 ? 'apple' : hash(p.v.key + state.day) % 9 === 1 ? 'sapling' : null;
-      if (bonus) { itemLife(p, bonus, top, p.v.key + bonus, a - 0.2, dir, time); if (a - 0.2 >= 1.3) got++; }
+    const a = u - tFell, fdir = { x: -dir.x, z: -dir.z }; // 打った人と反対へ倒れる
+    // 根元を軸にゆっくり傾き始め、だんだん速く倒れ、地面で少し弾んでから消える（葉が散る）。切り株は残る
+    setTreeFall(g, a / FALL, fdir, a > VAN - 0.15 ? Math.min(1, (a - VAN + 0.15) / 0.3) : 0);
+    setTreeCrack(g, -1);
+    let got = 0;
+    if (a >= VAN) {
+      const ag = a - VAN;
+      for (let k = 0; k < 4; k++) fx.chips(chipList({ x: g.position.x + fdir.x * (6.6 + k * 2.0) * S, y: 1.2, z: g.position.z + fdir.z * (6.6 + k * 2.0) * S }, { x: (k % 2 - 0.5) * 0.8, z: 0.4 }, p.v.key + 'leaf' + k, ag * 0.75, 14).map((q) => ({ ...q, s: q.s * 2.6 })), new THREE.Color(T.leafCol).getHex());
+      for (let i = 0; i < m.logs; i++) {
+        const o = { x: g.position.x + fdir.x * (1.8 + i * 2.2) * S, y: 0.5, z: g.position.z + fdir.z * (1.8 + i * 2.2) * S };
+        got += itemLife(p, 'log', o, p.v.key + 'log' + i, ag - i * 0.1, dir, time);
+      }
     }
     p.carryN = got;
   }
+  // チェスト：置くたびにふたが開いて、「+3」
+  let chestPop = null;
   function depositFx(p, time) {
-    const m = p.mine; if (!m || !p.carryN) return;
-    const pile = piles[m.kind === 'rock' ? 'cobble' : 'log'];
-    pile.n = Math.min(PILE_MAX, pile.n + p.carryN);
-    if (pile.n >= PILE_MAX) pile.n = PILE_MAX - 9; // いっぱいになったら倉庫へしまった分だけ減る
-    setPile(pile.g, pile.n);
-    pile.pop = { t: time, text: '+' + p.carryN };
+    if (!p.mine || !p.carryN) return;
+    chestPop = { t: time, text: '+' + p.carryN };
     p.carryN = 0;
   }
-  function updatePiles(time) {
-    for (const k in piles) {
-      const P = piles[k]; if (!P.pop) continue;
-      const a = time - P.pop.t; if (a > 1.4) { P.pop = null; continue; }
-      fx.plus(P.pop.text, P.g.position.x, 2.2 + a * 0.8, P.g.position.z, a < 1 ? 1 : (1.4 - a) / 0.4, '#fff6c8', 1.4);
-    }
+  function updateChest(time) {
+    if (!chestObj) return;
+    const a = chestPop ? time - chestPop.t : 9;
+    setChestOpen(chestObj, a < 1.4 ? Math.min(1, a / 0.2) * Math.min(1, (1.4 - a) / 0.3) : 0);
+    if (a < 1.4) fx.plus(chestPop.text, chestObj.position.x, 2.0 + a * 0.8, chestObj.position.z, a < 1 ? 1 : (1.4 - a) / 0.4, '#fff6c8', 1.4);
   }
 
   // ---------- 夜：見張りと、森の外から来る敵（sim.js で決まった最新の夜） ----------
-  const N = state.night && state.night.day >= state.day - 1 ? state.night : null;
+  const ENEMIES = !!(config.enemies && config.enemies.enabled);
+  const N = ENEMIES && state.night && state.night.day >= state.day - 1 ? state.night : null;
   const from = N && N.from ? N.from : { x: 0, z: -52 };
   const fl = Math.hypot(from.x, from.z) || 1, fdir = { x: from.x / fl, z: from.z / fl }, fside = { x: -fdir.z, z: fdir.x };
   const guardKeys = new Set(((N && N.guards) || []).filter((k) => people.some((p) => p.v.key === k)));
-  if (!guardKeys.size && people.length) people.filter((p) => !p.rest).slice(0, Math.min(2, people.length)).forEach((p) => guardKeys.add(p.v.key));
+  if (ENEMIES && !guardKeys.size && people.length) people.filter((p) => !p.rest).slice(0, Math.min(2, people.length)).forEach((p) => guardKeys.add(p.v.key));
   // 柵・石壁があれば、見張りはその内側に立ち、敵はその外で止められる
   const ringR = world.buildings.some((b) => b.type === 'wall') ? 33.5 : world.buildings.some((b) => b.type === 'fence') ? 31.5 : null;
   const fa = Math.atan2(fdir.z, fdir.x);
@@ -511,7 +526,7 @@ async function main() {
   }
 
   // 0:家→仕事場 1:仕事 2:仕事場→置き場 3:置く 4:置き場→仕事場 5:立ち話へ 6:立ち話 7:仕事場へもどる
-  const SPEED = 2.4;
+  const SPEED = 2.6; // 村人の背 3.8 で、人がふつうに歩く速さ（1 秒に 2 歩ほど・脚の動きと合う）
   function walkTo(p, route, dt) {
     let left = SPEED * dt;
     while (left > 0 && p.ri < route.length) {
@@ -552,11 +567,11 @@ async function main() {
     }
     if (p.rest) { setTool(p.ch, null); setCarry(p.ch, null); p.ch.position.set(p.pos.x, 0, p.pos.z); animate(p.ch, 'idle', time + (hash(p.v.key) % 100) / 10); return; }
     if (p.phase === 0 || p.phase === 4) {
-      setTool(p.ch, p.tool); setCarry(p.ch, null);
+      setTool(p.ch, p.toolKey); setCarry(p.ch, null);
       pose = 'walk';
       if (walkTo(p, p.routes[p.phase], dt)) { p.phase = 1; p.t = 0; }
     } else if (p.phase === 1) {
-      setTool(p.ch, p.tool); setCarry(p.ch, null);
+      setTool(p.ch, p.toolKey); setCarry(p.ch, null);
       pose = p.pose;
       if (p.work.fx !== null) p.ch.rotation.y = Math.atan2(p.work.fx - p.pos.x, p.work.fz - p.pos.z);
       if (p.mine ? workU(p, time) > workLen(p) : p.t > workLen(p)) { p.phase = 2; p.t = 0; p.w0 = null; }
@@ -574,11 +589,37 @@ async function main() {
       pose = p.bubble.hidden ? 'idle' : 'talk';
       p.ch.rotation.y = Math.atan2(p.other.pos.x - p.pos.x, p.other.pos.z - p.pos.z);
     } else if (p.phase === 7) {
-      setTool(p.ch, p.tool); pose = 'walk';
+      setTool(p.ch, p.toolKey); pose = 'walk';
       if (walkTo(p, p.routes.back, dt)) { p.phase = 1; p.t = 0; }
     }
     p.ch.position.set(p.pos.x, 0, p.pos.z);
     animate(p.ch, pose, time + (hash(p.v.key) % 100) / 10);
+  }
+
+  // ---------- 釣り：うき・糸・釣れた魚 ----------
+  const fishers = people.filter((p) => p.pose === 'fish' && world.pond);
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xf4f4f4 });
+  for (const p of fishers) {
+    p.bob = makeBobber(); scene.add(p.bob);
+    const dx = world.pond.x - p.work.x, dz = world.pond.z - p.work.z, l = Math.hypot(dx, dz) || 1;
+    p.bobAt = { x: p.work.x + (dx / l) * 2.4, z: p.work.z + (dz / l) * 2.4 };
+    p.line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), lineMat); scene.add(p.line);
+  }
+  const _tip = new THREE.Vector3();
+  function updateFishing(time) {
+    for (const p of fishers) {
+      const on = p.phase === 1 && p.mode === 'day' && p.ch.visible;
+      p.bob.visible = on; p.line.visible = on;
+      if (!on) continue;
+      const f = fishCycle(time + (hash(p.v.key) % 100) / 10);
+      const y = 0.1 + Math.sin(time * 2.2) * 0.02 - f.sink * 0.16 + f.reel * 0.5;
+      const k = f.reel; // 釣り上げる時は、うきが手前へ
+      p.bob.position.set(p.bobAt.x + (p.pos.x - p.bobAt.x) * k * 0.5, y, p.bobAt.z + (p.pos.z - p.bobAt.z) * k * 0.5);
+      p.bob.userData.ring.scale.setScalar(1 + f.sink * 1.4);
+      const tool = p.ch.userData.parts.tool;
+      if (tool && tool.userData.tip) { tool.userData.tip.getWorldPosition(_tip); p.line.geometry.setFromPoints([_tip.clone(), p.bob.position.clone().setY(y + 0.25)]); }
+      if (f.caught) fx.item('fish', p.bob.position.x, y + 0.2 + f.reel * 0.4, p.bob.position.z, time * 4, 1.3);
+    }
   }
 
   // ---------- クリック ----------
@@ -628,7 +669,8 @@ async function main() {
     fx.begin();
     for (const p of people) updatePerson(p, dt, time);
     for (const p of people) updateWork(p, time);
-    updatePiles(time);
+    updateChest(time);
+    for (const m of markers) m.userData.flag.rotation.y = Math.sin(time * 0.8) * 0.4;
     fx.end();
     for (const b of anim.blades) b.rotation.z += dt * 0.8;
     for (const b of anim.boats) { b.position.y = 0.05 + Math.sin(time * 1.5) * 0.06; b.rotation.z = Math.sin(time * 1.2) * 0.04; }
@@ -636,6 +678,10 @@ async function main() {
     for (const h of anim.hands) h.rotation.z = -time * 0.2;
     for (const p of guards) { const f = p.ch.userData.parts.tool && p.ch.userData.parts.tool.userData.flame; if (f) f[0].scale.y = 0.8 + Math.sin(time * 14 + p.t) * 0.25; }
     if (anim.flame) { anim.flame.scale.y = 0.8 + Math.sin(time * 12) * 0.2; }
+    if (pondObj) animatePond(pondObj, time);
+    for (const { a, o } of animals) { const q = animalPos(a, time, !!a.pen); o.position.set(q.x, 0, q.z); o.rotation.y = q.face; animateAnimal(o, time, q.move, q.graze); }
+    for (const c of anim.canals) for (const m of c.userData.flow) { const u = (time * 0.25 + m.userData.ph) % 1; m.position.z = -c.userData.len / 2 + u * c.userData.len; }
+    updateFishing(time);
     puffT += dt;
     if (puffT > 0.35) { puffT = 0; for (const e of emitters) if (!e.thin || Math.random() < 0.5) addPuff(scene, e); }
     for (let i = puffs.length - 1; i >= 0; i--) {
@@ -675,7 +721,7 @@ async function main() {
     }
     for (const bt of btags) {
       const dd = camera.position.distanceTo(bt.position);
-      bt.element.style.opacity = dd > 75 && !bt.element.classList.contains('new') ? '0' : '1';
+      bt.element.style.opacity = dd > 75 && !bt.element.classList.contains('new') && !bt.element.classList.contains('chesttag') ? '0' : '1';
     }
     // 見る場所が町の外へ行きすぎないように
     controls.target.x = Math.max(-100, Math.min(100, controls.target.x));
@@ -737,17 +783,28 @@ function renderPanel(D) {
     `<li>木を切った人 ${t.jobs.wood || 0} 人・岩を掘った人 ${t.jobs.stone || 0} 人・食べ物を集めた人 ${t.jobs.food || 0} 人</li>` +
     (builtNames.length ? `<li>${esc(builtNames.join('、'))}ができた</li>` : '') +
     history.slice(-5).reverse().map((h) => `<li><span class="muted">${h.day}日目</span> ${esc(h.text)}</li>`).join('');
-  const next = state.queue && state.queue[0];
-  if (next) {
-    const c = config.buildings[next].cost;
-    document.getElementById('next').innerHTML = `<b>${esc(config.buildings[next].name)}</b>（` +
-      Object.entries(c).map(([r, n]) => `${RES[r]} ${Math.min(state.resources[r], n)}/${n}`).join('・') + '）';
-  }
-  const vote = state.vote;
-  const nextMs = config.milestones.find((m) => !state.reached.includes(m.at));
-  document.getElementById('votebox').innerHTML = vote
-    ? `<b>投票中</b>：フォロワー ${vote.milestone} 人の節目。${vote.options.map((o) => esc(o.key + ' ' + o.name)).join(' / ')} <a href="vote.html">票を見る</a>`
-    : nextMs ? `次の投票はフォロワー <b>${nextMs.at}</b> 人で開きます（今 ${state.followers} 人）。<a href="vote.html">くわしく</a>` : 'すべての節目に届きました。';
+  const plan = state.plan;
+  const nextEl = document.getElementById('next');
+  if (plan) {
+    const c = config.buildings[plan.build].cost;
+    nextEl.innerHTML = `<b>${esc(config.buildings[plan.build].name)}</b>` + (plan.site ? `（${esc(plan.site.label)}）` : '（場所は投票中）') + '<br>' +
+      Object.entries(c).map(([r, n]) => `${RES[r]} ${Math.min(state.resources[r], n)}/${n}`).join('・') + (plan.site && !plan.leveled ? '・整地はこれから' : '');
+  } else nextEl.textContent = active.length ? '投票で決めます。' : '村人が来たら、投票で決めます。';
+  const hm = (iso) => { const d = new Date(iso); return `${(d.getUTCHours() + 9) % 24}時`; };
+  const votes = state.votes || [];
+  document.getElementById('votebox').innerHTML = votes.length
+    ? votes.map((v) => `<b>${esc(v.question)}</b>（${hm(v.opensAt)}〜${hm(v.closesAt)}）<br>` + v.options.map((o) => `${esc(o.key + ' ' + o.name)} <span class="muted">${v.votes[o.key]}票</span>`).join(' / ')).join('<br>') + ' <a href="vote.html">票を見る</a>'
+    : active.length ? '次の投票は、今の建物ができたあとに開きます。<a href="vote.html">くわしく</a>' : '村人が来たら「何を建てる？」の投票が始まります。';
+  // 町のチェスト
+  const IT = config.items;
+  const ORD = ['log', 'planks', 'stick', 'cobble', 'coal', 'iron', 'gold', 'diamond', 'berry', 'wheat', 'carrot', 'potato', 'apple', 'fish_funa', 'fish_masu', 'fish_koi', 'fish_namazu', 'egg', 'milk', 'wool', 'mushroom', 'seeds', 'sapling', 'old_coin', 'pearl', 'driftwood', 'old_boot'];
+  const rank = (k) => (ORD.includes(k) ? ORD.indexOf(k) : 99);
+  const rows = Object.entries(state.store || {}).filter(([, n]) => n > 0).sort((a, b) => rank(a[0]) - rank(b[0]));
+  document.getElementById('chest').innerHTML = rows.length
+    ? '<div class="mcslots">' + rows.map(([k, n]) => `<div class="mcslot" title="${esc((IT[k] || {}).name || k)}"><img src="icons/${k}.png" alt="" width="32" height="32" onerror="this.style.visibility='hidden'"><b>${n}</b><span>${esc((IT[k] || {}).name || k)}</span></div>`).join('') + '</div>'
+    : '<p class="muted">まだ空っぽです。</p>';
+  const nt = state.nextTool;
+  document.getElementById('nexttool').textContent = nt ? `次に作る道具：${(IT[nt.item] || {}).name || nt.item}（${nt.text}）` : '';
   document.getElementById('join').innerHTML = `インスタの投稿に「<b>${esc(config.joinWord)}</b>」とコメントすると、次の日から村人になります。`;
 }
 

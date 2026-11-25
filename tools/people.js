@@ -45,7 +45,8 @@ function findVillager(villagers, { igId, username }) {
 }
 
 // 村人を足す。もういる人なら名前だけ新しくして null を返す
-function upsertVillager(villagers, { igId, username, joined, joinedDay, source }, hidden) {
+// startTool は新しく来た人にだけ入れる（もういる人の道具は、プロフィールでだけ変えられる）
+function upsertVillager(villagers, { igId, username, joined, joinedDay, source, startTool }, hidden) {
   const hit = findVillager(villagers, { igId, username });
   if (hit) {
     if (igId && !hit.igId) hit.igId = igHash(igId);
@@ -60,6 +61,7 @@ function upsertVillager(villagers, { igId, username, joined, joinedDay, source }
   const key = keyFor(igId ? 'ig:' + igId : 'user:' + norm(username).toLowerCase());
   const v = { key, igId: igId ? igHash(igId) : undefined, name: norm(username), userHash: userHash(username), skin: skinFor(key), joined, joinedDay, source };
   if (!v.igId) delete v.igId;
+  if (startTool) v.startTool = startTool;
   applyPrivacy(v, hidden);
   villagers.push(v);
   return v;
@@ -78,15 +80,35 @@ const isJoin = (text, word) => {
   return [...JOIN_WORDS, ...(word ? [norm(word)] : [])].some((w) => t.includes(w));
 };
 
-function registrationsFrom(comments, word) {
-  // 古い順に見て、1 人 1 回。最後の名前を使う
+// 「参加したい ピッケル」「参加したい 釣り」から最初の道具を読む（config.startTools）。
+// いちばん前に書いてある道具の言葉を使う。敵が出ない間は剣（needsEnemies）は選べない。言葉がなければ null
+function parseStartTool(text, startTools, { enemies = false } = {}) {
+  const opts = ((startTools && startTools.options) || []).filter((o) => enemies || !o.needsEnemies);
+  const t = norm(text);
+  let best = null, at = Infinity;
+  for (const o of opts) for (const w of o.words || []) {
+    const i = t.indexOf(norm(w));
+    if (i >= 0 && (i < at || (i === at && best && norm(w).length > best.len))) { at = i; best = { id: o.id, len: norm(w).length }; }
+  }
+  return best ? best.id : null;
+}
+// 選べる道具の id → 表示名・仕事（profileFields の「最初の道具」は表示名で持つ）
+const startToolByLabel = (startTools, label) => ((startTools && startTools.options) || []).find((o) => o.label === label) || null;
+const startToolById = (startTools, id) => ((startTools && startTools.options) || []).find((o) => o.id === id) || null;
+
+function registrationsFrom(comments, word, startTools, opts) {
+  // 古い順に見て、1 人 1 回。最後の名前を使う。道具の言葉は、書いてある最後のものを使う
   const byUser = new Map();
   for (const c of [...comments].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))) {
     if (!isJoin(c.text, word)) continue;
     const u = commentUser(c);
     const id = u.igId ? 'ig:' + u.igId : 'user:' + norm(u.username).toLowerCase();
     const prev = byUser.get(id);
-    byUser.set(id, { ...u, firstAt: prev ? prev.firstAt : c.timestamp });
+    const tool = startTools ? parseStartTool(c.text, startTools, opts) : null;
+    const r = { ...u, firstAt: prev ? prev.firstAt : c.timestamp };
+    const st = tool || (prev && prev.startTool);
+    if (st) r.startTool = st;
+    byUser.set(id, r);
   }
   return [...byUser.values()];
 }
@@ -142,4 +164,4 @@ function readFollowerExport(json) {
   return out;
 }
 
-module.exports = { norm, igHash, userHash, keyFor, nickname, loadHidden, applyPrivacy, findVillager, upsertVillager, registrationsFrom, isJoin, JOIN_WORDS, parseChoice, tallyVote, readFollowerExport, commentUser };
+module.exports = { norm, igHash, userHash, keyFor, nickname, loadHidden, applyPrivacy, findVillager, upsertVillager, registrationsFrom, isJoin, JOIN_WORDS, parseStartTool, startToolByLabel, startToolById, parseChoice, tallyVote, readFollowerExport, commentUser };

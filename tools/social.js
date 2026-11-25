@@ -240,7 +240,7 @@ function makeTalk(a, b, kind, ctx, R, p) {
   // 返事：ライバルは言い返す、片思いの相手には照れる
   if (topic === 'rel' && kind === 'rival') lines.push([1, R.pick(['こっちのセリフだ', '望むところだ', 'ふん、見てなよ'])]);
   else if (topic === 'rel' && kind === 'crush') lines.push([1, R.pick(['え、ありがとう', 'どうしたの？'])]);
-  else if (topic === 'job' && jobOf(b) !== 'none' && jobOf(b) !== jobOf(a)) lines.push([1, fill(R.pick(T.job[jobOf(b)]), cx)]);
+  else if (topic === 'job' && jobOf(b) !== 'none' && jobOf(b) !== jobOf(a)) lines.push([1, fill(R.pick(T.job[jobOf(b)] || T.job.none), cx)]);
   else if (topic === 'job') lines.push([1, R.pick(T.re.job)]);
   else if (topic === 'weather') lines.push([1, R.pick(T.re.weather[weather] || T.re.weather['晴れ'])]);
   else if (topic === 'build') lines.push([1, R.pick(ctx.built ? T.re.build : T.re.buildNext)]);

@@ -18,6 +18,7 @@ async function main() {
     ['参加した日', `${fmtDate(v.joined)}（${v.joinedDay}日目）`],
     ['今の仕事', `${JOB[L.job] || 'まだなし'}${L.action ? '（' + ACTION[L.action] + '）' : ''}`],
     ['住んでいる家', homeName(L, D.world, D.config)],
+    ['最初の道具', startToolText(v, L, D.config)],
     ['スキン', `${v.skin} 番 <a href="skins.html#s${v.skin}">一覧で見る</a>`],
   ].map(([k, val]) => `<dt>${k}</dt><dd>${k === 'スキン' ? val : esc(val)}</dd>`).join('') + (v.hidden ? '<dt>表示</dt><dd>名前をかくしてあだ名で出しています</dd>' : '');
   document.getElementById('stats').innerHTML = ['wood', 'stone', 'food'].map((r) => `<div class="stat"><b>${Math.floor(L.gathered[r])}</b><small>${RES[r]}</small></div>`).join('');
@@ -28,7 +29,7 @@ async function main() {
   // 持ち物
   renderInventory(L, D.config);
   renderSocial(v, D);
-  renderProfile(v, D.config);
+  renderProfile(v, D.config, { day: D.state.day, L });
 
   // 3D の姿
   const el = document.getElementById('viewer');
@@ -50,7 +51,8 @@ async function main() {
   const ch = makeCharacter(skinUrl(v.skin), { scale: 1 });
   scene.add(ch);
   if (v.profile && v.profile.color) setAccent(ch, v.profile.color);
-  const tool = { chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', tend: 'hoe', berry: 'basket', harvest: 'basket', forage: 'basket' }[L.action];
+  let tool = { level: 'hoe', chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', tend: 'hoe', berry: 'basket', harvest: 'basket', forage: 'basket', fish: 'rod', ranch: 'basket' }[L.action];
+  if (tool && ['axe', 'pick', 'hoe', 'rod'].includes(tool)) tool += ':' + (L.toolTier && L.toolTier !== 'hand' ? L.toolTier : 'wood'); // 道具の素材で色と形を変える
   setTool(ch, tool || null);
   let mode = 'idle';
   const pose = { chop: 'chop', dig: 'dig', dig_last: 'dig', till: 'dig', berry: 'gather', harvest: 'gather', tend: 'gather', forage: 'gather' }[L.action] || 'idle';
@@ -88,6 +90,15 @@ function renderSocial(v, D) {
 // MBTI と誕生日の入力（ここでは保存しない。コメント用の文を作るだけ）
 // 公開しているプロフィールの表示（項目の定義から作る。文字は必ずエスケープ）
 function profileValues(v) { return { ...(v.profile || {}), ...(v.mbti ? { mbti: v.mbti } : {}), ...(v.birthday ? { birthday: v.birthday } : {}) }; }
+// 最初の道具（参加した時に選ぶ。選ばなかった人は、人が少ない仕事の道具）
+const startOpt = (config, id) => ((config.startTools && config.startTools.options) || []).find((o) => o.id === id);
+function startToolText(v, L, config) {
+  const o = startOpt(config, v.startTool || L.startTool);
+  if (!o) return 'まだなし';
+  return `木の${o.label}（${o.job}が得意）${!v.startTool && L.startAuto ? '・自動で決まった' : ''}`;
+}
+// 「最初の道具」を変えられるのは、参加した日の間に 1 回だけ
+const startLocked = (v, day) => !!v.startToolChanged || (day != null && day > v.joinedDay);
 function showValue(f, val) {
   if (f.type === 'monthday') return esc(mdText(val));
   if (f.type === 'color') return `<span class="swatch" style="background:${/^#[0-9a-f]{6}$/i.test(val) ? val : '#ccc'}"></span>`;
@@ -100,7 +111,7 @@ function renderProfileView(v, config) {
   document.getElementById('profview').innerHTML = rows.length ? rows.map((f) => `<dt>${esc(f.label)}</dt><dd>${showValue(f, vals[f.id])}</dd>`).join('') : '<dt>プロフィール</dt><dd>まだ登録されていません。</dd>';
 }
 // Google ログインで自分の村人を書きかえる
-function renderAuth(v, config) {
+function renderAuth(v, config, ctx = {}) {
   const box = document.getElementById('authbox'), form = document.getElementById('profedit');
   const fields = config.profileFields || [];
   const word = (config.firebase && config.firebase.linkWord) || 'つなぐ';
@@ -127,27 +138,31 @@ function renderAuth(v, config) {
     }
     box.innerHTML = tag + '<p>この村人とつながっています。下で書きかえて「保存」を押すと、次の毎日の更新で町に反映されます。</p>' + out;
     box.querySelector('#gout').onclick = () => A.signOut();
-    buildForm(form, fields, profileValues(v), async (vals) => {
+    const cur = startOpt(config, v.startTool || (ctx.L && ctx.L.startTool));
+    const vals0 = { ...profileValues(v), ...(cur ? { startTool: cur.label } : {}) };
+    const locked = new Set(fields.filter((f) => f.once === 'joinDay' && startLocked(v, ctx.day)).map((f) => f.id));
+    buildForm(form, fields, vals0, async (vals) => {
+      for (const id of locked) delete vals[id];
       const r = await A.save(v.key, window.ProfileFields.publicOnly(fields, vals), window.ProfileFields.privateOnly(fields, vals));
       return r === 'demo' ? '見本なので保存していません（本番では Firestore に保存されます）。' : '保存しました。次の更新で町に反映されます。';
-    });
+    }, locked);
     form.hidden = false;
   };
   initAuth(v.key, render).catch((e) => { box.innerHTML = '<p class="err">ログインの準備でつまずきました：' + esc(e.message) + '</p>'; });
 }
 // 項目の定義から入力欄を作る
-function buildForm(form, fields, vals, onSave) {
+function buildForm(form, fields, vals, onSave, locked = new Set()) {
   const PFm = window.ProfileFields;
   form.innerHTML = fields.map((f) => {
     const id = 'f_' + f.id, val = vals[f.id] ?? '';
     let input;
-    if (f.type === 'select') input = `<select id="${id}"><option value="">えらばない</option>${f.options.map((o) => `<option${o === val ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+    if (f.type === 'select') input = `<select id="${id}"${locked.has(f.id) ? ' disabled' : ''}><option value="">えらばない</option>${f.options.map((o) => `<option${o === val ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
     else if (f.type === 'monthday') { const [m, d] = String(val).split('-'); input = `<span class="md"><select id="${id}_m"><option value="">--</option>${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}"${+m === i + 1 ? ' selected' : ''}>${i + 1}月</option>`).join('')}</select><select id="${id}_d"><option value="">--</option>${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}"${+d === i + 1 ? ' selected' : ''}>${i + 1}日</option>`).join('')}</select></span>`; }
     else if (f.type === 'color') input = `<input type="color" id="${id}" value="${/^#[0-9a-f]{6}$/i.test(val) ? val : '#7cb342'}"><label class="nocolor"><input type="checkbox" id="${id}_none"${val ? '' : ' checked'}>えらばない</label>`;
     else if (f.type === 'number') input = `<input type="number" id="${id}" value="${esc(val)}"${f.min !== undefined ? ` min="${f.min}"` : ''}${f.max !== undefined ? ` max="${f.max}"` : ''}>`;
     else if (f.type === 'date') input = `<input type="date" id="${id}" value="${esc(val)}">`;
     else input = `<input type="text" id="${id}" maxlength="${f.max || 30}" value="${esc(val)}"><small class="cnt" data-for="${id}"></small>`;
-    return `<div class="fld"><label for="${id}">${esc(f.label)}${f.public ? '' : '<span class="priv">非公開</span>'}</label>${input}${f.note ? `<small class="muted">${esc(f.note)}</small>` : ''}<small class="ferr" id="${id}_err"></small></div>`;
+    return `<div class="fld"><label for="${id}">${esc(f.label)}${f.public ? '' : '<span class="priv">非公開</span>'}</label>${input}${locked.has(f.id) ? '<small class="muted">もう変えられません（参加した日に 1 回だけ）</small>' : f.note ? `<small class="muted">${esc(f.note)}</small>` : ''}<small class="ferr" id="${id}_err"></small></div>`;
   }).join('') + '<div class="fld"><button type="submit" class="savebtn">保存</button><span class="muted" id="fmsg"></span></div>';
   for (const c of form.querySelectorAll('.cnt')) { const inp = form.querySelector('#' + c.dataset.for); const up = () => { c.textContent = `${Array.from(inp.value).length}/${inp.maxLength}`; }; inp.addEventListener('input', up); up(); }
   form.onsubmit = async (e) => {
@@ -168,9 +183,9 @@ function buildForm(form, fields, vals, onSave) {
   };
 }
 
-function renderProfile(v, config) {
+function renderProfile(v, config, ctx) {
   renderProfileView(v, config);
-  renderAuth(v, config);
+  renderAuth(v, config, ctx);
   const word = config.profileWord || 'プロフ';
   const sm = document.getElementById('pmbti'), mo = document.getElementById('pmonth'), da = document.getElementById('pday');
   sm.innerHTML = '<option value="">えらぶ</option>' + MBTI.map((m) => `<option>${m}</option>`).join('');

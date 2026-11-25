@@ -2,6 +2,82 @@
   "title": "みんなで町づくり",
   "account": "@your_account",
   "joinWord": "参加したい",
+  "startTools": {
+    "note": "参加する時に、最初に持つ道具を 1 つ選べる。コメントの「参加したい ピッケル」「参加したい 釣り」などの言葉で決まり、道具の言葉がなければ、いちばん人が少ない仕事の道具になる。木の道具で、持ち物 3 つのうち 1 つを使う。選んだ道具の仕事を優先する。ログイン後のプロフィールで、参加した日（1 日目）の間に 1 回だけ変えられる",
+    "options": [
+      {
+        "id": "pickaxe",
+        "label": "つるはし",
+        "item": "wood_pickaxe",
+        "job": "採掘",
+        "words": [
+          "ピッケル",
+          "つるはし",
+          "ツルハシ",
+          "採掘",
+          "さいくつ"
+        ]
+      },
+      {
+        "id": "axe",
+        "label": "斧",
+        "item": "wood_axe",
+        "job": "伐採",
+        "words": [
+          "斧",
+          "おの",
+          "オノ",
+          "木こり",
+          "きこり",
+          "キコリ",
+          "伐採"
+        ]
+      },
+      {
+        "id": "fishing_rod",
+        "label": "釣りざお",
+        "item": "wood_fishing_rod",
+        "job": "漁業",
+        "words": [
+          "釣りざお",
+          "釣り竿",
+          "釣竿",
+          "つりざお",
+          "釣り",
+          "つり",
+          "ツリ",
+          "漁業"
+        ]
+      },
+      {
+        "id": "hoe",
+        "label": "くわ",
+        "item": "wood_hoe",
+        "job": "農業",
+        "words": [
+          "くわ",
+          "クワ",
+          "鍬",
+          "畑",
+          "はたけ",
+          "農業"
+        ]
+      },
+      {
+        "id": "sword",
+        "label": "剣",
+        "item": "wood_sword",
+        "job": "見張り",
+        "words": [
+          "剣",
+          "つるぎ",
+          "ソード"
+        ],
+        "needsEnemies": true
+      }
+    ],
+    "autoNote": "道具の言葉がない人は、その日までに選ばれた数がいちばん少ない仕事の道具（つるはし・斧・釣りざお・くわ）になる"
+  },
   "buildVote": {
     "note": "建てる物と場所は毎回 A/B/C の投票で決める。1 日の中で時間を分けるので、同じ A/B/C のコメントでも区別できる（日本時間）",
     "whatHours": [
@@ -70,13 +146,13 @@
     "log": {
       "name": "原木",
       "value": {
-        "wood": 0.25
+        "wood": 1
       }
     },
     "cobble": {
       "name": "丸石",
       "value": {
-        "stone": 0.25
+        "stone": 1
       }
     },
     "coal": {
@@ -132,7 +208,7 @@
     "planks": {
       "name": "板",
       "value": {
-        "wood": 0.0625
+        "wood": 0.25
       }
     },
     "stick": {
@@ -166,6 +242,174 @@
     "wood_hoe": {
       "name": "木のくわ",
       "tool": true
+    },
+    "wood_shovel": {
+      "name": "木のシャベル",
+      "tool": true
+    },
+    "wood_sword": {
+      "name": "木の剣",
+      "tool": true
+    },
+    "wood_fishing_rod": {
+      "name": "木の釣りざお",
+      "tool": true
+    },
+    "stone_shovel": {
+      "name": "石のシャベル",
+      "tool": true
+    },
+    "stone_hoe": {
+      "name": "石のくわ",
+      "tool": true
+    },
+    "stone_sword": {
+      "name": "石の剣",
+      "tool": true
+    },
+    "stone_fishing_rod": {
+      "name": "石の釣りざお",
+      "tool": true
+    },
+    "iron_shovel": {
+      "name": "鉄のシャベル",
+      "tool": true
+    },
+    "iron_hoe": {
+      "name": "鉄のくわ",
+      "tool": true
+    },
+    "iron_sword": {
+      "name": "鉄の剣",
+      "tool": true
+    },
+    "iron_fishing_rod": {
+      "name": "鉄の釣りざお",
+      "tool": true
+    },
+    "gold_pickaxe": {
+      "name": "金のつるはし",
+      "tool": true
+    },
+    "gold_axe": {
+      "name": "金の斧",
+      "tool": true
+    },
+    "gold_shovel": {
+      "name": "金のシャベル",
+      "tool": true
+    },
+    "gold_hoe": {
+      "name": "金のくわ",
+      "tool": true
+    },
+    "gold_sword": {
+      "name": "金の剣",
+      "tool": true
+    },
+    "gold_fishing_rod": {
+      "name": "金の釣りざお",
+      "tool": true
+    },
+    "diamond_pickaxe": {
+      "name": "ダイヤのつるはし",
+      "tool": true
+    },
+    "diamond_axe": {
+      "name": "ダイヤの斧",
+      "tool": true
+    },
+    "diamond_shovel": {
+      "name": "ダイヤのシャベル",
+      "tool": true
+    },
+    "diamond_hoe": {
+      "name": "ダイヤのくわ",
+      "tool": true
+    },
+    "diamond_sword": {
+      "name": "ダイヤの剣",
+      "tool": true
+    },
+    "diamond_fishing_rod": {
+      "name": "ダイヤの釣りざお",
+      "tool": true
+    },
+    "carrot": {
+      "name": "にんじん",
+      "value": {
+        "food": 0.5
+      }
+    },
+    "potato": {
+      "name": "じゃがいも",
+      "value": {
+        "food": 0.6
+      }
+    },
+    "fish_funa": {
+      "name": "フナ",
+      "value": {
+        "food": 0.6
+      }
+    },
+    "fish_koi": {
+      "name": "コイ",
+      "value": {
+        "food": 0.9
+      }
+    },
+    "fish_masu": {
+      "name": "ニジマス",
+      "value": {
+        "food": 0.8
+      }
+    },
+    "fish_namazu": {
+      "name": "ナマズ",
+      "value": {
+        "food": 1
+      }
+    },
+    "old_coin": {
+      "name": "古い金貨",
+      "value": {}
+    },
+    "pearl": {
+      "name": "真珠",
+      "value": {}
+    },
+    "old_boot": {
+      "name": "古い長ぐつ",
+      "value": {}
+    },
+    "driftwood": {
+      "name": "流木",
+      "value": {
+        "wood": 0.5
+      }
+    },
+    "egg": {
+      "name": "たまご",
+      "value": {
+        "food": 0.4
+      }
+    },
+    "milk": {
+      "name": "ミルク",
+      "value": {
+        "food": 0.6
+      }
+    },
+    "wool": {
+      "name": "羊毛",
+      "value": {}
+    },
+    "mushroom": {
+      "name": "きのこ",
+      "value": {
+        "food": 0.4
+      }
     }
   },
   "buildings": {
@@ -791,6 +1035,42 @@
         "kind": "workbench",
         "h": 2.2
       }
+    },
+    "farm": {
+      "name": "畑",
+      "cost": {
+        "wood": 12
+      },
+      "unique": true,
+      "bonus": {
+        "food": 0.05
+      },
+      "look": {
+        "kind": "farm"
+      }
+    },
+    "canal": {
+      "name": "水路",
+      "cost": {
+        "stone": 20,
+        "wood": 4
+      },
+      "unique": true,
+      "needs": "farm",
+      "plot": "farm",
+      "look": {
+        "kind": "canal"
+      }
+    },
+    "pen": {
+      "name": "動物の柵",
+      "cost": {
+        "wood": 30
+      },
+      "unique": true,
+      "look": {
+        "kind": "pen"
+      }
     }
   },
   "milestones": [
@@ -920,12 +1200,29 @@
         "伐採",
         "採掘",
         "農業",
+        "漁業",
+        "牧場",
         "建築",
         "商い"
       ],
       "public": true,
       "effect": "job",
-      "note": "仕事を決める時に少し優先されます"
+      "note": "仕事を決める時に少し優先されます（農業 = 畑、漁業 = 釣り、牧場 = 動物の世話）"
+    },
+    {
+      "id": "startTool",
+      "label": "最初の道具",
+      "type": "select",
+      "options": [
+        "つるはし",
+        "斧",
+        "釣りざお",
+        "くわ"
+      ],
+      "public": true,
+      "effect": "startTool",
+      "once": "joinDay",
+      "note": "参加した日（1 日目）の間に 1 回だけ変えられます。選んだ道具の仕事を優先します。剣は敵が出るようになったら選べます"
     }
   ],
   "firebase": {
@@ -934,17 +1231,18 @@
   },
   "nightNote": "夜は森の外から敵が来る（enemies.enabled が true の時だけ）。守り（defense）の合計が大きいほど来る数が減る。村人は死なない（ケガで 1 日休む）",
   "ores": {
-    "coal": 0.14,
-    "iron": 0.18,
-    "gold": 0.015,
-    "diamond": 0.004,
-    "note": "岩のブロック 1 つが鉱石になる確率。tools/ores.js が種と岩の id で決めるので毎回同じ"
+    "coal": 0.1,
+    "iron": 0.02,
+    "gold": 0.006,
+    "diamond": 0.002,
+    "note": "岩をたたいて 1 つ落ちる物が鉱石になる確率（深い所ほど少し出やすい）。tools/ores.js が種と岩の id で決めるので毎回同じ"
   },
   "spendOrder": {
     "note": "建てる時・食べる時にチェストから使う順",
     "wood": [
       "log",
-      "planks"
+      "planks",
+      "driftwood"
     ],
     "stone": [
       "cobble"
@@ -952,11 +1250,20 @@
     "food": [
       "berry",
       "wheat",
-      "apple"
+      "apple",
+      "carrot",
+      "potato",
+      "egg",
+      "mushroom",
+      "fish_funa",
+      "fish_masu",
+      "milk",
+      "fish_koi",
+      "fish_namazu"
     ]
   },
   "gather": {
-    "note": "木と岩：決まった回数たたくと 1 つ落ちる。岩は 1 つ落ちるごとに一段小さくなり、最後は消える。木はたたき終わると倒れて原木が落ち、切り株が残る",
+    "note": "木と岩：決まった回数たたくと 1 つ落ちる。形はたたいても変わらない。木は落ち終わると倒れて切り株が残り、岩は砕けて消える",
     "treeLogs": [
       3,
       5
@@ -978,7 +1285,7 @@
     "sameSpot": 0.5
   },
   "crafting": {
-    "note": "道具のレシピ。チェストの中の材料で作る（原木 1 → 板 4、板 2 → 棒 4 は自動）。足りなければ作れない。良い道具ほど、たたく回数が少なく（早く）・たくさん落ち・長くもつ",
+    "note": "道具のレシピ。チェストの中の材料で作る（原木 1 → 板 4、板 2 → 棒 4 は自動）。足りなければ作れない。良い道具ほど、たたく回数が少なく（早く）・たくさん落ち・長くもつ。金は早いがすぐこわれる",
     "intermediates": {
       "planks": {
         "from": {
@@ -1018,6 +1325,20 @@
         "hits": 3,
         "drop": 1.5,
         "durability": 120,
+        "needs": "workbench"
+      },
+      "gold": {
+        "name": "金",
+        "hits": 2,
+        "drop": 1.25,
+        "durability": 40,
+        "needs": "workbench"
+      },
+      "diamond": {
+        "name": "ダイヤ",
+        "hits": 2,
+        "drop": 1.75,
+        "durability": 400,
         "needs": "workbench"
       }
     },
@@ -1079,6 +1400,200 @@
           "coal": 1,
           "stick": 2
         }
+      },
+      "wood_shovel": {
+        "tool": "shovel",
+        "tier": "wood",
+        "from": {
+          "planks": 1,
+          "stick": 2
+        }
+      },
+      "wood_sword": {
+        "tool": "sword",
+        "tier": "wood",
+        "from": {
+          "planks": 2,
+          "stick": 1
+        }
+      },
+      "wood_fishing_rod": {
+        "tool": "fishing_rod",
+        "tier": "wood",
+        "from": {
+          "planks": 1,
+          "stick": 3
+        }
+      },
+      "stone_shovel": {
+        "tool": "shovel",
+        "tier": "stone",
+        "from": {
+          "cobble": 1,
+          "stick": 2
+        }
+      },
+      "stone_hoe": {
+        "tool": "hoe",
+        "tier": "stone",
+        "from": {
+          "cobble": 2,
+          "stick": 2
+        }
+      },
+      "stone_sword": {
+        "tool": "sword",
+        "tier": "stone",
+        "from": {
+          "cobble": 2,
+          "stick": 1
+        }
+      },
+      "stone_fishing_rod": {
+        "tool": "fishing_rod",
+        "tier": "stone",
+        "from": {
+          "cobble": 1,
+          "stick": 3
+        }
+      },
+      "iron_shovel": {
+        "tool": "shovel",
+        "tier": "iron",
+        "from": {
+          "iron": 1,
+          "coal": 1,
+          "stick": 2
+        }
+      },
+      "iron_hoe": {
+        "tool": "hoe",
+        "tier": "iron",
+        "from": {
+          "iron": 2,
+          "coal": 1,
+          "stick": 2
+        }
+      },
+      "iron_sword": {
+        "tool": "sword",
+        "tier": "iron",
+        "from": {
+          "iron": 2,
+          "coal": 1,
+          "stick": 1
+        }
+      },
+      "iron_fishing_rod": {
+        "tool": "fishing_rod",
+        "tier": "iron",
+        "from": {
+          "iron": 1,
+          "coal": 1,
+          "stick": 3
+        }
+      },
+      "gold_pickaxe": {
+        "tool": "pickaxe",
+        "tier": "gold",
+        "from": {
+          "gold": 3,
+          "coal": 1,
+          "stick": 2
+        }
+      },
+      "gold_axe": {
+        "tool": "axe",
+        "tier": "gold",
+        "from": {
+          "gold": 3,
+          "coal": 1,
+          "stick": 2
+        }
+      },
+      "gold_shovel": {
+        "tool": "shovel",
+        "tier": "gold",
+        "from": {
+          "gold": 1,
+          "coal": 1,
+          "stick": 2
+        }
+      },
+      "gold_hoe": {
+        "tool": "hoe",
+        "tier": "gold",
+        "from": {
+          "gold": 2,
+          "coal": 1,
+          "stick": 2
+        }
+      },
+      "gold_sword": {
+        "tool": "sword",
+        "tier": "gold",
+        "from": {
+          "gold": 2,
+          "coal": 1,
+          "stick": 1
+        }
+      },
+      "gold_fishing_rod": {
+        "tool": "fishing_rod",
+        "tier": "gold",
+        "from": {
+          "gold": 1,
+          "coal": 1,
+          "stick": 3
+        }
+      },
+      "diamond_pickaxe": {
+        "tool": "pickaxe",
+        "tier": "diamond",
+        "from": {
+          "diamond": 3,
+          "stick": 2
+        }
+      },
+      "diamond_axe": {
+        "tool": "axe",
+        "tier": "diamond",
+        "from": {
+          "diamond": 3,
+          "stick": 2
+        }
+      },
+      "diamond_shovel": {
+        "tool": "shovel",
+        "tier": "diamond",
+        "from": {
+          "diamond": 1,
+          "stick": 2
+        }
+      },
+      "diamond_hoe": {
+        "tool": "hoe",
+        "tier": "diamond",
+        "from": {
+          "diamond": 2,
+          "stick": 2
+        }
+      },
+      "diamond_sword": {
+        "tool": "sword",
+        "tier": "diamond",
+        "from": {
+          "diamond": 2,
+          "stick": 1
+        }
+      },
+      "diamond_fishing_rod": {
+        "tool": "fishing_rod",
+        "tier": "diamond",
+        "from": {
+          "diamond": 1,
+          "stick": 3
+        }
       }
     },
     "toolVoteEvery": 5
@@ -1093,8 +1608,11 @@
     "workbench"
   ],
   "choicePool": [
+    "farm",
     "house",
+    "pen",
     "well",
+    "canal",
     "fence",
     "workshop",
     "watch",
@@ -1106,5 +1624,119 @@
     "wall",
     "inn"
   ],
-  "milestonesNote": "フォロワーがこの数に届くと、特別な建物が投票の候補に入る（序盤は普通の村の建物だけ）"
+  "milestonesNote": "フォロワーがこの数に届くと、特別な建物が投票の候補に入る（序盤は普通の村の建物だけ）",
+  "fishing": {
+    "note": "池や海べで釣る。1 回の作業でうきが沈む見こみは biteChance（良い釣りざおほど多い）。釣れた物は、まず treasure と junk の確率を見て、どちらでもなければ fish の重みで魚を選ぶ",
+    "biteChance": 0.45,
+    "fish": [
+      [
+        "fish_funa",
+        45
+      ],
+      [
+        "fish_masu",
+        25
+      ],
+      [
+        "fish_koi",
+        18
+      ],
+      [
+        "fish_namazu",
+        12
+      ]
+    ],
+    "treasure": {
+      "p": 0.03,
+      "items": [
+        [
+          "old_coin",
+          2
+        ],
+        [
+          "pearl",
+          1
+        ]
+      ]
+    },
+    "junk": {
+      "p": 0.08,
+      "items": [
+        [
+          "old_boot",
+          1
+        ],
+        [
+          "driftwood",
+          2
+        ]
+      ]
+    }
+  },
+  "farming": {
+    "note": "くわで耕す → 種をまく → 何日かで育つ（育つ日数は crops の days）→ 収穫。水路のそばの畑は、毎日 canalBoost の確率でもう 1 段育つ。雨の日も 1 段育つ。畑は投票で「畑」を建てると、その場所に区画ができる",
+    "plotsPerFarm": 6,
+    "canalBoost": 0.6,
+    "canalRange": 8,
+    "crops": {
+      "wheat": {
+        "name": "小麦",
+        "days": 4,
+        "yield": [
+          2,
+          4
+        ],
+        "seed": "seeds"
+      },
+      "carrot": {
+        "name": "にんじん",
+        "days": 5,
+        "yield": [
+          2,
+          4
+        ]
+      },
+      "potato": {
+        "name": "じゃがいも",
+        "days": 6,
+        "yield": [
+          2,
+          5
+        ]
+      }
+    }
+  },
+  "animals": {
+    "note": "森や野原を歩く動物。柵（pen）を建てると、近くの動物を毎日 tamePerDay 頭まで中へ入れて飼う。村人は動物を殺さない。世話をする人（牧場の仕事）がいる日に、たまご・ミルク・羊毛・きのこをもらう",
+    "kinds": {
+      "cow": {
+        "name": "ウシ",
+        "gives": "milk",
+        "every": 1,
+        "p": 0.9
+      },
+      "sheep": {
+        "name": "ヒツジ",
+        "gives": "wool",
+        "every": 2,
+        "p": 1
+      },
+      "chicken": {
+        "name": "ニワトリ",
+        "gives": "egg",
+        "every": 1,
+        "p": 0.85
+      },
+      "pig": {
+        "name": "ブタ",
+        "gives": "mushroom",
+        "every": 1,
+        "p": 0.5,
+        "note": "鼻で土を掘って、きのこを見つける"
+      }
+    },
+    "penCap": 8,
+    "tamePerDay": 2,
+    "tameRange": 60
+  }
 }

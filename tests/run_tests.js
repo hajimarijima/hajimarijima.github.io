@@ -84,21 +84,29 @@ t('sim.js にコメントを入れると村人が増え、投票が数えられ�
   assert.strictEqual(vs.length, sample.expect.newVillagers);
   assert.ok(!fs.readFileSync(path.join(dir, 'villagers.json'), 'utf8').includes('secret_cat'), 'かくす人の名前は出ない');
   let st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
-  assert.ok(st.vote && st.vote.milestone === 10, '投票が開く');
-  // 投票の時刻を見本に合わせて、コメントを入れて 3 日進める
-  st.vote.opensAt = sample.vote.opensAt; st.vote.closesAt = sample.vote.closesAt;
+  // 1 日目：村人が来たら「何を建てる？」と「どこに建てる？」が A/B/C で開く。最初の候補は 小屋・倉庫・作業台
+  assert.strictEqual(st.votes.length, 2, '投票が 2 つ開く');
+  const [vw, vp] = st.votes;
+  assert.strictEqual(vw.kind, 'what'); assert.strictEqual(vp.kind, 'where');
+  assert.deepStrictEqual(vw.options.map((o) => o.key + o.build), ['Ahut', 'Bstorehouse', 'Cworkbench']);
+  assert.ok(vp.options.every((o) => typeof o.x === 'number' && typeof o.z === 'number' && o.name), '場所の候補には地図の位置がある');
+  assert.ok(Date.parse(vw.closesAt) <= Date.parse(vp.opensAt), '「何を」が締まってから「どこに」が開く');
+  // 投票の時刻を見本に合わせて、コメントを入れて 1 日進める → 締め切って決まる
+  for (const v of st.votes) { v.opensAt = sample.vote.opensAt; v.closesAt = sample.vote.closesAt; }
   fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify(st));
   fs.writeFileSync(inbox, JSON.stringify({ followers: sample.followers, joinComments: sample.joinComments, voteComments: sample.voteComments }));
   node('tools/sim.js', '--inbox', inbox);
   st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
-  assert.deepStrictEqual(st.vote.votes, sample.expect.votes);
-  node('tools/sim.js', '--inbox', inbox, '--days', '2');
-  st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
-  assert.strictEqual(st.vote, null);
+  assert.strictEqual(st.decisions.length, 2);
   const d = st.decisions[0];
+  assert.strictEqual(d.kind, 'what');
   assert.deepStrictEqual(d.votes, sample.expect.votes);
   assert.ok(d.key === 'A' || d.key === 'B', '同点の A と B のどちらか（くじ引き）');
   assert.strictEqual(d.tie, true);
+  assert.strictEqual(st.plan.build, d.build, '決まった物を建てる');
+  assert.ok(st.plan.site && st.decisions[1].kind === 'where', '場所も決まる');
+  assert.ok(!st.votes.some((v) => v.kind === 'what'), '建つまでは次の「何を」は開かない');
+  node('tools/sim.js', '--inbox', inbox, '--days', '2');
   const hist = JSON.parse(fs.readFileSync(path.join(dir, 'history.json'), 'utf8'));
   assert.ok(hist.some((h) => h.type === 'vote_result'));
   vs = JSON.parse(fs.readFileSync(path.join(dir, 'villagers.json'), 'utf8'));
@@ -344,7 +352,9 @@ t('夜：敵は来ても村人は死なない・ケガは次の日だけ休む�
 });
 t('夜：sim.js で履歴に残り、ケガをした人は次の日「休み」になる', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-night-'));
-  fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+  const cfgN = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  cfgN.enemies = { ...(cfgN.enemies || {}), enabled: true }; // ふだんは止めてある。コードは残っているので、出す設定で確かめる
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfgN));
   const env = { ...process.env, TOWN_DATA: dir };
   const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
   node('tools/init.js', '--demo'); node('tools/sim.js', '--demo', '--days', '30');
@@ -393,12 +403,211 @@ t('鉱石：鉄・金・ダイヤを掘ると履歴に「〇〇が鉄鉱石を�
   const h2 = JSON.parse(fs.readFileSync(path.join(dir2, 'history.json'), 'utf8'));
   assert.deepStrictEqual(h2.filter((x) => x.type === 'find').map((x) => x.text), finds.map((x) => x.text));
 });
-t('投票：序盤（10・25 人）は普通の村の建物だけ。時計台などの特別な建物は後の節目', () => {
+t('投票：最初の候補は普通の村の建物だけ。時計台などの特別な建物はフォロワー 50 人から候補に入る', () => {
   const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
-  const plain = new Set(['hut', 'house', 'well', 'storehouse', 'fence', 'workshop', 'watch', 'garden', 'plaza', 'shop', 'lamps', 'wall']);
-  for (const m of config.milestones.filter((x) => x.at <= 25)) for (const o of m.options) assert.ok(plain.has(o.build), `${m.at} 人の ${o.build}`);
-  const ct = config.milestones.find((m) => m.options.some((o) => o.build === 'clocktower'));
+  const plain = new Set(['hut', 'house', 'well', 'storehouse', 'workbench', 'fence', 'workshop', 'watch', 'garden', 'plaza', 'shop', 'lamps', 'wall', 'inn', 'farm', 'canal', 'pen']);
+  for (const b of config.firstChoices.concat(config.choicePool)) assert.ok(plain.has(b), b);
+  assert.ok(config.firstChoices.includes('workbench'), '作業台は最初から選べる');
+  const ct = config.milestones.find((m) => m.adds.includes('clocktower'));
   assert.ok(ct && ct.at >= 50, '時計台は 50 人以降');
+});
+
+// ---------- 道具作り ----------
+t('道具作り：板 3＋棒 2 で木のつるはし。原木から板・棒を自動で作る。足りない時は「あと いくつ」', () => {
+  const CR = require('../tools/craft');
+  const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const CC = config.crafting, IT = config.items;
+  assert.deepStrictEqual(CC.recipes.wood_pickaxe.from, { planks: 3, stick: 2 });
+  // 原木 2 → 板 8 → 棒に板 2 を使う → 板 3 を使って、板 3 と棒 2 が残る
+  const p = CR.plan({ log: 2 }, CC.recipes.wood_pickaxe, CC);
+  assert.ok(p.ok); assert.deepStrictEqual(p.store, { planks: 3, stick: 2 });
+  assert.deepStrictEqual(CR.plan({ log: 1 }, CC.recipes.wood_pickaxe, CC).missing, { log: 1 });
+  const m = CR.plan({ cobble: 1, stick: 2 }, CC.recipes.stone_pickaxe, CC);
+  assert.ok(!m.ok); assert.strictEqual(CR.missingText(m.missing, IT), '丸石 あと 2');
+  // 石の道具は作業台がいる。あれば石を選ぶ。投票で決まった道具（goal）を先に作る
+  const store = { log: 4, cobble: 6 };
+  assert.strictEqual(CR.choose(store, 'pickaxe', CC, { built: [] }).key, 'wood_pickaxe');
+  assert.strictEqual(CR.choose(store, 'pickaxe', CC, { built: ['workbench'] }).key, 'stone_pickaxe');
+  assert.strictEqual(CR.choose(store, 'pickaxe', CC, { built: ['workbench'], have: 'stone' }).key, null);
+  assert.strictEqual(CR.choose({ log: 4, iron: 3, coal: 1, cobble: 3 }, 'pickaxe', CC, { built: ['workbench'], goal: 'iron_pickaxe' }).key, 'iron_pickaxe');
+  // 良い道具ほど少ない回数で落ち、多く落ち、長く持つ
+  const T = CC.tiers;
+  assert.ok(T.hand.hits > T.wood.hits && T.wood.hits > T.stone.hits && T.stone.hits > T.iron.hits);
+  assert.ok(T.wood.drop <= T.stone.drop && T.stone.drop < T.iron.drop);
+  assert.ok(T.wood.durability < T.stone.durability && T.stone.durability < T.iron.durability);
+});
+t('道具作り：sim.js で序盤に木の道具を作り、こわれたら作り直す・同じ種なら同じ結果', () => {
+  const runs = [0, 1].map(() => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-craft-'));
+    fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+    const env = { ...process.env, TOWN_DATA: dir };
+    execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js'), '--demo'], { env });
+    execFileSync(process.execPath, [path.join(ROOT, 'tools/sim.js'), '--demo', '--days', '40'], { env });
+    const rd = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    const out = { life: rd('life.json'), state: rd('state.json'), world: rd('world.json'), hist: rd('history.json') };
+    fs.rmSync(dir, { recursive: true, force: true });
+    return out;
+  });
+  const [r] = runs;
+  const key = (r) => JSON.stringify([r.life, r.world, r.state.store, r.state.decisions, r.hist.map((h) => h.text)]);
+  assert.ok(key(runs[0]) === key(runs[1]), '同じ種なら同じ');
+  const diary = Object.values(r.life).flatMap((L) => L.diary);
+  // 最初の道具（木）は持って来るので、作るのは別の種類の道具がいる時。序盤（6 日目まで）に木の道具を作る
+  assert.ok(diary.some((d) => d.day <= 6 && /チェストの材料で木の(つるはし|斧|釣りざお|くわ)を作った/.test(d.text)), '序盤に木の道具を作る');
+  // 最初の道具があるので、足りない日はないこともある。あれば「あと いくつ」の形
+  assert.ok(diary.filter((d) => /材料が足りない/.test(d.text)).every((d) => /材料が足りない（.+ あと \d+）/.test(d.text)), '足りない時は「あと いくつ」');
+  assert.ok(diary.some((d) => /こわれた|作り直した/.test(d.text)), '道具はこわれて、作り直す');
+  if (r.world.buildings.some((b) => b.type === 'workbench')) assert.ok(diary.some((d) => /石の(つるはし|斧)を作った/.test(d.text)), '作業台ができたら石の道具');
+  assert.ok((r.state.store.log || 0) + (r.state.store.planks || 0) > 0, 'チェストに木がある');
+  assert.ok(r.state.store.cobble > 0, 'チェストに丸石がある');
+  assert.ok(r.world.buildings.length >= 3, '投票で決まった物が建つ');
+  assert.ok(r.world.buildings.every((b) => b.voted), 'どの建物も投票で決まった');
+  assert.ok(!r.hist.some((h) => h.type === 'night'), '敵は止めてある（config.enemies.enabled=false）');
+});
+
+// ---------- 木と岩 ----------
+t('木と岩：切った木は切り株→苗木→木・掘り切った岩は何日かで戻る（日数は config.json）・地図の全体に散らばる', () => {
+  const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const RS = config.respawn;
+  assert.ok(RS.stumpDays > 0 && RS.saplingDays > 0 && RS.rockDays[0] > 0, 'config.json に日数がある');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-regrow-'));
+  fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+  const env = { ...process.env, TOWN_DATA: dir };
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+  node('tools/init.js', '--demo');
+  const rd = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+  const w0 = rd('world.json');
+  const near = (a) => a.filter((o) => Math.hypot(o.x, o.z) < 40).length;
+  assert.ok(near(w0.trees) >= 8 && near(w0.rocks) >= 2, `町の近くにも木 ${near(w0.trees)}・岩 ${near(w0.rocks)}`);
+  const quad = (a) => [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([sx, sz]) => a.filter((o) => o.x * sx > 0 && o.z * sz > 0).length);
+  assert.ok(quad(w0.rocks).every((n) => n >= 3), '岩が四方にある ' + quad(w0.rocks));
+  const seen = { stump: 0, sapling: 0, regrown: 0, rockGone: 0, rockBack: 0 };
+  const prev = {};
+  for (let d = 0; d < 20; d++) {
+    node('tools/sim.js', '--demo');
+    const w = rd('world.json');
+    for (const t of w.trees) {
+      if (t.state === 'stump') seen.stump++;
+      if (t.state === 'sapling') seen.sapling++;
+      if (prev[t.id] === 'sapling' && t.state === 'tree') seen.regrown++;
+      prev[t.id] = t.state;
+    }
+    for (const r of w.rocks) {
+      if (r.hp <= 0) { seen.rockGone++; assert.ok(r.back > 0, '戻る日がある'); }
+      if (prev[r.id] === 0 && r.hp > 0) seen.rockBack++;
+      prev[r.id] = r.hp > 0 ? 1 : 0;
+    }
+  }
+  assert.ok(seen.stump && seen.sapling && seen.regrown, '切り株 → 苗木 → 木 ' + JSON.stringify(seen));
+  assert.ok(seen.rockGone && seen.rockBack, '岩はなくなって、また出る ' + JSON.stringify(seen));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+t('1 日目：村のまん中の草と石を整地し、チェストを置く', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-level-'));
+  fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+  const env = { ...process.env, TOWN_DATA: dir };
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+  node('tools/init.js', '--demo');
+  const rd = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+  assert.ok(rd('world.json').debris.length > 0 && !rd('world.json').square.leveled, '最初は草と石がある');
+  node('tools/sim.js', '--demo');
+  const w = rd('world.json'), life = rd('life.json');
+  assert.ok(w.square.leveled, '1 日目に整地が終わる');
+  assert.ok(Object.values(life).some((L) => L.action === 'level'), '整地する人がいる');
+  assert.ok(w.chest && w.chest.day === 1, 'チェストを置く');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+t('釣り・畑・動物：同じ種なら同じ結果・動物は減らない・はじめては歴史に残る', () => {
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  // 確率は config.json から読む（0〜1 の間・重みは正・宝物とがらくたはまれ）
+  assert.ok(cfg.fishing.biteChance > 0 && cfg.fishing.biteChance <= 1);
+  assert.ok(cfg.fishing.treasure.p < 0.1 && cfg.fishing.junk.p < 0.2, '宝物とがらくたはまれ');
+  for (const [id, w] of [...cfg.fishing.fish, ...cfg.fishing.treasure.items, ...cfg.fishing.junk.items]) assert.ok(w > 0 && cfg.items[id], id);
+  for (const k of ['wheat', 'carrot', 'potato']) assert.ok(cfg.farming.crops[k].days >= 3, k);
+  const run = () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-farm-'));
+    fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+    const env = { ...process.env, TOWN_DATA: dir };
+    const rd = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js'), '--demo'], { env });
+    const n0 = rd('world.json').animals.length;
+    const counts = [];
+    for (let d = 0; d < 6; d++) {
+      execFileSync(process.execPath, [path.join(ROOT, 'tools/sim.js'), '--demo', '--days', '5'], { env });
+      counts.push(rd('world.json').animals.length);
+    }
+    const out = { n0, counts, world: rd('world.json'), history: rd('history.json'), store: rd('state.json').store };
+    fs.rmSync(dir, { recursive: true, force: true });
+    return out;
+  };
+  const a = run(), b = run();
+  assert.deepStrictEqual(a.world.animals, b.world.animals, '動物の動きが同じ');
+  assert.deepStrictEqual(a.world.fields, b.world.fields, '畑が同じ');
+  assert.deepStrictEqual(a.store, b.store, 'チェストの中身が同じ');
+  assert.ok(a.n0 >= 8 && a.counts.every((n) => n === a.n0), '動物は 1 匹も減らない（村人は動物を殺さない）');
+  const firsts = a.history.filter((h) => h.type === 'first').map((h) => h.text).join('\n');
+  assert.ok(/はじめて魚を釣った/.test(firsts), '初めての魚 ' + firsts);
+  assert.ok(/はじめて.*柵の中に入れて/.test(firsts), '初めて飼った');
+  assert.ok(/はじめて畑を耕して/.test(firsts) && /畑ではじめて.*とれた/.test(firsts), '初めての畑と収穫');
+  assert.ok(a.store.egg > 0 && a.store.milk > 0 && a.store.wool > 0, 'たまご・ミルク・羊毛がたまる');
+  assert.ok(Object.keys(a.store).some((k) => k.startsWith('fish_')), '魚がたまる');
+  assert.ok(a.world.animals.filter((x) => x.pen).length <= cfg.animals.penCap, '柵の数を超えない');
+});
+t('最初の道具：コメントの言葉で選ぶ・なければ人の少ない仕事・木の道具を 1 つ持つ・プロフィールは参加した日に 1 回だけ', () => {
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const ST = cfg.startTools;
+  const cases = { '参加したい ピッケル': 'pickaxe', '参加したい つるはし': 'pickaxe', '参加したい！採掘': 'pickaxe', '参加したい 斧': 'axe', '参加します 木こり': 'axe', '参加したい 釣り': 'fishing_rod', '参加したい 釣りざお': 'fishing_rod', '参加 くわ': 'hoe', '参加したい 畑やりたい': 'hoe', '参加したい': null, '参加したい 剣': null, '参加したい 釣りと畑': 'fishing_rod' };
+  for (const [k, v] of Object.entries(cases)) assert.strictEqual(P.parseStartTool(k, ST), v, k);
+  assert.strictEqual(P.parseStartTool('参加したい 剣', ST, { enemies: true }), 'sword', '敵が出るようになったら剣も選べる');
+  for (const o of ST.options) assert.ok(cfg.items[o.item] && o.item.startsWith('wood_'), o.id);
+  const regs = P.registrationsFrom([
+    { text: '参加したい ピッケル', timestamp: '2026-11-02T01:00:00Z', from: { id: '9001', username: 'a' } },
+    { text: '参加したい', timestamp: '2026-11-02T02:00:00Z', from: { id: '9002', username: 'b' } },
+    { text: '参加したい', timestamp: '2026-11-02T03:00:00Z', from: { id: '9001', username: 'a' } },
+  ], cfg.joinWord, ST);
+  assert.strictEqual(regs.find((r) => r.username === 'a').startTool, 'pickaxe', 'あとの「参加したい」だけのコメントで消えない');
+  assert.strictEqual(regs.find((r) => r.username === 'b').startTool, undefined);
+  const vs = [];
+  for (const r of regs) P.upsertVillager(vs, { ...r, joined: 'x', joinedDay: 2 }, new Set());
+  assert.strictEqual(vs[0].startTool, 'pickaxe');
+  // プロフィール：参加した日なら 1 回だけ変えられる。次の日や 2 回目は変わらない
+  const PR = require('../tools/profiles');
+  const fields = cfg.profileFields;
+  assert.ok(fields.find((f) => f.id === 'startTool' && f.options.includes('つるはし') && !f.options.includes('剣')));
+  let r = PR.applyProfiles(vs, { [vs[0].key]: { startTool: '釣りざお' } }, {}, fields, { day: 2, startTools: ST });
+  assert.strictEqual(vs[0].startTool, 'fishing_rod');
+  r = PR.applyProfiles(vs, { [vs[0].key]: { startTool: 'くわ' } }, {}, fields, { day: 2, startTools: ST });
+  assert.strictEqual(vs[0].startTool, 'fishing_rod', '2 回目は変わらない');
+  assert.ok(r.report.rejected.some((x) => x.field === 'startTool'));
+  PR.applyProfiles(vs, { [vs[1].key]: { startTool: 'くわ' } }, {}, fields, { day: 3, startTools: ST });
+  assert.strictEqual(vs[1].startTool, undefined, '次の日は変えられない');
+  // sim.js：見本の町で、全員が木の道具を 1 つ持って来る・自動の分け方はかたよらない・同じ種なら同じ
+  const run = () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-start-'));
+    fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+    const env = { ...process.env, TOWN_DATA: dir };
+    const rd = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js'), '--demo'], { env });
+    execFileSync(process.execPath, [path.join(ROOT, 'tools/sim.js'), '--demo', '--days', '1'], { env });
+    const out = { life: rd('life.json'), villagers: rd('villagers.json'), day: rd('state.json').day };
+    fs.rmSync(dir, { recursive: true, force: true });
+    return out;
+  };
+  const a = run(), b = run();
+  const act = a.villagers.filter((v) => v.joinedDay <= a.day);
+  assert.ok(act.length >= 2, '見本の村人がいる');
+  const n = {};
+  for (const v of act) {
+    const L = a.life[v.key];
+    const o = ST.options.find((x) => x.id === L.startTool);
+    assert.ok(o && !o.needsEnemies, v.key + ' の最初の道具');
+    assert.ok(L.inv.some((s) => s && s.item === o.item), '木の道具を持っている');
+    assert.ok(L.slots === cfg.inventory.base, '持ち物は 3 つ');
+    n[o.id] = (n[o.id] || 0) + 1;
+  }
+  const cnt = ST.options.filter((o) => !o.needsEnemies).map((o) => n[o.id] || 0);
+  assert.ok(Math.max(...cnt) - Math.min(...cnt) <= 1, '自動の分け方がかたよらない ' + JSON.stringify(n));
+  assert.deepStrictEqual(Object.fromEntries(Object.entries(a.life).map(([k, L]) => [k, L.startTool])), Object.fromEntries(Object.entries(b.life).map(([k, L]) => [k, L.startTool])), '同じ種なら同じ');
 });
 
 console.log(`\nぜんぶ通りました（${ok} 件）`);

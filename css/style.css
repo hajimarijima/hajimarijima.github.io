@@ -266,3 +266,11 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 
 /* 夜の時刻の札 */
 .chip.nightchip{background:#1f2a4a;color:#e8ecff}
+
+/* 町のチェスト（マインクラフト風のます目） */
+.mcslots { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 4px; padding: 6px; background: #c6c6c6; border: 3px solid; border-color: #fff #555 #555 #fff; border-radius: 2px; }
+.mcslot { position: relative; display: flex; flex-direction: column; align-items: center; padding: 6px 2px 4px; background: #8b8b8b; border: 2px solid; border-color: #373737 #fff #fff #373737; }
+.mcslot img { image-rendering: pixelated; width: 32px; height: 32px; }
+.mcslot b { position: absolute; right: 4px; top: 22px; color: #fff; font-size: 14px; text-shadow: 2px 2px 0 #3f3f3f; font-variant-numeric: tabular-nums; }
+.mcslot span { margin-top: 4px; font-size: 11px; color: #fff; text-shadow: 1px 1px 0 #3f3f3f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.btag.chesttag { background: #7a4e22; color: #fff3d6; font-weight: 700; text-decoration: none; cursor: pointer; }

@@ -24,7 +24,7 @@
   <div id="current"></div>
   <h2>これまでの投票</h2>
   <div id="past"></div>
-  <h2>これからの節目</h2>
+  <h2>フォロワーの節目で増える候補</h2>
   <ul class="list card" id="future"></ul>
 </main>
 <script type="module">
@@ -71,30 +71,31 @@ loadAll().then(({ state, config }) => {
     document.getElementById('bar').style.width = Math.min(100, ((state.followers - prevAt) / (nextMs.at - prevAt)) * 100) + '%';
   } else { document.getElementById('nextline').textContent = 'すべての節目に届きました'; document.getElementById('bar').style.width = '100%'; }
 
-  const v = state.vote;
   const cur = document.getElementById('current');
-  if (v) {
+  const votes = state.votes || (state.vote ? [state.vote] : []);
+  const what = { what: '何を建てる？', where: 'どこに建てる？', tool: 'どの道具を作る？' };
+  cur.innerHTML = votes.length ? votes.map((v) => {
     const total = v.votes.A + v.votes.B + v.votes.C;
-    const close = JST(v.closesAt);
-    cur.innerHTML = `<h2>投票中：フォロワー ${v.milestone} 人の節目</h2>
-      <div class="howto">いちばん新しい投票の投稿に、<b>A・B・C</b> のどれか 1 つをコメントしてください。1 人 1 票で、何度か書いたら最後のコメントを数えます。締め切りは <b>${close.m}月${close.d}日 ${close.h}時</b>（日本時間）です。</div>
+    const op = JST(v.opensAt), close = JST(v.closesAt);
+    return `<h2>投票中：${esc(v.question || what[v.kind] || '')}</h2>
+      <div class="howto">投票の投稿に、<b>A・B・C</b> のどれか 1 つをコメントしてください。1 人 1 票で、何度か書いたら最後のコメントを数えます。受け付けは <b>${op.m}月${op.d}日 ${op.h}時〜${close.m}月${close.d}日 ${close.h}時</b>（日本時間）です。</div>
       <div class="card" style="margin-top:12px">${options(v)}
-      <p class="muted" style="margin-bottom:0">${v.voters} 人が投票・合計 ${total} 票（${v.openedDay}日目から ${v.closesDay}日目の朝まで）</p></div>
+      <p class="muted" style="margin-bottom:0">${v.voters} 人が投票・合計 ${total} 票</p></div>
       <h2>時間ごとの票の伸び</h2><div class="card">${chart(v.timeline)}</div>`;
-  } else cur.innerHTML = '<h2>いまは投票していません</h2><p class="muted">フォロワーが次の節目に届くと、ここで投票が始まります。</p>';
+  }).join('') : '<h2>いまは投票していません</h2><p class="muted">今の建物ができたら、次の「何を建てる？」が始まります。</p>';
 
   document.getElementById('past').innerHTML = state.decisions.length ? state.decisions.slice().reverse().map((d) => `
     <div class="card" style="margin-bottom:12px">
-      <b>フォロワー ${d.milestone} 人の節目</b>（${d.day}日目に決定）：<b>${esc(d.key + ' ' + d.name)}</b>${d.tie ? '（同点のためくじ引き）' : ''}
+      <b>${esc(d.question || what[d.kind] || (d.milestone ? 'フォロワー ' + d.milestone + ' 人の節目' : ''))}</b>（${d.day}日目に決定）：<b>${esc(d.key + ' ' + d.name)}</b>${d.tie ? '（同点のためくじ引き）' : ''}
       ${options(d)}
       <p class="muted">${d.voters} 人が投票</p>
       <details><summary>時間ごとの票の伸び</summary>${chart(d.timeline)}</details>
     </div>`).join('') : '<p class="muted">まだありません。</p>';
 
+  const B = config.buildings;
   document.getElementById('future').innerHTML = config.milestones.map((m) => {
-    const d = state.decisions.find((x) => x.milestone === m.at);
-    const status = d ? `決まり：${esc(d.key + ' ' + d.name)}` : state.vote && state.vote.milestone === m.at ? '投票中' : 'まだ';
-    return `<li><b>${m.at.toLocaleString()} 人</b>　<span class="muted">${status}</span></li>`;
+    const got = state.reached.includes(m.at);
+    return `<li><b>${m.at.toLocaleString()} 人</b>　${esc(m.adds.map((k) => B[k].name).join('・'))}<span class="muted">${got ? '（候補に入った）' : 'が候補に入る'}</span></li>`;
   }).join('');
 }).catch(showError);
 </script>

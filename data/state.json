@@ -19,9 +19,14 @@
  "followerLog": [],
  "reached": [],
  "vote": null,
+ "votes": [],
  "decisions": [],
- "queue": null,
- "repeatIdx": 0,
+ "plan": null,
+ "pool": null,
+ "toolGoal": null,
+ "store": {
+  "berry": 30
+ },
  "bonus": {
   "wood": 0,
   "stone": 0,

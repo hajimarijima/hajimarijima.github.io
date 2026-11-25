@@ -147,128 +147,215 @@ export function setCrack(mesh, stage) {
   c.visible = true; c.material = crackMat(Math.max(0, Math.min(STAGES - 1, stage)));
 }
 
-// ---------- 岩 ----------
-// 下 3×3、中 2×2、上 1。少ない岩は下の角から減らす。掘る順（0 番目）は上から
-function rockSlots(max) {
-  const base = [], mid = [], top = [{ x: 0, y: 2.5 * B, z: 0, layer: 2 }];
-  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) base.push({ x: i * B, y: 0.5 * B, z: j * B, layer: 0, ring: Math.abs(i) + Math.abs(j) });
-  for (const i of [-0.5, 0.5]) for (const j of [-0.5, 0.5]) mid.push({ x: i * B, y: 1.5 * B, z: j * B, layer: 1 });
-  const center = base.filter((p) => p.ring === 0), edge = base.filter((p) => p.ring === 1), corner = base.filter((p) => p.ring === 2);
-  const keep = [...center, ...edge, ...mid, ...top, ...corner].slice(0, Math.max(1, Math.min(14, max)));
-  const rank = (p) => (p.layer === 2 ? 0 : p.layer === 1 ? 1 : p.ring === 2 ? 2 : p.ring === 1 ? 3 : 4);
-  return keep.sort((a, b) => rank(a) - rank(b));
-}
-export function makeRockBlocks(r) {
+// ---------- 岩（最初に見せた動画の形）：灰色の箱 3 つを重ねた岩。鉱石のある岩は小さな色の粒が見える ----------
+// たたいている間は形を変えない。掘り切るとくだけて消える
+const lamC = (c) => lam('c' + c, () => new THREE.MeshLambertMaterial({ color: c }));
+const RK = 1.4; // 最初の版より大きく（村人の背 3.8 に合わせる）
+const ROCK_PARTS = [
+  { s: [2.4, 1.6, 2.0], p: [0, 0.8, 0], c: 0 },
+  { s: [1.4, 1.1, 1.4], p: [0.9, 1.6, -0.2], c: 1 },
+  { s: [1.2, 0.8, 1.2], p: [-0.9, 0.4, 0.8], c: 2 },
+].map((P) => ({ ...P, s: P.s.map((v) => v * RK), p: P.p.map((v) => v * RK) }));
+const ROCK_COL = [0x9a9ea3, 0x8b8f95, 0xa7aaae];
+const ORE_HEX = { c: 0x2c2c2f, i: 0xd49d74, g: 0xf0cb36, d: 0x45dcd6 };
+const rockOre = (r) => { const m = String(r.blocks || '').match(/[gdic]/g) || []; return ['d', 'g', 'i', 'c'].find((k) => m.includes(k)) || (r.kind === 1 ? 'g' : null); };
+const ORE_SPOTS = [[0.6, 1.2, 1.0], [1.15, 0.5, 1.02], [-0.3, 0.95, 1.02]].map((p) => p.map((v) => v * RK));
+export const rockScale = (hp) => (hp <= 0 ? 0 : 1); // 削れて小さくなる段階はない
+export function makeRock(r) {
   const g = new THREE.Group();
-  const max = Math.min(14, r.max);
-  const slots = rockSlots(max);
-  const kinds = (r.blocks || '').padEnd(max, 's');
-  const meshes = slots.map((p, i) => cube(g, blockMat(kinds[i]), B, B, B, p.x, p.y, p.z));
-  // 掘った跡：土が見えるへこみ（下の段のブロックがなくなった所）
-  const dents = slots.map((p) => { if (p.layer) return null; const d = cube(g, dirtMat(), B * 0.98, 0.05, B * 0.98, p.x, 0.025, p.z, false); d.visible = false; return d; });
-  const rim = new THREE.Group();
-  for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) {
-    if (Math.max(Math.abs(i), Math.abs(j)) !== 2 || (Math.abs(i) === 2 && Math.abs(j) === 2)) continue;
-    cube(rim, grassMats(), B, 0.3, B, i * B, 0.15, j * B);
-  }
-  cube(rim, dirtMat(), 3 * B, 0.04, 3 * B, 0, 0.02, 0, false);
-  rim.visible = false; g.add(rim);
-  g.userData.rock = { meshes, slots, kinds, max, dents, rim };
+  const body = new THREE.Group(); g.add(body);
+  for (const P of ROCK_PARTS) cube(body, lamC(ROCK_COL[P.c]), ...P.s, ...P.p);
+  const ore = rockOre(r);
+  if (ore) ORE_SPOTS.forEach((p, i) => cube(body, lamC(ORE_HEX[ore]), 0.4 * RK * (i ? 0.7 : 1), 0.3 * RK * (i ? 0.7 : 1), 0.4 * RK * (i ? 0.7 : 1), ...p));
+  g.userData.rock = { body, max: r.max || 14 };
   g.rotation.y = (h32(r.id) % 628) / 100;
   g.position.set(r.x, 0, r.z);
-  setRockHp(g, Math.min(max, r.hp));
+  setRock(g, r.hp);
   return g;
 }
-// hp：残りのブロック数。上から順に消える
-export function setRockHp(g, hp) {
-  const R = g.userData.rock; if (!R) return;
-  const gone = R.max - Math.max(0, Math.min(R.max, hp));
-  R.meshes.forEach((m, i) => { m.visible = i >= gone; m.scale.setScalar(1); setCrack(m, -1); });
-  R.dents.forEach((d, i) => { if (d) d.visible = i < gone; });
-  R.rim.visible = gone >= R.max;
-}
+export function setRock(g, hp) { const R = g.userData.rock; if (R) R.body.visible = hp > 0; }
 
-// ---------- 木 ----------
-export function makeTreeBlocks(t) {
+// ---------- 木（最初に見せた動画の形）：茶色の幹に、緑の箱を 3 段＋横の小さな塊。色は平らな 3 色 ----------
+// 大きさだけ村人（2 ブロック = 3.8）に合わせて、最初の版の 2.6 倍・幹を少し長く
+export const BL = 1.9; // 1 ブロック（村人の背 3.8 の半分）
+const TK = 2.6, LIFT = 0.9;
+const GREENS = [[0x4f8f3a, 0x5fa344, 0x3f7a30], [0x3f7f45, 0x4e9452, 0x336b39], [0x6a9a3a, 0x7cad46, 0x58852f]];
+const TRUNK = 0x7a5230;
+const TREE_PARTS = [
+  { c: -1, s: [0.5 * TK, 2.2 * TK + LIFT, 0.5 * TK], p: [0, (2.2 * TK + LIFT) / 2, 0] },
+  { c: 0, s: [2.4 * TK, 1.2 * TK, 2.4 * TK], p: [0, 2.6 * TK + LIFT, 0] },
+  { c: 1, s: [1.8 * TK, 1.0 * TK, 1.8 * TK], p: [0, 3.6 * TK + LIFT, 0] },
+  { c: 2, s: [1.0 * TK, 0.7 * TK, 1.0 * TK], p: [0.1 * TK, 4.4 * TK + LIFT, -0.1 * TK] },
+  { c: 1, s: [0.5 * TK, 0.5 * TK, 0.5 * TK], p: [-1.1 * TK, 2.2 * TK + LIFT, 0.6 * TK] },
+];
+export const TREE_LEN = 4.75 * TK + LIFT; // 倒れた時の長さ（てっぺんまで）
+export const TREE_LEAF_Y = 2.0 * TK + LIFT; // 葉の下の高さ
+const partCol = (P, k) => (P.c < 0 ? TRUNK : GREENS[k][P.c]);
+export function makeTree(t) {
   const g = new THREE.Group();
-  const k = t.kind || 0;
-  const stump = cube(g, logMats(), LOG, 0.3, LOG, 0, 0.15, 0);
-  const trunk = new THREE.Group(); g.add(trunk);
-  const logs = [];
-  for (let i = 0; i < LOGS; i++) logs.push(cube(trunk, logMats(), LOG, LOG, LOG, 0, 0.3 + LOG / 2 + i * LOG, 0));
-  const canopy = new THREE.Group(); trunk.add(canopy);
-  const top = 0.3 + LOGS * LOG;
-  cube(canopy, leafMat(k), 2.4, 1.2, 2.4, 0, top + 0.3, 0);
-  cube(canopy, leafMat(k), 1.8, 1.0, 1.8, 0, top + 1.4, 0);
-  cube(canopy, leafMat(k), 1.0, 0.7, 1.0, 0.1, top + 2.2, -0.1);
-  cube(canopy, leafMat(k), 0.6, 0.6, 0.6, -1.15, top - 0.1, 0.6);
-  g.userData.tree = { logs, canopy, trunk, stump, size: t.size || 1, leafCol: LEAF[k][0] };
-  g.scale.setScalar(t.size || 1);
+  const s = t.size || 1, k = t.kind || 0;
+  const body = new THREE.Group(); g.add(body); // 根元（切り株の上）を軸に倒れる
+  let trunk = null;
+  for (const P of TREE_PARTS) {
+    const m = cube(body, lamC(partCol(P, k)), ...P.s, ...P.p);
+    if (P.c < 0) trunk = m;
+  }
+  body.scale.setScalar(s);
+  // 切り株：最初の版の切り株（茶色の低い箱・明るい切り口・横に出た根）を幹の太さに合わせる
+  const stump = new THREE.Group(); g.add(stump);
+  const SW = 0.55 * TK * s, SH = 0.35 * TK * 0.7 * s;
+  cube(stump, lamC(TRUNK), SW, SH, SW, 0, SH / 2, 0);
+  cube(stump, lamC(0xd8b98a), SW * 0.82, 0.05, SW * 0.82, 0, SH + 0.02, 0, false);
+  const root = cube(stump, lamC(0x6b4628), 0.2 * TK * s, 0.12 * TK * s, 0.6 * TK * s, 0.45 * TK * s, 0.06 * TK * s, 0.2 * TK * s); root.rotation.y = 0.5;
+  const sapling = new THREE.Group(); g.add(sapling);
+  cube(sapling, lamC(TRUNK), 0.15 * 2.2, 0.7 * 2.2, 0.15 * 2.2, 0, 0.35 * 2.2, 0);
+  cube(sapling, lamC(GREENS[k][1]), 0.6 * 2.2, 0.5 * 2.2, 0.6 * 2.2, 0, 0.9 * 2.2, 0);
+  g.userData.tree = { body, trunk, stump, sapling, size: s, stumpH: SH, leafCol: '#' + GREENS[k][0].toString(16).padStart(6, '0') };
   g.position.set(t.x, 0, t.z);
-  setTreeCut(g, t.state === 'tree' ? 0 : LOGS);
+  setTreeState(g, t.state);
   return g;
 }
-// cut：下から切った幹の数（小数で、上の幹が落ちていく途中も表せる）
-export function setTreeCut(g, cut, fall = 0) {
+export function setTreeState(g, state) {
   const T = g.userData.tree; if (!T) return;
-  const n = Math.floor(cut);
-  T.logs.forEach((m, i) => { m.visible = i >= n; m.scale.setScalar(1); setCrack(m, -1); });
-  T.trunk.position.y = -(n - fall) * LOG; // 切った分だけ上が落ちる（fall: 0..1 で落ちる途中）
-  T.canopy.visible = n < LOGS;
+  T.body.visible = state === 'tree'; T.stump.visible = state === 'stump'; T.sapling.visible = state === 'sapling';
+  T.body.quaternion.identity(); T.body.position.set(0, 0, 0);
 }
-export function makeSapling(t) {
-  const g = new THREE.Group();
-  cube(g, logMats(), 0.15, 0.7, 0.15, 0, 0.35, 0);
-  cube(g, leafMat(t.kind || 0), 0.6, 0.5, 0.6, 0, 0.9, 0);
-  g.position.set(t.x, 0, t.z);
-  return g;
+// 倒れる：u は倒れ始めてからの時間 ÷ 倒れる時間（0..1 で倒れる、1..1.45 で地面で弾む）。
+// 根元を軸に一方へ、ゆっくり傾き始めて、だんだん速く倒れる。gone が 0.5 を越えたら消える（切り株は残る）
+const _ax = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _d = new THREE.Vector3();
+export function fallAngle(u) {
+  const R = Math.PI / 2 * 0.985;
+  if (u <= 0) return 0;
+  if (u < 1) return R * Math.pow(u, 2.6);
+  const b = (u - 1) / 0.45; // 弾む：1 回目は大きく、2 回目は小さく
+  if (b < 1) return R - 0.09 * Math.abs(Math.sin(b * Math.PI * 2)) * (b < 0.5 ? 1 : 0.35);
+  return R;
 }
+export const FALL_END = 1.45; // 弾み終わり（u の値）
+export function setTreeFall(g, u, dir, gone = 0) {
+  const T = g.userData.tree; if (!T) return;
+  T.body.visible = gone < 0.5; T.stump.visible = u > 0; T.sapling.visible = false;
+  _d.set(dir.x, 0, dir.z).normalize(); _ax.crossVectors(_up, _d).normalize();
+  T.body.quaternion.setFromAxisAngle(_ax, fallAngle(u));
+  T.body.position.set(0, T.stumpH * 0.6, 0);
+}
+export const setTreeCrack = () => {}; // ひびは描かない
 
 // ---------- 遠くの木と、手つかずの岩はまとめて描く（instancing。スマホでも重くならないように） ----------
 const UNIT = new THREE.BoxGeometry(1, 1, 1);
-const TREE_PARTS = (() => {
-  const top = 0.3 + LOGS * LOG, parts = [{ m: 'log', s: [LOG, 0.3, LOG], p: [0, 0.15, 0] }];
-  for (let i = 0; i < LOGS; i++) parts.push({ m: 'log', s: [LOG, LOG, LOG], p: [0, 0.3 + LOG / 2 + i * LOG, 0] });
-  parts.push({ m: 'leaf', s: [2.4, 1.2, 2.4], p: [0, top + 0.3, 0] }, { m: 'leaf', s: [1.8, 1.0, 1.8], p: [0, top + 1.4, 0] }, { m: 'leaf', s: [1.0, 0.7, 1.0], p: [0.1, top + 2.2, -0.1] }, { m: 'leaf', s: [0.6, 0.6, 0.6], p: [-1.15, top - 0.1, 0.6] });
-  return parts;
-})();
 export function makeForest(trees) {
   const g = new THREE.Group();
-  const nLog = trees.length * (LOGS + 1), byKind = [0, 1, 2].map((k) => trees.filter((t) => (t.kind || 0) === k));
-  const logs = new THREE.InstancedMesh(UNIT, logMats(), Math.max(1, nLog));
-  const leaves = byKind.map((list, k) => new THREE.InstancedMesh(UNIT, leafMat(k), Math.max(1, list.length * 4)));
   const o = new THREE.Object3D();
-  let li = 0; const lc = [0, 0, 0];
+  const groups = {}; // 色 → 行列
   for (const t of trees) {
     const s = t.size || 1, k = t.kind || 0;
     for (const P of TREE_PARTS) {
+      const c = partCol(P, k);
       o.position.set(t.x + P.p[0] * s, P.p[1] * s, t.z + P.p[2] * s); o.scale.set(P.s[0] * s, P.s[1] * s, P.s[2] * s); o.updateMatrix();
-      if (P.m === 'log') logs.setMatrixAt(li++, o.matrix); else leaves[k].setMatrixAt(lc[k]++, o.matrix);
+      (groups[c] = groups[c] || []).push(o.matrix.clone());
     }
   }
-  logs.count = li; leaves.forEach((m, k) => { m.count = lc[k]; });
-  for (const m of [logs, ...leaves]) { m.castShadow = true; m.receiveShadow = true; m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere(); g.add(m); }
+  for (const c in groups) {
+    const m = new THREE.InstancedMesh(UNIT, lamC(+c), groups[c].length);
+    groups[c].forEach((mx, i) => m.setMatrixAt(i, mx));
+    m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere(); g.add(m);
+  }
   return g;
 }
 export function makeRockField(rocks) {
   const g = new THREE.Group(), lists = {};
   const o = new THREE.Object3D(), q = new THREE.Object3D();
   for (const r of rocks) {
-    const max = Math.min(14, r.max), slots = rockSlots(max), kinds = (r.blocks || '').padEnd(max, 's');
-    const gone = max - Math.max(0, Math.min(max, r.hp));
+    if (!rockScale(r.hp)) continue;
     q.position.set(r.x, 0, r.z); q.rotation.set(0, (h32(r.id) % 628) / 100, 0); q.updateMatrix();
-    slots.forEach((p, i) => {
-      if (i < gone) return;
-      const k = ORE_COL[kinds[i]] ? kinds[i] : 's';
-      o.position.set(p.x, p.y, p.z); o.scale.set(B, B, B); o.updateMatrix();
-      (lists[k] = lists[k] || []).push(new THREE.Matrix4().multiplyMatrices(q.matrix, o.matrix));
-    });
+    const parts = ROCK_PARTS.map((P) => ({ c: ROCK_COL[P.c], s: P.s, p: P.p }));
+    const ore = rockOre(r);
+    if (ore) ORE_SPOTS.forEach((p, i) => { const k = i ? 0.7 : 1; parts.push({ c: ORE_HEX[ore], s: [0.4 * RK * k, 0.3 * RK * k, 0.4 * RK * k], p }); });
+    for (const P of parts) {
+      o.position.set(...P.p); o.scale.set(...P.s); o.updateMatrix();
+      (lists[P.c] = lists[P.c] || []).push(new THREE.Matrix4().multiplyMatrices(q.matrix, o.matrix));
+    }
   }
-  for (const k in lists) {
-    const m = new THREE.InstancedMesh(UNIT, blockMat(k), lists[k].length);
-    lists[k].forEach((mx, i) => m.setMatrixAt(i, mx));
+  for (const c in lists) {
+    const m = new THREE.InstancedMesh(UNIT, lamC(+c), lists[c].length);
+    lists[c].forEach((mx, i) => m.setMatrixAt(i, mx));
     m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere(); g.add(m);
   }
+  return g;
+}
+
+// ---------- 整地する前の草と小石 ----------
+export function makeDebris(list) {
+  const g = new THREE.Group();
+  const items = list.map((d) => {
+    const o = new THREE.Group();
+    if (d.k === 'grass') {
+      for (let i = 0; i < 4; i++) cube(o, lamC(i % 2 ? 0x5e9a3c : 0x4f8a32), 0.12, 0.5 + (i % 3) * 0.18, 0.12, (i % 2 - 0.5) * 0.3, 0.3, (Math.floor(i / 2) - 0.5) * 0.3);
+      cube(o, lamC(0x6aa648), 0.7, 0.14, 0.7, 0, 0.07, 0);
+    } else {
+      cube(o, lamC(0x8d9196), 0.55, 0.32, 0.45, 0, 0.16, 0); cube(o, lamC(0xa3a7ab), 0.3, 0.22, 0.3, 0.3, 0.11, 0.25);
+    }
+    o.scale.setScalar(d.s || 1); o.position.set(d.x, 0, d.z); o.rotation.y = (h32(d.x + ',' + d.z) % 628) / 100; g.add(o);
+    return o;
+  });
+  g.userData.items = items;
+  return g;
+}
+
+// ---------- チェスト：茶色の木箱に黒い縁と、前の錠（ふたは後ろのちょうつがいで開く） ----------
+// 面の絵：板の横すじ・左上が明るく右下が暗い・まわりに黒い縁
+const chestSideTex = (k) => canvasTex('chestside' + k, (g, R) => {
+  const pal = k === 2 ? ['#a96f33', '#b67a3a', '#9c652e'] : ['#9a612b', '#a86c32', '#8d5826'];
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px(g, x, y, pal[Math.floor(R() * 3)]);
+  for (const y of k === 2 ? [5, 10] : [4, 9]) for (let x = 1; x < 15; x++) { px(g, x, y, '#6a3f17'); px(g, x, y + 1, '#c08443'); } // 板の継ぎ目と、下の板の明るい縁
+  for (let i = 0; i < 6; i++) { const y = 2 + Math.floor(R() * 12), x0 = 2 + Math.floor(R() * 8); for (let x = x0; x < x0 + 3 + R() * 4; x++) px(g, x, y, '#7b4a1d'); } // 木目
+  for (let i = 1; i < 15; i++) { px(g, i, 1, '#c98d4a'); px(g, 1, i, '#c08443'); px(g, i, 14, '#5e3612'); px(g, 14, i, '#5e3612'); } // 左上は明るく、右下は暗く
+  for (let i = 0; i < 16; i++) { px(g, i, 0, '#1c120a'); px(g, i, 15, '#1c120a'); px(g, 0, i, '#1c120a'); px(g, 15, i, '#1c120a'); } // 黒い縁
+});
+const chestMats = (k) => lam('chestM' + k, () => new THREE.MeshLambertMaterial({ map: chestSideTex(k) }));
+export function makeChest() {
+  const g = new THREE.Group();
+  const W = 1.3, D = 1.0, HB = 0.62, HL = 0.26, T = 0.07; // 箱の高さ・ふたの高さ・板の厚み
+  const side = chestMats(1), top = chestMats(2), inner = lamC(0x3b2410), black = lamC(0x1c120a);
+  const metal = lamC(0xc9cdd3), metalD = lamC(0x6f747c), metalL = lamC(0xf2f4f6);
+  // 箱：前・後ろ・左右の面は 1 枚の絵（黒い縁つき）。底と中の暗がり
+  const bm = [side, side, inner, side, side, side];
+  const bb = new THREE.Mesh(geo(W, HB, D), bm); bb.position.y = HB / 2; bb.castShadow = true; bb.receiveShadow = true; g.add(bb);
+  cube(g, inner, W - 2 * T, 0.02, D - 2 * T, 0, HB + 0.005, 0, false); // 上から見た中（暗い）
+  for (const s of [1, -1]) { cube(g, side, W, 0.012, T, 0, HB + 0.006, s * (D / 2 - T / 2), false); cube(g, side, T, 0.012, D, s * (W / 2 - T / 2), HB + 0.006, 0, false); } // 壁の上の厚み
+  // ふた：後ろのちょうつがいを軸に開く
+  const lid = new THREE.Group(); lid.position.set(0, HB, -D / 2); g.add(lid);
+  const lm = [side, side, top, inner, side, side];
+  const lb = new THREE.Mesh(geo(W, HL, D), lm); lb.position.set(0, HL / 2 + 0.012, D / 2); lb.castShadow = true; lb.receiveShadow = true; lid.add(lb);
+  // 錠：ふたの前に付いた金具が、箱の縁にかかる
+  cube(lid, metalD, 0.24, 0.3, 0.07, 0, 0.0, D + 0.035);
+  cube(lid, metal, 0.18, 0.24, 0.07, 0, 0.0, D + 0.05);
+  cube(lid, metalL, 0.18, 0.04, 0.07, 0, 0.1, D + 0.052, false); // 上の光
+  cube(lid, black, 0.05, 0.08, 0.02, 0, -0.04, D + 0.09, false); // 鍵穴
+  // 中身（開けた時に見える。原木・丸石・木の実）
+  const inside = new THREE.Group(); g.add(inside);
+  cube(inside, lamC(0x8a5a30), 0.36, 0.2, 0.2, -0.3, HB - 0.12, -0.15); cube(inside, lamC(0x8a8e93), 0.24, 0.22, 0.24, 0.12, HB - 0.1, 0.1);
+  cube(inside, lamC(0xb8323a), 0.12, 0.1, 0.12, 0.38, HB - 0.06, -0.18);
+  g.userData.lid = lid; g.userData.inside = inside;
+  return g;
+}
+export const setChestOpen = (g, a) => { g.userData.lid.rotation.x = -a * 1.75; };
+
+// ---------- 「どこに建てる？」の印（A/B/C の旗） ----------
+const markTex = (L, col) => canvasTex('mark' + L + col, (g, R, n) => {
+  g.fillStyle = col; g.fillRect(0, 0, n, n);
+  g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(0, n - 10, n, 10);
+  g.fillStyle = '#fff'; g.font = `900 ${n * 0.72}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(L, n / 2, n / 2 + 4);
+}, 128);
+export const MARK_COL = { A: '#d0603e', B: '#3f78b8', C: '#4b9a5e' };
+export function makeMarker(L) {
+  const g = new THREE.Group();
+  cube(g, lamC(0x8a5a33), 0.18, 4.2, 0.18, 0, 2.1, 0);
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.8), new THREE.MeshBasicMaterial({ map: markTex(L, MARK_COL[L]), side: THREE.DoubleSide }));
+  flag.position.set(0, 4.6, 0); g.add(flag);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(3.0, 3.5, 40), new THREE.MeshBasicMaterial({ color: new THREE.Color(MARK_COL[L]), transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; g.add(ring);
+  g.userData.flag = flag; g.userData.ring = ring;
   return g;
 }
 
@@ -286,7 +373,7 @@ export function strikeAt(t, { rate, phase }, hits = HITS) {
   return { n, since, broken, inBlk, stage, last };
 }
 export const breakTime = (i, { rate, phase }, hits = HITS) => ((i + 1) * hits - 1 + phase) / rate;
-export const SHRINK = 0.16; // 壊れる瞬間に少し縮んでから消える
+export const SHRINK = 0; // 縮んで消える演出はなし（砕ける粒だけ）
 
 // 落ちた物：はねて落ち、ゆっくり回る。age は壊れてからの秒
 export function dropPos(o, seed, age, toward) {
@@ -326,6 +413,21 @@ function itemMesh(kind) {
   } else if (kind === 'sapling') {
     cube(g, logMats(), 0.06, 0.24, 0.06, 0, -0.02, 0);
     cube(g, leafMat(0), 0.22, 0.14, 0.22, 0, 0.14, 0);
+  } else if (kind === 'fish' || kind.startsWith('fish_')) {
+    // 魚：背は暗い青緑、腹は明るい銀。尾びれと目
+    cube(g, lamC(0x5f8fa0), 0.36, 0.08, 0.14, 0, 0.04, 0); cube(g, lamC(0xd8e2e6), 0.34, 0.07, 0.13, 0, -0.03, 0);
+    cube(g, lamC(0x48707e), 0.1, 0.14, 0.04, -0.22, 0.01, 0); cube(g, lamC(0x48707e), 0.1, 0.05, 0.03, 0.02, 0.1, 0);
+    cube(g, lamC(0x16181c), 0.03, 0.03, 0.15, 0.13, 0.03, 0);
+  } else if (kind === 'egg') {
+    cube(g, lamC(0xf2e6cc), 0.16, 0.2, 0.16, 0, 0, 0); cube(g, lamC(0xfff8e8), 0.06, 0.06, 0.04, -0.03, 0.05, 0.07);
+  } else if (kind === 'milk') {
+    cube(g, lamC(0x8a6a48), 0.18, 0.24, 0.18, 0, 0, 0); cube(g, lamC(0xf6f6f2), 0.14, 0.03, 0.14, 0, 0.12, 0);
+  } else if (kind === 'wool') {
+    cube(g, lamC(0xf1eee6), 0.26, 0.2, 0.26, 0, 0, 0); cube(g, lamC(0xfbfaf6), 0.16, 0.08, 0.16, -0.03, 0.12, -0.03);
+  } else if (kind === 'carrot') {
+    cube(g, lamC(0xe8742a), 0.08, 0.26, 0.08, 0, 0, 0); cube(g, lamC(0x5aa83c), 0.12, 0.08, 0.04, 0, 0.16, 0);
+  } else if (kind === 'potato') {
+    cube(g, lamC(0xb8935a), 0.2, 0.15, 0.17, 0, 0, 0); cube(g, lamC(0x8a6a3a), 0.03, 0.03, 0.03, 0.06, 0.07, 0.05);
   } else {
     const m = kind === 'cobble' ? lam('cobble', () => new THREE.MeshLambertMaterial({ map: cobbleTex() })) : blockMat({ coal: 'c', iron: 'i', gold: 'g', diamond: 'd' }[kind] || 's');
     cube(g, m, ITEM_SIZE, ITEM_SIZE, ITEM_SIZE, 0, 0, 0);
@@ -356,7 +458,10 @@ export function makeFx(scene) {
     const k = text + col; if (plusCache[k]) return plusCache[k];
     const c = document.createElement('canvas'); c.width = 256; c.height = 96;
     const g = c.getContext('2d');
-    g.font = '900 64px "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const FONT = (px) => '900 ' + px + 'px "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif';
+    g.font = FONT(64); const w0 = g.measureText(text).width; // 長い字は枠に入るまで小さくする
+    if (w0 > 236) g.font = FONT(Math.max(28, Math.floor(64 * 236 / w0)));
+    g.textAlign = 'center'; g.textBaseline = 'middle';
     g.lineWidth = 12; g.strokeStyle = 'rgba(20,24,30,0.9)'; g.strokeText(text, 128, 50);
     g.fillStyle = col; g.fillText(text, 128, 50);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;

@@ -24,6 +24,7 @@ const write = (f, o) => fs.writeFileSync(path.join(DATA, f), JSON.stringify(o, n
 
 const RES = ['wood', 'stone', 'food'];
 const RES_JA = { wood: '木材', stone: '石', food: '食べ物' };
+let ITEMS0 = {};
 const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const jst = (date, hh = 0) => date + 'T' + String(hh).padStart(2, '0') + ':00:00+09:00';
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -37,8 +38,26 @@ function area(p) {
   return '村はずれの';
 }
 
+// 「どこに建てる？」の 3 つの候補。空いている区画から、海のそば・森の入口・広場の近くを 1 つずつ
+function siteOptions(world, state) {
+  const used = new Set(world.buildings.map((b) => b.plot));
+  const free = world.plots.map((p, i) => ({ x: p.x, z: p.z, plot: i })).filter((p) => !used.has(p.plot));
+  const r = (p) => Math.hypot(p.x, p.z + 1);
+  const trees = (p) => world.trees.filter((t) => !t.gone && t.state === 'tree' && Math.hypot(t.x - p.x, t.z - p.z) < 9).length;
+  const sea = free.slice().sort((a, b) => b.z - a.z || r(a) - r(b))[0];
+  const mid = free.filter((p) => p !== sea).sort((a, b) => r(a) - r(b))[0];
+  const forest = free.filter((p) => p !== sea && p !== mid && p.z < 10).sort((a, b) => trees(b) - trees(a) || r(b) - r(a))[0] || free.find((p) => p !== sea && p !== mid);
+  const dir = (p) => (Math.abs(p.x) > Math.abs(p.z + 1) ? (p.x > 0 ? '東' : '西') : (p.z < -1 ? '北' : '南'));
+  return [
+    { name: '海のそば', x: sea.x, z: sea.z, plot: sea.plot },
+    { name: dir(forest) + 'の森の入口', x: forest.x, z: forest.z, plot: forest.plot },
+    { name: '広場の近く', x: mid.x, z: mid.z, plot: mid.plot },
+  ];
+}
+
 function stepDay(S) {
   const { config, villagers, world, state, life, history, inbox, demo, hidden } = S;
+  ITEMS0 = config.items;
   const day = state.day + 1;
   const date = addDays(state.startDate, day - 1);
   const R = makeRng(state.seed + ':day:' + day);
@@ -52,11 +71,18 @@ function stepDay(S) {
   if (!world.square) world.square = { x: 0, z: -1, r: 8, leveled: day > 1 ? 1 : 0 };
   if (!world.debris) world.debris = [];
   if (!world.chest) world.chest = { x: 5.2, z: 0.6, day: 0 };
+  if (!world.animals) world.animals = [];
+  if (!state.firsts) state.firsts = {};
+  // 釣り・畑・動物は別の乱数（ここが増えても、木・岩・投票の流れは変わらない）
+  const R2 = makeRng(state.seed + ':farm:' + day);
+  // 「はじめて」の出来事は、町の歴史に 1 回だけ書く
+  const first = (key, text, extra) => { if (state.firsts[key]) return false; state.firsts[key] = day; hist('first', text, extra); return true; };
 
   // ---- 1. 参加の登録（「参加したい」コメント） ----
   if (inbox && inbox.joinComments) {
-    for (const r of P.registrationsFrom(inbox.joinComments, config.joinWord)) {
-      const v = P.upsertVillager(villagers, { igId: r.igId, username: r.username, joined: date, joinedDay: day, source: 'comment' }, hidden);
+    const enemiesOn = !!(config.enemies && config.enemies.enabled);
+    for (const r of P.registrationsFrom(inbox.joinComments, config.joinWord, config.startTools, { enemies: enemiesOn })) {
+      const v = P.upsertVillager(villagers, { igId: r.igId, username: r.username, joined: date, joinedDay: day, source: 'comment', startTool: r.startTool }, hidden);
       if (v) v._new = true;
     }
   }
@@ -89,7 +115,7 @@ function stepDay(S) {
         pf.food = ['カレー', 'おにぎり', 'りんご', 'たまご焼き', 'パン', 'やきいも', 'シチュー', 'みかん'][h % 8];
         pf.color = ['#d9534f', '#3f78b8', '#e0b030', '#8e5bb5', '#2e9a8a', '#e07a3a', '#c2457a', '#5a8f3a'][(h >> 3) % 8];
         if ((h >> 6) % 3) pf.hobby = ['昼寝', '釣り', '星を見る', '歌', '木彫り', '散歩'][(h >> 8) % 6];
-        if ((h >> 11) % 4 === 0) pf.wantJob = ['伐採', '採掘', '農業', '建築'][(h >> 13) % 4];
+        if ((h >> 11) % 4 === 0) pf.wantJob = ['伐採', '採掘', '農業', '漁業', '牧場', '建築'][(h >> 13) % 6];
         if ((h >> 15) % 3 === 0) pf.message = ['よろしくね', 'みんなで大きな町にしよう', '朝が苦手です', '畑をひろげたい'][(h >> 17) % 4];
         v.profile = pf;
       }
@@ -107,28 +133,31 @@ function stepDay(S) {
   }
   state.followerLog.push({ day, followers: state.followers });
 
-  // ---- 3. 投票 ----
+  // ---- 3. 投票（建てる物・建てる場所・ときどき道具。どれも A/B/C） ----
+  // 何を建てるかと、どこに建てるかは同じ日に、時間を分けて開く（同じ A/B/C でも、コメントの時刻で区別できる）
+  const BV = config.buildVote;
   const diaryExtra = {}; // key -> 文
-  let closedVoters = null;
+  let closedVoters = [];
+  const KIND_Q = { what: '何を建てる？', where: 'どこに建てる？', tool: 'どの道具を作る？' };
   const genDemo = (vote) => { // 見本の投票コメントを作る（締め切り後のコメントも混ぜて、数えないことを確かめる）
     vote.demoComments = vote.demoComments || [];
     const bias = vote.demoBias || (vote.demoBias = [R.range(0.6, 1.4), R.range(0.6, 1.4), R.range(0.6, 1.4)]);
-    const base = Date.parse(vote.opensAt) + (day - vote.openedDay) * 24 * 3600e3;
-    const n = R.int(4, 9);
-    for (let i = 0; i < n + (day === vote.closesDay - 1 ? 2 : 0); i++) {
+    const t0 = Date.parse(vote.opensAt), t1 = Date.parse(vote.closesAt);
+    const n = R.int(5, 10);
+    for (let i = 0; i < n + 2; i++) {
       const named = active.filter((x) => x.name);
       const who = named.length && R.chance(0.45) ? R.pick(named).name : 'voter_' + R.int(1, 40);
       const ch = R.weighted([['A', bias[0]], ['B', bias[1]], ['C', bias[2]]]);
       const word = R.pick([ch, ch.toLowerCase(), String.fromCharCode(0xFF21 + ch.charCodeAt(0) - 65), ch + 'がいい', ch + '案で!', '断然' + ch]);
-      const late = i >= n; // 締め切りのあとに来たコメント
-      const t = late ? Date.parse(vote.closesAt) + R.range(60e3, 6 * 3600e3) : Math.min(base + R.range(0, 24 * 3600e3), Date.parse(vote.closesAt) - 60e3);
-      vote.demoComments.push({ id: 'd' + day + '_' + i, text: word, timestamp: new Date(t).toISOString(), from: { id: 'demo-' + who, username: who } });
+      const late = i >= n; // 締め切りのあとに来たコメント（数えない）
+      const t = late ? t1 + R.range(60e3, 3 * 3600e3) : t0 + R.range(0, t1 - t0 - 60e3);
+      vote.demoComments.push({ id: 'd' + day + '_' + vote.kind + '_' + i, text: word, timestamp: new Date(t).toISOString(), from: { id: 'demo-' + who, username: who } });
     }
   };
   const retally = (vote) => {
     const comments = (inbox && inbox.voteComments) || vote.demoComments || [];
     const tally = P.tallyVote(comments, { opensAt: vote.opensAt, closesAt: vote.closesAt });
-    const manual = vote.manual || { A: 0, B: 0, C: 0 }; // 手で書いた票（data/state.json の vote.manual）
+    const manual = vote.manual || { A: 0, B: 0, C: 0 }; // 手で書いた票（data/state.json の votes[].manual）
     vote.counted = tally.votes;
     vote.votes = { A: tally.votes.A + (manual.A || 0), B: tally.votes.B + (manual.B || 0), C: tally.votes.C + (manual.C || 0) };
     vote.voters = tally.voters + (manual.A || 0) + (manual.B || 0) + (manual.C || 0);
@@ -136,182 +165,387 @@ function stepDay(S) {
     vote.commentCount = tally.comments;
     return tally;
   };
-  if (state.vote && day >= state.vote.closesDay) {
-    const vote = state.vote;
-    closedVoters = retally(vote).who;
+  // 節目：フォロワーが届くと、特別な建物が候補に入る
+  for (const m of config.milestones) {
+    if (state.followers < m.at || state.reached.includes(m.at)) continue;
+    state.reached.push(m.at);
+    const adds = m.adds.filter((b) => !state.pool.includes(b));
+    state.pool.unshift(...adds);
+    if (adds.length) hist('event', `フォロワーが ${m.at} 人に届いた。${adds.map((b) => B(b).name).join('・')}が投票の候補に入った。`, { milestone: m.at });
+  }
+  // 締め切った投票を決める（何を → どこに の順）
+  const ORDER = { what: 0, where: 1, tool: 2 };
+  for (const vote of state.votes.filter((v) => day >= v.closesDay).sort((a, b) => ORDER[a.kind] - ORDER[b.kind])) {
+    closedVoters = closedVoters.concat(retally(vote).who);
     const max = Math.max(vote.votes.A, vote.votes.B, vote.votes.C);
     const tops = ['A', 'B', 'C'].filter((k) => vote.votes[k] === max);
     const win = tops.length === 1 ? tops[0] : R.pick(tops);
-    const ms = config.milestones.find((m) => m.at === vote.milestone);
-    const opt = ms.options.find((o) => o.key === win);
+    const opt = vote.options.find((o) => o.key === win);
     const total = vote.votes.A + vote.votes.B + vote.votes.C;
     const result = {
-      milestone: vote.milestone, key: win, build: opt.build, name: B(opt.build).name, day,
+      kind: vote.kind, question: KIND_Q[vote.kind], key: win, name: opt.name, day, openedDay: vote.openedDay,
       votes: vote.votes, voters: vote.voters, tie: tops.length > 1,
       pct: Object.fromEntries(['A', 'B', 'C'].map((k) => [k, total ? Math.round((vote.votes[k] / total) * 1000) / 10 : 0])),
       options: vote.options, opensAt: vote.opensAt, closesAt: vote.closesAt, timeline: vote.timeline,
     };
+    const tail = `（A ${vote.votes.A} 票・B ${vote.votes.B} 票・C ${vote.votes.C} 票、${vote.voters} 人が投票${tops.length > 1 ? '、同点のためくじ引き' : ''}）`;
+    if (vote.kind === 'what') {
+      result.build = opt.build;
+      state.plan = { build: opt.build, day, site: null, leveled: 0 };
+      const i = state.pool.indexOf(opt.build);
+      if (i >= 0) { state.pool.splice(i, 1); if (!B(opt.build).unique) state.pool.push(opt.build); } // 何度も建つ物は列の後ろへ
+      hist('vote_result', `「何を建てる？」の投票で「${win} ${opt.name}」に決まった${tail}。`, { kind: 'what', key: win, votes: vote.votes, voters: vote.voters });
+      for (const v of active) diaryExtra[v.key] = (diaryExtra[v.key] || '') + `投票で${opt.name}を建てることに決まった。`;
+    } else if (vote.kind === 'where') {
+      const def = state.plan && B(state.plan.build);
+      if (state.plan && !state.plan.site) {
+        const farm = world.buildings.find((b) => b.type === 'farm');
+        if (def.plot === 'ring') state.plan.site = { x: 0, z: -1, plot: 'ring', label: '町のまわり' };
+        else if (def.plot === 'farm' && farm) state.plan.site = { x: +(farm.x + Math.cos(farm.rot) * 4.4).toFixed(2), z: +(farm.z - Math.sin(farm.rot) * 4.4).toFixed(2), plot: 'farm', label: '畑のとなり', rot: farm.rot };
+        else if (def.plot && world.special[def.plot]) state.plan.site = { ...world.special[def.plot], plot: def.plot, label: def.plot === 'center' ? '町のまん中' : '海べ' };
+        else state.plan.site = { x: opt.x, z: opt.z, plot: opt.plot, label: opt.name };
+      }
+      result.site = state.plan ? state.plan.site : null;
+      const fixed = state.plan && state.plan.site && state.plan.site.label !== opt.name;
+      hist('vote_result', `「どこに建てる？」の投票で「${win} ${opt.name}」に決まった${tail}。${fixed ? `${def.name}は${state.plan.site.label}にしか建てられないので、${state.plan.site.label}に建てる。` : ''}`, { kind: 'where', key: win, votes: vote.votes, voters: vote.voters });
+    } else {
+      result.recipe = opt.recipe;
+      state.toolGoal = opt.recipe;
+      hist('vote_result', `「どの道具を作る？」の投票で「${win} ${opt.name}」に決まった${tail}。`, { kind: 'tool', key: win, votes: vote.votes, voters: vote.voters });
+    }
     state.decisions.push(result);
-    state.queue.unshift(opt.build);
-    (opt.unlocks || []).forEach((u, i) => state.queue.splice(Math.min(state.queue.length, 2 + i * 2), 0, u));
-    hist('vote_result', `フォロワー ${vote.milestone} 人の投票で「${win} ${B(opt.build).name}」に決まった（A ${vote.votes.A} 票・B ${vote.votes.B} 票・C ${vote.votes.C} 票、${vote.voters} 人が投票${tops.length > 1 ? '、同点のためくじ引き' : ''}）。`, { milestone: vote.milestone, key: win, votes: vote.votes, voters: vote.voters });
-    for (const v of active) diaryExtra[v.key] = `投票で${B(opt.build).name}を建てることに決まった。楽しみだ。`;
-    state.vote = null;
   }
-  const nextMs = config.milestones.find((m) => !state.reached.includes(m.at));
-  if (!state.vote && nextMs && state.followers >= nextMs.at) {
-    state.reached.push(nextMs.at);
-    state.vote = {
-      milestone: nextMs.at, openedDay: day, closesDay: day + config.voteDays,
-      opensAt: jst(date, 9), closesAt: jst(addDays(date, config.voteDays), 0),
-      options: nextMs.options.map((o) => ({ key: o.key, build: o.build, name: B(o.build).name, desc: o.desc })),
+  state.votes = state.votes.filter((v) => day < v.closesDay);
+  // 新しい投票を開く（村人がいる時だけ）
+  const builtTypes = world.buildings.map((b) => b.type);
+  const choices = () => {
+    const out = [];
+    for (const b of state.pool) {
+      if (out.includes(b) || (B(b).unique && (builtTypes.includes(b) || (state.plan && state.plan.build === b)))) continue;
+      if (B(b).needs && !builtTypes.includes(B(b).needs)) continue; // 水路は畑ができてから
+      out.push(b); if (out.length === 3) break;
+    }
+    return out;
+  };
+  const openVote = (kind, options, h0, h1) => {
+    const v = {
+      kind, question: KIND_Q[kind], openedDay: day, closesDay: day + 1,
+      opensAt: jst(date, h0), closesAt: h1 >= 24 ? jst(addDays(date, 1), h1 - 24) : jst(date, h1),
+      options: options.map((o, i) => ({ key: 'ABC'[i], ...o })),
       votes: { A: 0, B: 0, C: 0 }, manual: { A: 0, B: 0, C: 0 }, voters: 0, timeline: [],
     };
-    hist('vote_open', `フォロワーが ${nextMs.at} 人に届いた。「次に何を作る？」の投票が始まった（${state.vote.options.map((o) => o.key + ' ' + o.name).join(' / ')}）。`, { milestone: nextMs.at });
+    state.votes.push(v);
+    return v;
+  };
+  if (!state.votes.length && active.length) {
+    if (!state.plan) {
+      const what = choices();
+      if (what.length === 3) {
+        const sites = siteOptions(world, state);
+        const v1 = openVote('what', what.map((b) => ({ build: b, name: B(b).name })), BV.whatHours[0], BV.whatHours[1]);
+        const v2 = openVote('where', sites, BV.whereHours[0], BV.whereHours[1]);
+        hist('vote_open', `投票が始まった。「何を建てる？」（${v1.options.map((o) => o.key + ' ' + o.name).join(' / ')}、${BV.whatHours[0]}時〜${BV.whatHours[1]}時）と「どこに建てる？」（${v2.options.map((o) => o.key + ' ' + o.name).join(' / ')}、${BV.whereHours[0]}時〜${BV.whereHours[1]}時）。`, { kind: 'build' });
+      }
+    } else if (state.plan.site && builtTypes.includes(config.crafting.tiers.stone.needs) && day - (state.lastToolVote || 0) >= config.crafting.toolVoteEvery) {
+      // 作業台がある時だけ、ときどき「どの道具を作る？」
+      const recs = Object.entries(config.crafting.recipes).filter(([k, r]) => r.tier !== 'wood' && k !== state.toolGoal).slice(0, 3);
+      if (recs.length === 3) {
+        const v = openVote('tool', recs.map(([k, r]) => ({ recipe: k, name: ITEMS0[k].name, from: r.from })), BV.toolHours[0], BV.toolHours[1]);
+        state.lastToolVote = day;
+        hist('vote_open', `「どの道具を作る？」の投票が始まった（${v.options.map((o) => o.key + ' ' + o.name).join(' / ')}）。`, { kind: 'tool' });
+      }
+    }
   }
-  if (state.vote) { if (demo && !(inbox && inbox.voteComments)) genDemo(state.vote); retally(state.vote); }
+  for (const v of state.votes) { if (demo && !(inbox && inbox.voteComments)) genDemo(v); retally(v); }
+  state.vote = state.votes[0] || null; // 前の形で読む画面のため
 
   // ---- 4. 天気 ----
   state.weather = R.weighted([['晴れ', 55], ['くもり', 25], ['雨', 20]]);
   const rain = state.weather === '雨';
 
   // ---- 5. 仕事を決める ----
-  const built = world.buildings.map((b) => b.type);
+  const built = builtTypes;
   const has = (t) => built.includes(t);
   const mult = { wood: 1 + state.bonus.wood, stone: 1 + state.bonus.stone, food: 1 + state.bonus.food };
   for (const t of built) { const bo = B(t).bonus; if (bo) for (const r of RES) mult[r] += bo[r] || 0; }
-  // 次の建物に足りない分を見て、仕事の重みを決める
-  while (state.queue.length && B(state.queue[0]).unique && has(state.queue[0])) state.queue.shift();
-  if (!state.queue.length) state.queue.push(config.repeat[state.repeatIdx++ % config.repeat.length]);
-  const next = state.queue[0];
-  const cost = B(next).cost;
+  const plan = state.plan;
+  const cost = plan ? B(plan.build).cost : { wood: 20, stone: 8 }; // 何を建てるか決まる前は、木を多めに
   const IC = config.inventory;
   const ITEMS = config.items;
-  if (!state.res) state.res = { ...state.resources };
+  const CC = config.crafting, GA = config.gather, RS2 = config.respawn;
   if (!state.store) state.store = {};
-  const syncRes = () => { for (const r of RES) state.resources[r] = Math.max(0, Math.floor(state.res[r] + 1e-9)); };
-  const valueOf = (items) => { const v = { wood: 0, stone: 0, food: 0 }; for (const [it, n] of Object.entries(items)) { const val = (ITEMS[it] && ITEMS[it].value) || {}; for (const r of RES) v[r] += (val[r] || 0) * n; } return v; };
-  const deposit = (items) => { for (const [it, n] of Object.entries(items)) state.store[it] = (state.store[it] || 0) + n; const v = valueOf(items); for (const r of RES) { state.res[r] += v[r]; state.totals[r] = Math.round((state.totals[r] + v[r]) * 100) / 100; } syncRes(); return v; };
+  // チェスト（state.store）がそのまま町の持ち物。資源の数はチェストの中身から数える
+  const VAL = (it) => (ITEMS[it] && ITEMS[it].value) || {};
+  const syncRes = () => {
+    state.res = { wood: 0, stone: 0, food: 0 };
+    for (const r of RES) for (const it of config.spendOrder[r]) state.res[r] += (state.store[it] || 0) * (VAL(it)[r] || 0);
+    for (const r of RES) state.resources[r] = Math.floor(state.res[r] + 1e-9);
+  };
+  const valueOf = (items) => { const v = { wood: 0, stone: 0, food: 0 }; for (const [it, n] of Object.entries(items)) { const val = VAL(it); for (const r of RES) v[r] += (val[r] || 0) * n; } return v; };
+  const deposit = (items) => { for (const [it, n] of Object.entries(items)) if (n) state.store[it] = (state.store[it] || 0) + n; const v = valueOf(items); for (const r of RES) state.totals[r] = Math.round((state.totals[r] + v[r]) * 100) / 100; syncRes(); return v; };
+  // チェストから使う（建てる・食べる）。足りた分だけ使って、足りなければ false
+  const spend = (r, amount) => {
+    let left = amount;
+    for (const it of config.spendOrder[r]) {
+      const per = VAL(it)[r]; if (!per || left <= 1e-9) continue;
+      const k = Math.min(state.store[it] || 0, Math.ceil(left / per - 1e-9));
+      state.store[it] = (state.store[it] || 0) - k; left -= k * per;
+      if (!state.store[it]) delete state.store[it];
+    }
+    syncRes();
+    return left <= 1e-9;
+  };
+  syncRes();
   const need = {};
   for (const r of RES) need[r] = Math.max(0, (cost[r] || 0) - state.resources[r]);
   need.food += Math.max(0, active.length * 4 - state.resources.food);
-  const takenTrees = new Set(), takenFields = new Set(), takenBushes = new Set();
+  const takenTrees = new Set(), takenFields = new Set(), takenBushes = new Set(), takenRocks = new Set();
+  let ranchTaken = null; // 動物の世話は 1 日 1 人（もらえる物はその人がまとめて受け取る）
   const center = world.campfire;
-
-  // 石が少なくなったら新しい岩場が見つかる
-  if (world.rocks.filter((r) => r.hp > 0 && !r.far).length < 4) { // 町の外の岩場（far）は数えない
-    for (let k = 0; k < 3; k++) {
-      const x = R.range(20, 46), z = R.range(-50, -22);
-      if (world.rocks.some((r) => Math.hypot(r.x - x, r.z - z) < 3.4)) continue;
-      const max = R.int(8, 12);
-      const rk = { id: 'r' + world.rocks.length, x: +x.toFixed(2), z: +z.toFixed(2), hp: max, max, kind: R.int(0, 2) };
-      O.ensureBlocks(state.seed, rk, config.ores); world.rocks.push(rk);
-    }
-    hist('event', '北東で新しい岩場が見つかった。');
-  }
 
   const daysIn = (v) => day - v.joinedDay + 1;
   const ensureLife = (L, v) => {
     L.inv = L.inv || []; L.xp = L.xp || 0; L.trips = L.trips || 0; L.items = L.items || {}; L.debt = L.debt || 0;
     L.level = I.levelFor(L.xp, IC); L.slots = I.slotCount(L.level, daysIn(v), IC);
     I.ensureSize(L.inv, L.slots);
+    // 前の形の道具（axe / pickaxe / hoe）は木の道具として読む
+    for (const s of L.inv) if (s && (s.item === 'axe' || s.item === 'pickaxe' || s.item === 'hoe')) s.item = 'wood_' + s.item;
+    giveStartTool(L, v);
   };
+  // 最初の道具：参加した時に選んだ木の道具を 1 つ持たせる（持ち物 3 つのうち 1 つ）。
+  // 選んでいない人は、それまでに選ばれた数がいちばん少ない仕事の道具（同じ数なら名前から決まる順）。乱数は使わない
+  const ST = config.startTools || { options: [] };
+  const stOpts = ST.options.filter((o) => !o.needsEnemies || (config.enemies && config.enemies.enabled));
+  const autoOpts = ST.options.filter((o) => !o.needsEnemies);
+  const startCount = () => { const n = Object.fromEntries(autoOpts.map((o) => [o.id, 0])); for (const k in life) { const t = life[k] && life[k].startTool; if (t in n) n[t]++; } return n; };
+  const giveStartTool = (L, v) => {
+    if (!ST.options.length) return;
+    const want = v.startTool && stOpts.find((o) => o.id === v.startTool);
+    if (L.startTool && (!want || want.id === L.startTool)) return;
+    const dur = CC.tiers.wood.durability;
+    if (L.startTool) { // プロフィールで道具を変えた（参加した日の間に 1 回だけ。確かめは profiles.js）
+      const old = ST.options.find((o) => o.id === L.startTool);
+      const cur = old && I.getTool(L.inv, old.id);
+      if (cur && I.toolTier(cur.item) === 'wood') I.removeTool(L.inv, old.id);
+      if (I.addTool(L.inv, L.slots, want.item, dur)) { L.startTool = want.id; L.startAuto = false; diaryExtra[v.key] = (diaryExtra[v.key] || '') + `最初の道具を${ITEMS[want.item].name}にかえた。`; }
+      return;
+    }
+    let pick = want;
+    if (!pick) {
+      const n = startCount(), h = hashStr('start:' + v.key);
+      pick = autoOpts.map((o, i) => ({ o, n: n[o.id], r: (i + h) % autoOpts.length })).sort((a, b) => a.n - b.n || a.r - b.r)[0].o;
+    }
+    L.startTool = pick.id; L.startAuto = !want;
+    if (!I.getTool(L.inv, pick.id)) I.addTool(L.inv, L.slots, pick.item, dur);
+    diaryExtra[v.key] = (diaryExtra[v.key] || '') + `${ITEMS[pick.item].name}を持ってきた。`;
+  };
+  const startJob = (L) => { const o = ST.options.find((x) => x.id === L.startTool); return o ? o.job : null; };
   const haulText = (got) => Object.entries(got).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).slice(0, 3)
     .map(([it, n]) => `${ITEMS[it].name}${n}`).join('・');
 
-  const today = { weather: state.weather, jobs: { wood: 0, stone: 0, food: 0 }, gained: { wood: 0, stone: 0, food: 0 }, built: [], trips: 0 };
+  // 整地：最初の日は村のまん中、建てる場所が決まったらその場所。2 人までがする
+  const levelJobs = [];
+  if (active.length && !world.square.leveled) levelJobs.push({ target: 'square', at: world.square, r: world.square.r, what: '村のまん中' });
+  if (plan && plan.site && !plan.leveled && plan.site.plot !== 'ring' && plan.site.plot !== 'farm') levelJobs.push({ target: 'site', at: plan.site, r: 4.2, what: `${B(plan.build).name}を建てる場所` });
+  let leveler = 0;
+  // チェストは最初の村人が来た日に置く
+  if (active.length && !world.chest.day) { world.chest.day = day; hist('event', '村のまん中にチェストを置いた。集めた物は、ここに入れる。'); }
+
+  const today = { weather: state.weather, jobs: { wood: 0, stone: 0, food: 0 }, gained: { wood: 0, stone: 0, food: 0 }, built: [], trips: 0, crafted: [], leveled: [] };
   for (const v of active) {
     const L = life[v.key];
     ensureLife(L, v);
+    L.targets = [];
     // 夜の見張りでケガをした人は、この日だけ休む（乱数は使わないので、ほかの人の結果の流れはそのまま）
     if (L.hurt && L.hurt >= day) {
       L.job = 'rest'; L.action = 'rest'; L.target = null; L.amount = 0; L.today = { got: {}, trips: 0, actions: 0 };
       L.diary.push({ day, date, text: (v.joinedDay === day ? '' : 'ゆうべのケガで、今日は家で休んだ。') + (diaryExtra[v.key] || '') });
       continue;
     }
+    // 整地をする人
+    const lv = levelJobs.length ? levelJobs[Math.min(levelJobs.length - 1, Math.floor(leveler / 2))] : null;
+    if (lv && leveler < levelJobs.length * 2) {
+      leveler++;
+      L.job = 'level'; L.action = 'level'; L.target = lv.target; L.amount = 0; L.today = { got: {}, trips: 0, actions: IC.actionsPerDay };
+      L.xp += IC.actionsPerDay * IC.xp.gather;
+      L.diary.push({ day, date, text: (v.joinedDay === day ? '今日から村に住むことになった。よろしく。' : '') + `${lv.what}の草をぬいて、石をどけて、地面をならした。` + (diaryExtra[v.key] || '') });
+      continue;
+    }
     const pref = RES[(P.userHash(v.key).charCodeAt(0)) % 3];
     // プロフィールの「やりたい仕事」を少し優先する（建築は今いちばん足りない材料へ。商いはまだ店がないので影響なし）
-    const want = (v.profile && v.profile.wantJob) || (v._priv && v._priv.wantJob);
-    const wantRes = { '伐採': 'wood', '採掘': 'stone', '農業': 'food' }[want] || (want === '建築' ? RES.slice().sort((a, b) => need[b] - need[a])[0] : null);
-    const w = RES.map((r) => [r, (1 + need[r] / 8) * (r === pref ? 1.6 : 1) * (r === wantRes ? 2.2 : 1)]);
+    // 最初の道具の仕事（得意な仕事）。プロフィールの「やりたい仕事」があれば、そちらを先にする
+    const want = (v.profile && v.profile.wantJob) || (v._priv && v._priv.wantJob) || startJob(L);
+    const wantRes = { '伐採': 'wood', '採掘': 'stone', '農業': 'food', '漁業': 'food', '牧場': 'food' }[want] || (want === '建築' ? RES.slice().sort((a, b) => need[b] - need[a])[0] : null);
+    const wantK = want && want === startJob(L) && !(v.profile && v.profile.wantJob) ? 4 : 2.2; // 最初の道具の仕事は強めに優先
+    const w = RES.map((r) => [r, (1 + need[r] / 8) * (r === pref ? 1.6 : 1) * (r === wantRes ? wantK : 1)]);
     let job = R.weighted(w);
-    let target = null, action = null, place = '', mined = null;
-    const tryWood = () => {
-      const cand = world.trees.filter((t) => t.state === 'tree' && !takenTrees.has(t.id)).sort((a, b) => dist(a, center) - dist(b, center)).slice(0, 8);
-      if (!cand.length) return false;
-      const t = R.pick(cand); takenTrees.add(t.id);
-      t.state = 'stump'; t.regrow = R.int(5, 8); t.cutDay = day;
-      target = t.id; action = 'chop'; place = area(t);
-      return true;
+    // 最初の道具の仕事（得意な仕事）は先にする（乱数の流れは変えない。木や岩がなければ、いつもの順で別の仕事）
+    if (wantK === 4 && wantRes) job = wantRes;
+    let target = null, action = null, place = '', harvestCrop = null;
+    // 木：近い木から。1 本ずつ、原木が落ち終わるまで（treeLogs 本）。倒れたら切り株になって、次の木へ
+    const nextTree = (from) => {
+      const cand = world.trees.filter((t) => t.state === 'tree' && !t.gone && !takenTrees.has(t.id)).sort((a, b) => dist(a, from) - dist(b, from)).slice(0, from === center ? 8 : 2);
+      if (!cand.length) return null;
+      const t = from === center ? R.pick(cand) : cand[0]; takenTrees.add(t.id);
+      if (!t.logs) t.logs = R.int(GA.treeLogs[0], GA.treeLogs[1]);
+      return t;
     };
-    const tryStone = () => {
-      const cand = world.rocks.filter((r) => r.hp > 0).sort((a, b) => dist(a, center) - dist(b, center)).slice(0, 4);
-      if (!cand.length) return false;
-      const r = R.pick(cand);
+    const nextRock = (from) => {
+      const cand = world.rocks.filter((r) => r.hp > 0 && !r.gone && !takenRocks.has(r.id)).sort((a, b) => dist(a, from) - dist(b, from)).slice(0, from === center ? 4 : 2);
+      if (!cand.length) return null;
+      const r = from === center ? R.pick(cand) : cand[0]; takenRocks.add(r.id);
       O.ensureBlocks(state.seed, r, config.ores);
-      mined = r.blocks[r.max - r.hp] || 's'; // 今日掘るブロック（上から順）
-      r.hp -= 1;
-      target = r.id; action = r.hp === 0 ? 'dig_last' : 'dig'; place = area(r);
-      return true;
+      return r;
     };
+    let curTree = null, curRock = null;
+    const tryWood = () => { curTree = nextTree(center); if (!curTree) return false; target = curTree.id; action = 'chop'; place = area(curTree); return true; };
+    const tryStone = () => { curRock = nextRock(center); if (!curRock) return false; target = curRock.id; action = 'dig'; place = area(curRock); return true; };
     const tryFood = () => {
-      const maxFields = Math.min(world.fieldSlots.length, has('hut') ? 2 + 2 * built.filter((t) => t === 'house').length : 0);
-      const ripe = world.fields.filter((f) => f.stage >= 3 && !takenFields.has(f.id));
-      if (ripe.length) { const f = R.pick(ripe); takenFields.add(f.id); f.stage = 0; target = f.id; action = 'harvest'; return true; }
-      if (world.fields.length < maxFields && R.chance(0.5)) {
-        const slot = world.fieldSlots[world.fields.length];
-        const f = { id: 'f' + world.fields.length, x: slot.x, z: slot.z, stage: 0, day };
-        world.fields.push(f); takenFields.add(f.id); target = f.id; action = 'till'; return true;
+      // 食べ物の仕事の中身：畑（農業）・釣り（漁業）・動物の世話（牧場）・野原で集める。「やりたい仕事」を優先
+      const FA = config.farming, AN = config.animals;
+      const tamed = world.animals.filter((a) => a.pen);
+      const rodOK = I.getTool(L.inv, 'fishing_rod') || CR.choose(state.store, 'fishing_rod', CC, { built, have: 'hand' }).key;
+      const subs = [['wild', 1.2]];
+      if (world.fieldSlots.length) subs.push(['farm', want === '農業' ? 5 : 1.8]);
+      if (world.pond && rodOK) subs.push(['fish', want === '漁業' ? 5 : 1.0]);
+      if (tamed.length && !ranchTaken) subs.push(['ranch', want === '牧場' ? 5 : 2.5]);
+      const sub = R2.weighted(subs);
+      if (sub === 'fish') { target = 'pond'; action = 'fish'; place = '池で'; return true; }
+      if (sub === 'ranch') { ranchTaken = v.key; target = (world.buildings.find((b) => b.type === 'pen') || {}).id || null; action = 'ranch'; return true; }
+      if (sub === 'farm') {
+        const ripe = world.fields.filter((f) => f.stage >= (f.max || 3) && !takenFields.has(f.id));
+        if (ripe.length) { const f = R2.pick(ripe); takenFields.add(f.id); f.stage = 0; f.harvested = (f.harvested || 0) + 1; target = f.id; action = 'harvest'; harvestCrop = f.crop || 'wheat'; return true; }
+        if (world.fields.length < world.fieldSlots.length) {
+          const slot = world.fieldSlots[world.fields.length];
+          const crops = Object.keys(FA.crops);
+          const crop = crops[world.fields.length % crops.length];
+          const f = { id: 'f' + world.fields.length, x: slot.x, z: slot.z, rot: slot.rot || 0, stage: 0, day, crop, max: FA.crops[crop].days };
+          world.fields.push(f); takenFields.add(f.id); target = f.id; action = 'till'; harvestCrop = crop; return true;
+        }
+        const grow = world.fields.filter((f) => !takenFields.has(f.id) && f.stage < (f.max || 3));
+        if (grow.length) { const f = R2.pick(grow); takenFields.add(f.id); f.stage = Math.min(f.max || 3, f.stage + 1); target = f.id; action = 'tend'; return true; }
       }
+      void AN;
       const bush = world.bushes.filter((b) => b.ready && !takenBushes.has(b.id));
       if (bush.length && R.chance(0.6)) { const b = R.pick(bush); takenBushes.add(b.id); b.ready = false; b.regrow = 3; target = b.id; action = 'berry'; return true; }
-      const grow = world.fields.filter((f) => !takenFields.has(f.id));
-      if (grow.length) { const f = R.pick(grow); takenFields.add(f.id); f.stage = Math.min(3, f.stage + 1); target = f.id; action = 'tend'; return true; }
       if (bush.length) { const b = R.pick(bush); takenBushes.add(b.id); b.ready = false; b.regrow = 3; target = b.id; action = 'berry'; return true; }
       target = null; action = 'forage'; return true; // 野原で草を摘む
     };
     const order = { wood: [tryWood, tryStone, tryFood], stone: [tryStone, tryWood, tryFood], food: [tryFood] }[job];
     for (const f of order) if (f()) break;
-    job = { chop: 'wood', dig: 'stone', dig_last: 'stone' }[action] || 'food';
+    job = { chop: 'wood', dig: 'stone' }[action] || 'food';
     const notes = [];
 
-    // 道具（1 枠使う）。なければ村の材料で作ってもらう。材料もなければ素手（とれる量が半分）
-    const tool = { chop: 'axe', dig: 'pickaxe', dig_last: 'pickaxe', till: 'hoe', tend: 'hoe', harvest: 'hoe' }[action] || null;
+    // ---- 道具：チェストの材料で、今より良い物を作る（作業台があれば石・鉄も）。材料が足りなければ素手 ----
+    const kind = { chop: 'axe', dig: 'pickaxe', till: 'hoe', tend: 'hoe', harvest: 'hoe', fish: 'fishing_rod' }[action] || null;
     let budget = IC.actionsPerDay - L.debt; L.debt = 0;
     let trips = 0;
     const onUnload = (items) => { const val = deposit(items); for (const r of RES) L.contrib[r] += val[r]; trips++; };
-    if (tool && !I.hasTool(L.inv, tool)) {
-      const tc = IC.toolCost;
-      if (state.res.wood >= tc.wood && state.res.stone >= tc.stone) {
-        if (!L.inv.slice(0, L.slots).some((s) => !s)) { onUnload(I.unload(L.inv)); budget -= IC.tripCost; }
-        if (I.addTool(L.inv, L.slots, tool, IC.toolDurability)) {
-          state.res.wood -= tc.wood; state.res.stone -= tc.stone; syncRes();
-          notes.push(`新しい${ITEMS[tool].name}を作った。`);
+    const tryCraft = (again) => {
+      const cur = I.getTool(L.inv, kind);
+      const have = cur ? I.toolTier(cur.item) : 'hand';
+      const ch = CR.choose(state.store, kind, CC, { built, have, goal: state.toolGoal });
+      if (ch.key) {
+        if (!cur && !L.inv.slice(0, L.slots).some((s) => !s)) { onUnload(I.unload(L.inv)); budget -= IC.tripCost; }
+        I.removeTool(L.inv, kind);
+        const dur = CC.tiers[ch.recipe.tier].durability;
+        if (I.addTool(L.inv, L.slots, ch.key, dur)) {
+          for (const k of Object.keys(state.store)) delete state.store[k];
+          Object.assign(state.store, ch.store); syncRes();
+          notes.push(again ? `${ITEMS[ch.key].name}を作り直した。` : `チェストの材料で${ITEMS[ch.key].name}を作った。`);
+          today.crafted.push({ who: v.key, item: ch.key });
+          if (state.toolGoal === ch.key) { hist('craft', `投票で決まった${ITEMS[ch.key].name}ができた。`, { item: ch.key }); state.toolGoal = null; }
+          return true;
         }
+      } else if (!cur && ch.want) {
+        notes.push(`${ITEMS[ch.want.key].name}を作りたかったが、材料が足りない（${CR.missingText(ch.want.missing, ITEMS)}）。素手でがんばった。`);
+        today.craftNeed = { item: ch.want.key, missing: ch.want.missing };
       }
-    }
-    let hand = tool && !I.hasTool(L.inv, tool) ? 0.5 : 1;
-    let broke = false;
-    const q = (a, b, m) => Math.max(0, Math.round(R.int(a, b) * m * hand));
+      return false;
+    };
+    if (kind) tryCraft(false);
+    const tierNow = () => { const cur = kind && I.getTool(L.inv, kind); return cur ? I.toolTier(cur.item) : 'hand'; };
+    const usedTier = tierNow();
+    let acc = 0, extra = 0, ranchGot = false, harvestDone = false;
+    if (action === 'till') first('till', `${v.display}が、村ではじめて畑を耕して${config.farming.crops[harvestCrop].name}の種をまいた。`, { who: [v.key] });
+    let curT = curTree, curR = curRock;
+    // 1 回の作業：道具が良いほどたたく回数が少ないので、たくさん落ちる（素手 8 回・木 6 回・石 4 回・鉄 3 回で 1 つ）
     const produce = () => {
-      if (tool && hand === 1 && I.useTool(L.inv, tool)) { broke = true; hand = 0.5; }
-      if (job === 'wood') return [['log', q(2, 4, mult.wood)], ['apple', R.chance(0.12) ? 1 : 0], ['sapling', R.chance(0.1) ? 1 : 0]];
-      if (job === 'stone') { R.chance(0.2) && R.int(1, 2); R.chance(0.08); return [['cobble', q(2, 4, mult.stone)]]; } // 鉱石は岩のブロックから（乱数の流れは前と同じにしておく）
-      if (action === 'harvest') return [['wheat', q(2, 4, mult.food)], ['seeds', R.int(0, 2)]];
+      const st = CR.stats(kind ? tierNow() : 'wood', CC);
+      const before = kind && I.getTool(L.inv, kind);
+      if (before && st.durability && I.useTool(L.inv, kind)) { const nm = ITEMS[before.item].name; if (!tryCraft(true)) notes.push(`${nm}がこわれた。`); }
+      if (action === 'fish') { // うきが沈んだら釣り上げる。良い釣りざおほど、よく沈む
+        const FC = config.fishing;
+        const out = {};
+        if (R2.chance(Math.min(0.95, FC.biteChance * CC.tiers.wood.hits / st.hits))) {
+          const it = R2.chance(FC.treasure.p) ? R2.weighted(FC.treasure.items) : R2.chance(FC.junk.p) ? R2.weighted(FC.junk.items) : R2.weighted(FC.fish);
+          out[it] = 1;
+          if (it.startsWith('fish_')) first('fish', `${v.display}が、村ではじめて魚を釣った（${ITEMS[it].name}）。`, { who: [v.key], item: it });
+          else if (FC.treasure.items.some(([k]) => k === it)) { first('treasure', `${v.display}が池から${ITEMS[it].name}を釣り上げた。村ではじめての宝物。`, { who: [v.key], item: it }); notes.push(`${ITEMS[it].name}が釣れた。`); }
+        }
+        return Object.entries(out);
+      }
+      if (action === 'ranch') { // 柵の中の動物の世話。もらえる物は 1 日 1 回（最初の作業でまとめて）
+        if (ranchGot) return [];
+        ranchGot = true;
+        const AN = config.animals, out = {};
+        for (const a of world.animals.filter((x) => x.pen)) {
+          const k = AN.kinds[a.kind];
+          if ((day - a.tamedDay) % k.every !== 0 || !R2.chance(k.p)) continue;
+          out[k.gives] = (out[k.gives] || 0) + 1;
+          first('give_' + k.gives, `はじめて${k.name}から${ITEMS[k.gives].name}をもらった。`, { who: [v.key], item: k.gives });
+        }
+        return Object.entries(out);
+      }
+      acc += CC.tiers.wood.hits / st.hits;
+      let n = Math.floor(acc + 1e-9); acc -= n;
+      if (job === 'wood') {
+        const out = [['log', 0], ['apple', 0], ['sapling', 0]];
+        while (n > 0 && curT) {
+          const k = Math.min(n, curT.logs); curT.logs -= k; n -= k; out[0][1] += k;
+          extra += k * (st.drop - 1); if (extra >= 1) { out[0][1] += Math.floor(extra); extra -= Math.floor(extra); }
+          L.targets.push(curT.id);
+          if (curT.logs <= 0) { // 倒れて、切り株が残る
+            curT.state = 'stump'; curT.regrow = RS2.stumpDays + RS2.saplingDays; curT.cutDay = day; curT.logs = 0;
+            if (R.chance(0.12)) out[1][1]++; if (R.chance(0.1)) out[2][1]++;
+            curT = nextTree(curT);
+          }
+        }
+        out[0][1] = Math.round(out[0][1] * mult.wood);
+        return out;
+      }
+      if (job === 'stone') {
+        const got = {};
+        while (n > 0 && curR) {
+          const blk = curR.blocks[curR.max - curR.hp] || 's';
+          const item = O.ORE_ITEM[blk] || 'cobble';
+          got[item] = (got[item] || 0) + 1; n--;
+          if (item === 'cobble') { extra += st.drop - 1; if (extra >= 1) { got.cobble += Math.floor(extra); extra -= Math.floor(extra); } }
+          if (O.RARE.has(blk) && !history.some((h) => h.day === day && h.type === 'find' && h.item === item)) { hist('find', `${v.display}が${ITEMS[item].name}を見つけた。`, { who: [v.key], item, rock: curR.id }); notes.push(`岩の中から${ITEMS[item].name}が出てきた。`); }
+          L.targets.push(curR.id);
+          curR.hp -= 1;
+          if (curR.hp <= 0) { curR.back = day + R.int(RS2.rockDays[0], RS2.rockDays[1]); curR = nextRock(curR); } // 壊れて消える。何日かでまた出る
+        }
+        if (got.cobble) got.cobble = Math.round(got.cobble * mult.stone);
+        return Object.entries(got);
+      }
+      const q = (a, b, m) => Math.max(0, Math.round(R.int(a, b) * m * (n > 0 ? 1 : 0.5)));
+      if (action === 'harvest') {
+        const cp = config.farming.crops[harvestCrop] || config.farming.crops.wheat;
+        if (!harvestDone) { harvestDone = true; first('harvest_' + harvestCrop, `畑ではじめて${cp.name}がとれた。`, { who: [v.key], item: harvestCrop }); }
+        const got = [[harvestCrop, Math.max(0, Math.round(R2.int(cp.yield[0], cp.yield[1]) * mult.food * (n > 0 ? 1 : 0.5)))]];
+        if (cp.seed) got.push([cp.seed, R2.int(0, 2)]);
+        return got;
+      }
       if (action === 'berry') return [['berry', q(1, 3, mult.food)], ['flower_r', R.chance(0.08) ? 1 : 0]];
       if (action === 'till' || action === 'tend') return [['wheat', R.chance(0.35) ? q(1, 2, mult.food) : 0], ['seeds', R.int(0, 1)]];
       return [['berry', q(1, 2, mult.food)], [R.chance(0.5) ? 'flower_r' : 'flower_y', R.chance(0.25) ? 1 : 0], ['seeds', R.int(0, 1)]];
     };
     const res = I.workDay({ inv: L.inv, slots: L.slots, budget, produce, onUnload, cfg: IC });
-    // 掘ったブロックが鉱石なら、その鉱石が 1 つ手に入る（めずらしい物は履歴に残す）
-    const oreItem = job === 'stone' && mined && O.ORE_ITEM[mined];
-    if (oreItem) {
-      res.got[oreItem] = (res.got[oreItem] || 0) + 1;
-      const val = deposit({ [oreItem]: 1 }); for (const r of RES) L.contrib[r] += val[r];
-      if (O.RARE.has(mined)) { hist('find', `${v.display}が${ITEMS[oreItem].name}を見つけた。`, { who: [v.key], item: oreItem, rock: target }); notes.push(`岩の中から${ITEMS[oreItem].name}が出てきた。`); }
-    }
-    L.mined = mined;
-    if (broke) notes.push(`${ITEMS[tool].name}がこわれた。`);
+    // 夕方、持っている物をぜんぶチェストへ入れる（往復には数えない）
+    { const rest = I.unload(L.inv); if (Object.keys(rest).length) { const val = deposit(rest); for (const r of RES) L.contrib[r] += val[r]; } }
+    L.targets = [...new Set(L.targets)];
+    L.tool = kind ? (I.getTool(L.inv, kind) || {}).item || null : null; L.toolTier = usedTier;
     const gotVal = valueOf(res.got);
     for (const [it, n] of Object.entries(res.got)) L.items[it] = (L.items[it] || 0) + n;
     for (const r of RES) L.gathered[r] = Math.round((L.gathered[r] + gotVal[r]) * 100) / 100;
@@ -323,66 +557,134 @@ function stepDay(S) {
 
     // 日記
     const haul = haulText(res.got) || '少し';
+    const fell = job === 'wood' ? L.targets.length : 0;
     const T = {
-      chop: [`${place}木を切った。${haul}。`, `朝から斧をふって、${place}木を1本たおした。${haul}。`, `切り株がまたひとつ。${haul}。`],
-      dig: [`${place}岩場で掘った。${haul}。`, `つるはしで岩をくだいた。${haul}。`, `岩がだいぶ小さくなってきた。${haul}。`],
-      dig_last: [`掘っていた岩がなくなって、石切り場の跡になった。${haul}。`],
+      chop: fell > 1 ? [`${place}木を${fell}本たおした。${haul}。`] : [`${place}木を切った。${haul}。`, `朝から斧をふって、${place}木を1本たおした。${haul}。`],
+      dig: [`${place}岩をたたいて掘った。${haul}。`, `つるはしで岩をくだいた。${haul}。`, `岩を何回もたたいて、かけらを掘り出した。${haul}。`],
       berry: [`草むらで木の実を集めた。${haul}。`, `赤い実をかごいっぱいにつんだ。${haul}。`],
       till: [`新しい畑を耕した。${haul}。`, `くわで土を起こして、畑をひとつ作った。${haul}。`],
       tend: [`畑の世話をした。芽がのびてきた。${haul}。`, `畑に水をまいた。${haul}。`],
       harvest: [`畑で収穫した。${haul}。`, `畑の作物をかりとった。${haul}。`],
       forage: [`野原で草や実を集めた。${haul}。`],
+      fish: res.got && Object.keys(res.got).length ? [`池で釣りをした。うきが沈むのを待って、${haul}を釣り上げた。`, `釣りざおを持って池へ行った。${haul}。`] : ['池で一日釣りをしたが、何もかからなかった。'],
+      ranch: Object.keys(res.got).length ? [`柵の中の動物に、えさと水をやった。${haul}をもらった。`, `動物の世話をした。${haul}をもらった。`] : ['柵の中の動物に、えさと水をやった。'],
     }[action];
+    if (action === 'harvest' || action === 'till') T.unshift(...(action === 'harvest' ? [`畑で${config.farming.crops[harvestCrop].name}を収穫した。${haul}。`] : [`くわで土を起こして、${config.farming.crops[harvestCrop].name}の種をまいた。${haul}。`]));
     let text = R.pick(T);
     if (rain && R.chance(0.6)) text = '雨の中、' + text;
     else if (state.weather === '晴れ' && R.chance(0.25)) text = 'いい天気。' + text;
     if (v.joinedDay === day) text = '今日から村に住むことになった。よろしく。' + text;
     text += notes.join('');
-    if (trips) text += `持ち物がいっぱいになって、倉庫まで${trips}回往復した。`;
+    if (trips) text += `持ち物がいっぱいになって、チェストまで${trips}回往復した。`;
     if (diaryExtra[v.key]) text += diaryExtra[v.key];
     L.diary.push({ day, date, text });
   }
-
-  // ---- 6. 食べる（倉庫の食べ物、足りなければ自分の持ち物から） ----
-  state.res.food -= active.length;
-  if (state.res.food < 0) {
-    let short = -state.res.food;
-    state.res.food = 0;
-    const FOOD = ['apple', 'berry', 'wheat'];
-    for (const v of active) {
-      if (short <= 0) break;
-      const inv = life[v.key].inv;
-      for (let i = 0; i < inv.length && short > 0; i++) {
-        const s = inv[i];
-        if (s && FOOD.includes(s.item)) { const per = ITEMS[s.item].value.food; const k = Math.min(s.n, Math.ceil(short / per)); s.n -= k; short -= k * per; if (s.n <= 0) inv[i] = null; }
+  // 整地のできあがり：草と石がなくなる。建てる場所の木と岩はどける
+  if (leveler) {
+    for (const lv of levelJobs) {
+      if (lv.target === 'square') { world.square.leveled = day; today.leveled.push('square'); hist('level', '村のまん中の草をぬいて、石をどけて、地面をならした（整地）。'); }
+      else {
+        plan.leveled = day; today.leveled.push('site');
+        for (const t of world.trees) if (!t.gone && Math.hypot(t.x - plan.site.x, t.z - plan.site.z) < lv.r + 1) { t.gone = 1; t.state = 'stump'; }
+        for (const r of world.rocks) if (!r.gone && r.hp > 0 && Math.hypot(r.x - plan.site.x, r.z - plan.site.z) < lv.r + 1.5) { r.hp = 0; r.back = day + RS2.rockDays[0]; }
+        hist('level', `${plan.site.label}の、${B(plan.build).name}を建てる場所をならした。建て始めた。`);
       }
     }
-    if (short > 0) {
+  }
+  if (plan && plan.site && (plan.site.plot === 'ring' || plan.site.plot === 'farm') && !plan.leveled) plan.leveled = day;
+
+  // ---- 6. 食べる（チェストの食べ物、足りなければ自分の持ち物から） ----
+  if (!spend('food', active.length)) {
+    const FOOD = ['apple', 'berry', 'wheat'];
+    let need2 = active.length * 0.5; // チェストが空になった分の半分を、持ち物から
+    for (const v of active) {
+      if (need2 <= 0) break;
+      const inv = life[v.key].inv;
+      for (let i = 0; i < inv.length && need2 > 0; i++) {
+        const s = inv[i];
+        if (s && FOOD.includes(s.item)) { const per = ITEMS[s.item].value.food; const k = Math.min(s.n, Math.ceil(need2 / per)); s.n -= k; need2 -= k * per; if (s.n <= 0) inv[i] = null; }
+      }
+    }
+    if (need2 > 0) {
       for (const v of active) life[v.key].diary[life[v.key].diary.length - 1].text += '食べ物が足りなくて、おなかがすいた。';
       hist('event', '食べ物が足りなくなった。みんなおなかをすかせている。');
     }
   }
   syncRes();
 
-  // ---- 7. 生える・育つ ----
+  // ---- 7. 生える・育つ・また出てくる（日数は config.json の respawn） ----
   for (const t of world.trees) {
+    if (t.gone) continue;
     if (t.state === 'stump' || t.state === 'sapling') {
       if (t.cutDay === day) continue;
       t.regrow -= 1;
-      t.state = t.regrow <= 0 ? 'tree' : t.regrow <= 2 ? 'sapling' : 'stump';
+      t.state = t.regrow <= 0 ? 'tree' : t.regrow <= RS2.saplingDays ? 'sapling' : 'stump';
+      if (t.state === 'tree') t.logs = 0;
     }
   }
+  // 岩：同じ場所か、別の場所に新しく出る（建物や建てる場所の上には出ない）
+  const busy = (x, z) => world.buildings.some((b) => Math.hypot(b.x - x, b.z - z) < 6) || (state.plan && state.plan.site && Math.hypot(state.plan.site.x - x, state.plan.site.z - z) < 6)
+    || Math.hypot(x - world.square.x, z - world.square.z) < world.square.r + 2 || world.trees.some((t) => !t.gone && t.state === 'tree' && Math.hypot(t.x - x, t.z - z) < 2.6)
+    || world.rocks.some((r) => r.hp > 0 && Math.hypot(r.x - x, r.z - z) < 4);
+  for (const r of world.rocks) {
+    if (r.hp > 0 || !r.back || day < r.back) continue;
+    let x = r.x, z = r.z;
+    if (!R.chance(RS2.sameSpot) || busy(x, z)) {
+      let ok = false;
+      for (let k = 0; k < 40 && !ok; k++) {
+        x = R.range(-100, 100); z = R.range(-100, world.seaZ - 6);
+        ok = !busy(x, z) && !(x < -30 && x > -46 && z > -10 && z < 12);
+      }
+      if (!ok) continue;
+    }
+    r.gen = (r.gen || 0) + 1;
+    r.x = +x.toFixed(2); r.z = +z.toFixed(2);
+    r.max = R.int(GA.rockItems[0], GA.rockItems[1]); r.hp = r.max;
+    r.blocks = O.genBlocks(state.seed, { id: r.id + '#' + r.gen, max: r.max }, config.ores);
+    if (Math.hypot(r.x, r.z + 1) > 44) r.far = 1; else delete r.far;
+    delete r.back; delete r.gone;
+  }
   for (const b of world.bushes) if (!b.ready) { b.regrow -= 1; if (b.regrow <= 0) b.ready = true; }
-  if (rain) for (const f of world.fields) if (!takenFields.has(f.id)) f.stage = Math.min(3, f.stage + 1);
+  // 畑：毎日 1 段育つ。雨の日と、水路のそば（確率）はもう 1 段
+  {
+    const FA = config.farming;
+    const canal = world.buildings.find((b) => b.type === 'canal');
+    for (const f of world.fields) {
+      const max = f.max || 3;
+      if (f.day === day && f.stage === 0 && takenFields.has(f.id)) continue; // 今日まいた種は明日から
+      let g = 1;
+      if (rain) g++;
+      if (canal && Math.hypot(f.x - canal.x, f.z - canal.z) < FA.canalRange && R2.chance(FA.canalBoost)) { g++; f.water = 1; }
+      f.stage = Math.min(max, f.stage + g);
+    }
+  }
+  // 動物の柵：近くの野の動物を、毎日少しずつ中へ入れて飼う（動物は減らない）
+  {
+    const AN = config.animals;
+    for (const pen of world.buildings.filter((b) => b.type === 'pen')) {
+      const inPen = world.animals.filter((a) => a.pen === pen.id);
+      const wild = world.animals.filter((a) => !a.pen && Math.hypot(a.x - pen.x, a.z - pen.z) < AN.tameRange)
+        .sort((a, b) => Math.hypot(a.x - pen.x, a.z - pen.z) - Math.hypot(b.x - pen.x, b.z - pen.z) || (a.id < b.id ? -1 : 1));
+      // 種類がかたよらないように、まだいない種類を先に
+      wild.sort((a, b) => inPen.some((x) => x.kind === a.kind) - inPen.some((x) => x.kind === b.kind));
+      for (const a of wild.slice(0, Math.max(0, Math.min(AN.tamePerDay, AN.penCap - inPen.length)))) {
+        const i = inPen.length;
+        a.pen = pen.id; a.tamedDay = day; a.wildX = a.x; a.wildZ = a.z;
+        a.x = +(pen.x + ((i % 4) - 1.5) * 1.6 + R2.range(-0.3, 0.3)).toFixed(2); a.z = +(pen.z + (Math.floor(i / 4) - 0.5) * 1.8 + R2.range(-0.3, 0.3)).toFixed(2);
+        inPen.push(a);
+        first('tame', `野の${AN.kinds[a.kind].name}を、はじめて柵の中に入れて飼い始めた。`, { animal: a.id });
+      }
+    }
+  }
 
-  // ---- 8. 建てる（1 日 1 つまで） ----
-  // 倉庫だけで足りなければ、材料を持っている人が持ち寄る（その人は明日の仕事が往復ぶん減る）
-  const lacking = () => RES.filter((r) => state.resources[r] < (cost[r] || 0));
-  if (lacking().length) {
-    const pooled = { wood: state.res.wood, stone: state.res.stone, food: state.res.food };
-    const carriers = active.map((v) => ({ v, val: valueOf(Object.fromEntries(life[v.key].inv.filter((s) => s && !I.isTool(s)).map((s) => [s.item, s.n]))) }));
+  // ---- 8. 建てる（投票で決まった物を、決まった場所に。整地が終わって、チェストの材料が足りたら） ----
+  // チェストだけで足りなければ、材料を持っている人が持ち寄る（その人は明日の仕事が往復ぶん減る）
+  const lacking = () => RES.filter((r) => state.res[r] + 1e-9 < (cost[r] || 0));
+  if (plan && plan.site && plan.leveled && lacking().length) {
+    const pooled = { ...state.res };
+    const carriers = active.map((v) => ({ v, val: valueOf(Object.fromEntries(life[v.key].inv.filter((s) => s && !I.isTool(s) && config.spendOrder.wood.concat(config.spendOrder.stone, config.spendOrder.food).includes(s.item)).map((s) => [s.item, s.n]))) }));
     for (const c of carriers) for (const r of RES) pooled[r] += c.val[r];
-    if (RES.every((r) => Math.floor(pooled[r] + 1e-9) >= (cost[r] || 0))) {
+    if (RES.every((r) => pooled[r] + 1e-9 >= (cost[r] || 0))) {
       carriers.sort((a, b) => RES.reduce((s, r) => s + (lacking().includes(r) ? b.val[r] - a.val[r] : 0), 0));
       for (const c of carriers) {
         const lk = lacking();
@@ -392,31 +694,42 @@ function stepDay(S) {
         const val = deposit(I.unload(L.inv));
         for (const r of RES) L.contrib[r] += val[r];
         L.trips++; today.trips++; L.debt += IC.tripCost; L.xp += IC.xp.carry;
-        L.diary[L.diary.length - 1].text += '建てる材料を倉庫へ運んだ。';
+        L.diary[L.diary.length - 1].text += '建てる材料をチェストへ運んだ。';
       }
     }
   }
-  if (!lacking().length) {
-    for (const r of RES) state.res[r] -= cost[r] || 0;
-    syncRes();
-    const def = B(next);
-    let pos;
-    if (def.plot === 'ring') pos = { x: 0, z: -1, plot: 'ring' }; // 町をぐるりと囲むもの（柵・石壁・街灯）
-    else if (def.plot && world.special[def.plot]) pos = world.special[def.plot];
-    else {
-      const used = new Set(world.buildings.map((b) => b.plot));
-      const idx = world.plots.findIndex((p, i) => !used.has(i));
-      pos = { ...world.plots[idx], plot: idx };
-    }
-    const id = next + '_' + world.buildings.length;
+  if (plan && plan.site && plan.leveled && !lacking().length) {
+    for (const r of RES) if (cost[r]) spend(r, cost[r]);
+    const def = B(plan.build);
+    const pos = plan.site;
+    const id = plan.build + '_' + world.buildings.length;
     const builders = active.filter((v) => RES.some((r) => (cost[r] || 0) > 0 && life[v.key].contrib[r] > 0)).map((v) => v.key);
-    const b = { id, type: next, x: pos.x, z: pos.z, plot: pos.plot ?? def.plot, rot: +Math.atan2(-pos.x, -(pos.z + 1)).toFixed(3), day, builders, variant: R.int(0, 3) };
-    if (def.plot === 'coast' || def.plot === 'coast2' || def.plot === 'coast3') b.rot = Math.PI;
+    const b = { id, type: plan.build, x: pos.x, z: pos.z, plot: pos.plot, rot: +Math.atan2(-pos.x, -(pos.z + 1)).toFixed(3), day, builders, variant: R.int(0, 3), voted: true };
+    if (pos.plot === 'coast' || pos.plot === 'coast2' || pos.plot === 'coast3') b.rot = Math.PI;
+    if (pos.rot !== undefined) b.rot = pos.rot;
     world.buildings.push(b);
+    if (plan.build === 'farm') { // 畑の区画（3 × 2）。建った場所の向きにそろえる
+      const n = config.farming.plotsPerFarm, c = Math.cos(b.rot), s = Math.sin(b.rot);
+      for (let i = 0; i < n; i++) {
+        const lx = ((i % 3) - 1) * 2.3, lz = (Math.floor(i / 3) - 0.5) * 2.5;
+        world.fieldSlots.push({ x: +(b.x + lx * c + lz * s).toFixed(2), z: +(b.z - lx * s + lz * c).toFixed(2), farm: b.id, rot: b.rot });
+      }
+    }
     for (const k of builders) { life[k].built.push(id); life[k].xp += IC.xp.build; for (const r of RES) life[k].contrib[r] = 0; life[k].diary[life[k].diary.length - 1].text += `${def.name}ができた。自分の運んだ材料も使われている。`; }
-    state.queue.shift();
     today.built.push(id);
-    hist('build', `${def.name}が建った。${builders.length} 人が材料を集めた。`, { building: id, buildingType: next });
+    hist('build', `投票で決まった${def.name}が${pos.label}に建った。${builders.length} 人が材料を集めた。`, { building: id, buildingType: plan.build });
+    state.plan = null;
+  }
+  // 次に作れる道具（サイトの「町のチェスト」に出す）
+  {
+    const best = (kind) => active.reduce((m, v) => { const t = I.getTool(life[v.key].inv || [], kind); const tier = t ? I.toolTier(t.item) : 'hand'; return CR.tierRank(tier) > CR.tierRank(m) ? tier : m; }, 'hand');
+    const ch = CR.choose(state.store, 'pickaxe', CC, { built: world.buildings.map((x) => x.type), have: best('pickaxe'), goal: state.toolGoal });
+    let nt = ch.key ? { item: ch.key, ok: true, text: "作れる" } : ch.want ? { item: ch.want.key, ok: false, missing: ch.want.missing, text: `材料が足りない（${CR.missingText(ch.want.missing, ITEMS)}）` } : null;
+    if (!nt) { // 次の段階に作業台が要る時
+      const have = best("pickaxe"), nx = Object.entries(CC.recipes).find(([, r]) => r.tool === "pickaxe" && CR.tierRank(r.tier) === CR.tierRank(have) + 1);
+      if (nx) nt = { item: nx[0], ok: false, text: `${B(CC.tiers[nx[1].tier].needs).name}がいる` };
+    }
+    state.nextTool = nt;
   }
 
   // ---- 8.5 コメントで参加した人にも少し経験値 ----
@@ -430,7 +743,7 @@ function stepDay(S) {
     }
   };
   if (inbox && inbox.joinComments) bonusXp(inbox.joinComments.filter((c) => Date.parse(c.timestamp) >= Date.parse(jst(addDays(date, -1), 0))).map(P.commentUser), IC.xp.comment);
-  if (closedVoters) bonusXp(closedVoters, IC.xp.vote, '投票に参加した。');
+  if (closedVoters.length) bonusXp(closedVoters, IC.xp.vote, '投票に参加した。');
 
   // ---- レベルと枠 ----
   for (const v of active) {
@@ -470,8 +783,8 @@ function stepDay(S) {
     posOf: (k) => objAt[life[k].target] || objAt[life[k].home] || null,
     homePos: (id) => (id && objAt[id]) || null,
     built: today.built.length ? B(world.buildings.find((b) => b.id === today.built[0]).type).name : '',
-    queueNext: state.queue[0] ? B(state.queue[0]).name : '',
-    vote: state.vote,
+    queueNext: state.plan ? B(state.plan.build).name : '',
+    vote: state.votes.find((v) => v.kind !== 'where') || null,
   });
   today.talks = soc.talks.length;
   for (const t of soc.talks) for (const k of [t.a, t.b]) {
@@ -480,7 +793,7 @@ function stepDay(S) {
   }
 
   // ---- 12. 夜（敵が来る・見張りが追い払う）。別の乱数なので、ここまでの結果は変わらない ----
-  state.night = N.stepNight({ day, seed: state.seed, active, life, world, state, config, hist });
+  state.night = config.enemies && config.enemies.enabled ? N.stepNight({ day, seed: state.seed, active, life, world, state, config, hist }) : null;
   syncRes();
   if (state.night) {
     state.nightLog = (state.nightLog || []).concat({ day, count: state.night.count, result: state.night.result, defense: state.night.defense }).slice(-60);

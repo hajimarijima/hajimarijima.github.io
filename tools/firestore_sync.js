@@ -112,7 +112,7 @@ const toFs = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typ
   // 2. プロフィール：公開の項目は villagers.json へ、公開しない項目は data/inbox/（git に入らない）へ
   const pub = await list('profiles');
   const priv = await list('private');
-  const { report, priv: privOut } = PR.applyProfiles(villagers, pub, priv, config.profileFields || []);
+  const { report, priv: privOut } = PR.applyProfiles(villagers, pub, priv, config.profileFields || [], { day: (read('state.json') || {}).day, startTools: config.startTools });
   write('villagers.json', villagers);
   write('inbox/profiles_private.json', privOut);
   console.log(`つないだ人 ${linked} 人・プロフィールを反映 ${report.updated.length} 人・使えなかった項目 ${report.rejected.length}${DRY ? '（--dry なので書いていません）' : ''}`);

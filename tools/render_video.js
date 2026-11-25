@@ -117,6 +117,12 @@ function encode(info) {
   execFileSync(FFMPEG, ['-y', '-loglevel', 'error', '-framerate', String(info.FPS), '-i', path.join(VIDEO, 'frames', '%05d.jpg'), '-i', path.join(VIDEO, 'audio.wav'),
     '-vf', 'scale=out_range=tv:out_color_matrix=bt709,format=yuv420p', '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-color_range', 'tv', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-r', String(info.FPS), '-c:a', 'aac', '-b:a', '160k', '-shortest', '-movflags', '+faststart', out], { stdio: 'inherit' });
   console.log('できました: ' + out);
+  // 軽い版（30MB 未満。送ったり上げたりしやすい）：720p（720×1280）・crf 28。念のためビットレートの上限もつける
+  const lite = path.join(VIDEO, 'town_reel_軽量.mp4');
+  const kbps = Math.max(800, Math.min(3200, Math.floor((27 * 8 * 1024) / info.DURATION) - 128));
+  execFileSync(FFMPEG, ['-y', '-loglevel', 'error', '-i', out, '-vf', 'scale=720:1280:flags=lanczos', '-c:v', 'libx264', '-preset', 'slow', '-crf', '28', '-maxrate', kbps + 'k', '-bufsize', kbps * 2 + 'k',
+    '-pix_fmt', 'yuv420p', '-color_range', 'tv', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', lite], { stdio: 'inherit' });
+  console.log('軽い版: ' + lite + `（${(fs.statSync(lite).size / 1048576).toFixed(1)} MB）`);
   return out;
 }
 

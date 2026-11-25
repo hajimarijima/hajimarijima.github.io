@@ -2,10 +2,10 @@
 // 村人の持ち物欄・レベル・枠の数（sim.js とテストで共通）
 // 数は data/config.json の "inventory" にある。
 
-const TOOLS = { axe: '斧', pickaxe: 'つるはし', hoe: 'くわ' };
+const TOOLS = { axe: '斧', pickaxe: 'つるはし', hoe: 'くわ', shovel: 'シャベル', sword: '剣', fishing_rod: '釣りざお' };
 // 道具の種類（wood_pickaxe → pickaxe）と段階（wood / stone / iron）
-const toolKind = (item) => { if (!item) return null; const m = /^(?:(wood|stone|iron)_)?(axe|pickaxe|hoe)$/.exec(item); return m ? m[2] : null; };
-const toolTier = (item) => { const m = /^(wood|stone|iron)_/.exec(item || ''); return m ? m[1] : toolKind(item) ? 'wood' : 'hand'; };
+const toolKind = (item) => { if (!item) return null; const m = /^(?:(wood|stone|iron|gold|diamond)_)?(axe|pickaxe|hoe|shovel|sword|fishing_rod)$/.exec(item); return m ? m[2] : null; };
+const toolTier = (item) => { const m = /^(wood|stone|iron|gold|diamond)_/.exec(item || ''); return m ? m[1] : toolKind(item) ? 'wood' : 'hand'; };
 
 // レベル L に届くのに要る経験値の合計
 function xpForLevel(L, cfg) { return L <= 1 ? 0 : Math.round(cfg.xpBase * Math.pow(L - 1, cfg.xpExp)); }

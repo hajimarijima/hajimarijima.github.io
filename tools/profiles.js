@@ -24,7 +24,8 @@ function linksFrom(comments, word) {
 }
 // Firestore の profiles / private の中身を、項目の定義で確かめてから村人に入れる。
 // docs: { 村人の key: { 項目: 値 } }。公開する項目だけを villagers.json に入れ、公開しない項目は別に返す。
-function applyProfiles(villagers, pubDocs, privDocs, fields) {
+// 「最初の道具」（startTool）は、参加した日（day <= joinedDay）に 1 回だけ変えられる。それ以外は前の道具のまま
+function applyProfiles(villagers, pubDocs, privDocs, fields, { day = null, startTools = null } = {}) {
   const report = { updated: [], rejected: [] };
   const priv = {};
   const byKey = Object.fromEntries(villagers.map((v) => [v.key, v]));
@@ -38,6 +39,12 @@ function applyProfiles(villagers, pubDocs, privDocs, fields) {
       if (ok[f.id] === undefined) continue;
       if (f.id === 'mbti') v.mbti = ok.mbti;
       else if (f.id === 'birthday') v.birthday = ok.birthday;
+      else if (f.id === 'startTool') {
+        const o = P.startToolByLabel(startTools, ok.startTool);
+        if (!o || o.id === v.startTool) continue;
+        if (v.startToolChanged || (day != null && day > v.joinedDay)) { report.rejected.push({ key, field: 'startTool', reason: '最初の道具は、参加した日に 1 回だけ変えられます' }); continue; }
+        v.startTool = o.id; v.startToolChanged = day != null ? day : true;
+      }
       else prof[f.id] = ok[f.id];
     }
     v.profile = prof;

@@ -3,7 +3,7 @@
 // レシピと段階は data/config.json の "crafting"。材料はチェスト（state.store）から使う。
 // 原木 1 → 板 4、板 2 → 棒 4 は、足りない時に自動で作る（余りはチェストに残る）。
 
-const TIER_ORDER = ['hand', 'wood', 'stone', 'iron'];
+const TIER_ORDER = ['hand', 'wood', 'stone', 'iron', 'gold', 'diamond'];
 const tierRank = (t) => TIER_ORDER.indexOf(t);
 
 // recipe を今のチェストで作れるか。作れるなら { ok: true, store: 使ったあとの中身 }、

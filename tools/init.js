@@ -74,6 +74,10 @@ for (const [x, z] of [[11.5, -9.5], [-10.5, 7.5]]) {
   rk.blocks = genBlocks(seed, rk, ORES);
   rocks.push(rk);
 }
+// 池（釣りをする所）：まわりの木と岩をどける
+const POND = { x: -20, z: 15, r: 4.2 };
+for (let i = trees.length - 1; i >= 0; i--) if (Math.hypot(trees[i].x - POND.x, trees[i].z - POND.z) < POND.r + 2.6) trees.splice(i, 1);
+for (let i = rocks.length - 1; i >= 0; i--) if (Math.hypot(rocks[i].x - POND.x, rocks[i].z - POND.z) < POND.r + 3) rocks.splice(i, 1);
 trees.forEach((t, i) => { t.id = 't' + i; });
 
 // 整地する前の村のまん中：草と小石
@@ -91,16 +95,32 @@ while (bushes.length < 12 && tries++ < 2000) {
   bushes.push({ id: 'b' + bushes.length, x: +x.toFixed(2), z: +z.toFixed(2), ready: true, regrow: 0 });
 }
 
-// 畑の区画（耕されると使われる）
+// 畑の区画は、投票で「畑」が建った時にその場所にできる
 const fieldSlots = [];
-for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) fieldSlots.push({ x: -43 + i * 3.6 + 1.5, z: -7 + j * 3.6 + 1.5 });
+
+// 野の動物（森と野原を歩く）。別の乱数なので、木と岩の並びは変わらない
+const RW = makeRng('wild:' + seed);
+const animals = [];
+const KINDS = ['cow', 'sheep', 'chicken', 'pig'];
+const MEADOWS = [[-38, 1, 7], [38, 7, 7], [-6, -30, 10], [26, -22, 9]]; // 野原と森の入口（x, z, 広さ）
+for (let i = 0; i < 16; i++) {
+  const [mx, mz, mr] = MEADOWS[i % MEADOWS.length];
+  let x = 0, z = 0;
+  for (let k = 0; k < 30; k++) {
+    const a = RW.range(0, Math.PI * 2), r = Math.sqrt(RW.next()) * mr;
+    x = mx + Math.cos(a) * r; z = mz + Math.sin(a) * r;
+    if (!near(trees, x, z, 1.4) && !near(rocks, x, z, 2) && !near(animals, x, z, 1.6)) break;
+  }
+  animals.push({ id: 'a' + i, kind: KINDS[(i + Math.floor(i / 4)) % 4], x: +x.toFixed(2), z: +z.toFixed(2), pen: null });
+}
 
 const world = {
   size: 220, seaZ: SEA_Z,
   trees, rocks, bushes,
   fields: [], fieldSlots,
   buildings: [],
-  plots: freePlots, special,
+  plots: freePlots.filter((p) => Math.hypot(p.x - POND.x, p.z - POND.z) > POND.r + 3.5), special,
+  pond: POND, animals,
   campfire: { x: 2.5, z: 3 },
   square: { ...SQUARE, leveled: 0 }, debris,
   chest: { x: 5.2, z: 0.6, day: 0 }, // 集めた物を入れるチェスト（最初の村人が来た日に置く）
