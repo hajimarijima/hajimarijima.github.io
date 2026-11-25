@@ -2050,7 +2050,7 @@
     "maxRounds": 80
   },
   "badges": {
-    "note": "バッジ。stat の数が tiers（銅・銀・金・ダイヤ）に届くともらえる。絵はあとでまとめて作る（今は仮）",
+    "note": "バッジ。stat（村人の記録。kills.total・gathered.wood・built など）の数が tiers（銅・銀・金・ダイヤ）に届くともらえる。founder は段なしで、村ができて founder 日目までに住んだ人がもらう。絵は icons/badge_<id>_<段>.png（tools/gen_badges.js で作る）",
     "tierNames": [
       "銅",
       "銀",
@@ -2058,9 +2058,15 @@
       "ダイヤ"
     ],
     "list": {
+      "founder": {
+        "name": "はじまりの住人",
+        "founder": 7,
+        "note": "村ができて 7 日目までに住んだ"
+      },
       "guard": {
         "name": "見張り番",
-        "stat": "kills",
+        "stat": "kills.total",
+        "unit": " 体",
         "tiers": [
           10,
           100,
@@ -2068,6 +2074,31 @@
           1000
         ],
         "note": "夜に敵を倒した数"
+      },
+      "lumber": {
+        "name": "木こり",
+        "stat": "gathered.wood",
+        "tiers": [100, 1000, 5000, 10000],
+        "note": "集めた木"
+      },
+      "miner": {
+        "name": "石掘り",
+        "stat": "gathered.stone",
+        "tiers": [100, 1000, 5000, 10000],
+        "note": "集めた石"
+      },
+      "farmer": {
+        "name": "食べもの係",
+        "stat": "gathered.food",
+        "tiers": [100, 1000, 5000, 10000],
+        "note": "集めた食べもの"
+      },
+      "builder": {
+        "name": "大工",
+        "stat": "built",
+        "unit": " 軒",
+        "tiers": [1, 5, 20, 50],
+        "note": "建てるのを手伝った建物"
       }
     }
   },

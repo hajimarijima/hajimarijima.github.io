@@ -105,3 +105,25 @@ export function rollDrops(type, C, rng) {
 
 // バッジの段（tiers = [銅, 銀, 金, ダイヤ] の数）。届いていなければ -1
 export function badgeTier(n, tiers) { let t = -1; tiers.forEach((v, i) => { if (n >= v) t = i; }); return t; }
+
+// バッジの数を村人の記録から読む。stat は 'kills.total' / 'gathered.wood' / 'built'（配列は数）など。
+// 'kills' のように入れ物だけなら .total を使う
+export function badgeCount(L, stat) {
+  let v = L;
+  for (const p of String(stat).split('.')) v = v == null ? undefined : v[p];
+  if (Array.isArray(v)) return v.length;
+  if (v && typeof v === 'object') v = v.total;
+  return Math.floor(Number(v) || 0);
+}
+
+// その村人がいま持っているはずのバッジ { id: 段 }。founder のバッジは段なし（0 だけ）
+export function badgesOf(L, v, BG) {
+  const out = {};
+  if (!BG || !L) return out;
+  for (const [id, B] of Object.entries(BG.list)) {
+    if (B.founder) { if (v && v.joinedDay <= B.founder) out[id] = 0; continue; }
+    const t = badgeTier(badgeCount(L, B.stat), B.tiers);
+    if (t >= 0) out[id] = t;
+  }
+  return out;
+}

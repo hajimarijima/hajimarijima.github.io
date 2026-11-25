@@ -474,6 +474,24 @@ t('戦い：攻撃力は装備で決まる・クリティカルは良い装備�
   assert.deepStrictEqual([9, 10, 99, 100, 500, 999, 1000].map((n) => CB.badgeTier(n, T)), [-1, 0, 0, 1, 2, 2, 3], '見張り番バッジの段（銅・銀・金・ダイヤ）');
   for (const k of ['guard', 'repel', 'kill_zombie', 'kill_skeleton', 'kill_spider']) assert.ok(config.inventory.xp[k] > 0, `経験値 ${k}`);
 });
+t('バッジ：はじまりの住人と技能バッジ（銅・銀・金・ダイヤ）・数の読み方・絵がある', () => {
+  const CB = require('../js/combat.js');
+  const BG = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8')).badges;
+  const L = { kills: { total: 120, zombie: 100 }, gathered: { wood: 600, stone: 10, food: 50 }, built: ['a', 'b', 'c', 'd', 'e'] };
+  assert.strictEqual(CB.badgeCount(L, 'kills'), 120, 'kills は total を読む');
+  assert.strictEqual(CB.badgeCount(L, 'gathered.wood'), 600);
+  assert.strictEqual(CB.badgeCount(L, 'built'), 5, '配列は数');
+  assert.strictEqual(CB.badgeCount(L, 'nothing.here'), 0);
+  assert.deepStrictEqual(CB.badgesOf(L, { joinedDay: 1 }, BG), { founder: 0, guard: 1, lumber: 0, builder: 1 }); // 木こりは 100/1000/5000/10000 本（600 本は銅）・食べもの 50 はまだ
+  assert.ok(!('founder' in CB.badgesOf(L, { joinedDay: BG.list.founder.founder + 1 }, BG)), 'あとから来た人ははじまりの住人ではない');
+  for (const [id, B] of Object.entries(BG.list)) {
+    assert.ok(B.name && B.note, id + ' の名前と説明');
+    if (B.founder) { assert.ok(fs.existsSync(path.join(ROOT, 'icons', `badge_${id}.png`)), id + ' の絵'); continue; }
+    assert.strictEqual(B.tiers.length, BG.tierNames.length, id + ' は 4 段');
+    assert.ok(B.tiers.every((v, i) => i === 0 || v > B.tiers[i - 1]), id + ' の段は増えていく');
+    B.tiers.forEach((_, i) => assert.ok(fs.existsSync(path.join(ROOT, 'icons', `badge_${id}_${i}.png`)), `${id} ${BG.tierNames[i]} の絵`));
+  }
+});
 t('鉱石：岩の中身は種と岩の id で毎回同じ・確率は config.json・まれな物ほど少ない', () => {
   const O = require('../tools/ores');
   const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));

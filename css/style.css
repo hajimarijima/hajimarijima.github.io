@@ -180,6 +180,11 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .slot .lockimg { inset: 20% 30% 40%; width: 40%; height: 40%; opacity: .7; }
 .slot .cond { position: absolute; left: 0; right: 0; bottom: 3px; font: 700 9px/1.1 sans-serif; color: var(--sub); text-align: center; white-space: nowrap; overflow: hidden; }
 .invmore { margin: 6px 0 0; font-size: 13px; color: var(--sub); }
+.badges { display: flex; flex-wrap: wrap; gap: 10px 14px; margin: 8px 0 0; }
+.badge { margin: 0; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.badge img { width: 48px; height: 48px; image-rendering: pixelated; flex: none; filter: drop-shadow(0 2px 2px rgba(0,0,0,.35)); }
+.badge figcaption { font-size: 13px; line-height: 1.3; }
+.badge small { display: block; color: var(--sub); font-size: 12px; }
 .vcard .lvline { font-size: 12px; color: var(--sub); }
 
 /* ---- 関係・立ち話・プロフィール ---- */

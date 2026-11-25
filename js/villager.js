@@ -6,6 +6,7 @@ import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, JOB, ACTION, RES, fmtDat
 import { BODIES, BODY_LABEL } from './skingen.js';
 import { decodeHours, parseCode, hourOf, hourText } from './hours.js';
 import { heldOf } from './invslots.js';
+import { badgeCount } from './combat.js';
 
 // 今の時刻（日本時間。?hour=N で決められる）の行動と、1 日の予定（同じ行動が続く所をまとめる）
 function hourRows(L) {
@@ -312,20 +313,44 @@ function renderInventory(L, config) {
   const more = IC.max - slots - showLocked;
   if (more > 0) { const p = document.createElement('p'); p.className = 'invmore'; p.textContent = `ほかに あと ${more} 枠。レベルや住んだ日数で開きます。`; box.after(p); }
   info.textContent = held.label + '。枠を押すと中身が出ます。点線の枠は次に開く条件です。';
-  // 夜の見張りで倒した敵と、バッジ（見張り番：銅・銀・金・ダイヤ。絵はあとで）
+  // 夜の見張りで倒した敵
+  let tail = info;
   if (L.kills && L.kills.total) {
-    const BG = config.badges, NM = { zombie: 'ゾンビ', skeleton: 'スケルトン', spider: 'クモ' };
+    const NM = { zombie: 'ゾンビ', skeleton: 'スケルトン', spider: 'クモ' };
     const parts = Object.keys(NM).filter((k) => L.kills[k]).map((k) => `${NM[k]} ${L.kills[k]}`).join('・');
-    let b = '';
-    if (BG) for (const [id, B] of Object.entries(BG.list)) {
-      const t = (L.badges || {})[id] ?? -1;
-      b += t >= 0 ? `「${B.name}」${BG.tierNames[t]}バッジ` : `「${B.name}」の銅バッジまで あと ${B.tiers[0] - L.kills.total} 体`;
-      if (t >= 0 && t < B.tiers.length - 1) b += `（次の${BG.tierNames[t + 1]}まで あと ${B.tiers[t + 1] - L.kills.total} 体）`;
-    }
     const p = document.createElement('p'); p.className = 'invmore';
-    p.textContent = `夜の見張りで倒した敵 ${L.kills.total} 体（${parts}）。${b}`;
-    info.after(p);
+    p.textContent = `夜の見張りで倒した敵 ${L.kills.total} 体（${parts}）。`;
+    tail.after(p); tail = p;
   }
+  renderBadges(L, config, tail);
+}
+
+// バッジ：もらったものは絵で並べ、次の段までの残りを添える。まだのものは一番近い 2 つだけ「あと いくつ」
+function renderBadges(L, config, after) {
+  const BG = config.badges; if (!BG) return;
+  const got = L.badges || {}, box = document.createElement('div'); box.className = 'badges';
+  const near = [];
+  for (const [id, B] of Object.entries(BG.list)) {
+    const t = got[id] ?? -1;
+    if (t < 0) {
+      if (!B.founder) { const n = badgeCount(L, B.stat); near.push({ B, left: B.tiers[0] - n, r: n / B.tiers[0] }); }
+      continue;
+    }
+    const n = B.founder ? 0 : badgeCount(L, B.stat), unit = B.unit || '';
+    const title = B.founder ? B.name : `${B.name}（${BG.tierNames[t]}）`;
+    const next = !B.founder && t < B.tiers.length - 1 ? `次の${BG.tierNames[t + 1]}まで あと ${B.tiers[t + 1] - n}${unit}` : '';
+    const src = B.founder ? `icons/badge_${id}.png` : `icons/badge_${id}_${t}.png`;
+    const tip = B.founder ? `${B.name}：${B.note}` : `${title}：${B.note} ${n}${unit}${next ? '。' + next : ''}`;
+    const el = document.createElement('figure'); el.className = 'badge'; el.title = tip;
+    el.innerHTML = `<img class="pixel" src="${src}" alt="" width="48" height="48"><figcaption>${esc(title)}${next ? `<small>${esc(next)}</small>` : ''}</figcaption>`;
+    box.append(el);
+  }
+  const p = document.createElement('p'); p.className = 'invmore';
+  near.sort((a, b) => b.r - a.r);
+  const rest = near.slice(0, 2).map(({ B, left }) => `「${B.name}」の銅まで あと ${left}${B.unit || ''}`).join('、');
+  p.textContent = (box.children.length ? 'バッジ。' : 'バッジはまだありません。') + (rest ? rest + '。' : '');
+  after.after(p);
+  if (box.children.length) p.after(box);
 }
 
 main().catch(showError);

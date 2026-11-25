@@ -1473,12 +1473,6 @@ function stepDay(S) {
       for (const t of Object.keys(kl)) { gain += (XP['kill_' + t] || 0) * kl[t]; L.kills = L.kills || { total: 0 }; L.kills[t] = (L.kills[t] || 0) + kl[t]; L.kills.total += kl[t]; }
       if (NT.fight && NT.fight.end === 'won') gain += XP.repel || 0; // 守りきった夜（敵を全員倒した）
       L.xp += gain; L.nightXp = { day, xp: gain };
-      // バッジ（見張り番など）：数が段に届いたら、町の歴史に残す
-      if (BG) for (const [id, B] of Object.entries(BG.list)) {
-        const n = (L[B.stat] && L[B.stat].total) || 0, tier = CB.badgeTier(n, B.tiers);
-        L.badges = L.badges || {};
-        if (tier > (L.badges[id] ?? -1)) { L.badges[id] = tier; hist('badge', `${nameOf(k)}が「${B.name}」の${BG.tierNames[tier]}バッジをもらった（${B.note} ${n}）。`, { who: [k], badge: id, tier }); }
-      }
     }
     if (NT.drops && Object.keys(NT.drops).length) {
       deposit(NT.drops);
@@ -1487,6 +1481,23 @@ function stepDay(S) {
     }
     state.nightLog = (state.nightLog || []).concat({ day, count: state.night.count, result: state.night.result, defense: state.night.defense }).slice(-60);
     today.night = { count: state.night.count, result: state.night.result };
+  }
+
+  // バッジ（はじまりの住人・技能バッジ 銅/銀/金/ダイヤ）：届いたら町の歴史と日記に残す
+  const BGS = config.badges;
+  if (BGS) for (const v of active) {
+    const k = v.key, L = life[k]; if (!L) continue;
+    const got = CB.badgesOf(L, v, BGS);
+    L.badges = L.badges || {};
+    for (const [id, tier] of Object.entries(got)) {
+      if (tier <= (L.badges[id] ?? -1)) continue;
+      const B = BGS.list[id]; L.badges[id] = tier;
+      const what = B.founder ? `「${B.name}」のバッジ` : `「${B.name}」の${BGS.tierNames[tier]}バッジ`;
+      const why = B.founder ? B.note : `${B.note} ${CB.badgeCount(L, B.stat)}${B.unit || ''}`;
+      hist('badge', `${v.display}が${what}をもらった（${why}）。`, { who: [k], badge: id, tier });
+      const d = L.diary[L.diary.length - 1];
+      if (d && d.day === day) d.text += `${what}をもらった。`;
+    }
   }
 
   for (const k in life) if (life[k].diary.length > 90) life[k].diary.splice(0, life[k].diary.length - 90);
