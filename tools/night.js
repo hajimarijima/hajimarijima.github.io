@@ -63,11 +63,11 @@ function stepNight(S) {
 
   // たいまつ 2 本ぶん + 見張り 1 人 2 + 守りの建物
   const power = guards.length * 2 + defense + 2;
-  const gText = names(guards).join('と');
-  const lead = names(guards.slice(0, 1))[0];
+  // 見張りの書き方：3 人までは名前を「と」でつなぐ。もっと多い時は「見張りの〇人」
+  const gText = guards.length <= 3 ? names(guards).join('と') : `見張りの${guards.length}人`;
   if (power >= count * 1.3) {
     night.result = 'repelled';
-    hist('night', `${day}日目の夜、${mobText(night.groups)}が来たが、${guards.length > 1 ? lead + 'たち' : lead}が追い払った。朝になると敵は森へ帰った。`, { night: day, who: guards });
+    hist('night', `${day}日目の夜、${mobText(night.groups)}が来たが、${gText}が追い払った。朝になると敵は森へ帰った。`, { night: day, who: guards });
     for (const k of guards) diary(k, `夜の見張りで、${mobText(night.groups)}をたいまつで追い払った。`);
     return night;
   }

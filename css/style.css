@@ -164,18 +164,22 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 /* 持ち物欄（マイクラ風） */
 .lvrow { display: flex; align-items: center; gap: 10px; max-width: 420px; }
 .lv { font-size: 18px; white-space: nowrap; }
-.xpbar { flex: 1; height: 10px; border-radius: 3px; background: #3a3a3a; overflow: hidden; border: 1px solid #222; }
-.xpbar i { display: block; height: 100%; background: linear-gradient(#9ef05a, #5cbf2a); }
-.inv { display: grid; grid-template-columns: repeat(9, 1fr); gap: 3px; padding: 6px; background: #c6c6c6; border-radius: 4px;
-  box-shadow: inset 2px 2px #fff, inset -2px -2px #555; max-width: 420px; }
-.slot { position: relative; aspect-ratio: 1; padding: 0; border: 0; background: #8b8b8b; box-shadow: inset 2px 2px #373737, inset -2px -2px #fff; cursor: pointer; min-width: 0; }
-.slot img { position: absolute; inset: 14%; width: 72%; height: 72%; }
-.slot .n { position: absolute; right: 2px; bottom: 0; font: 700 12px/1 sans-serif; color: #fff; text-shadow: 1px 1px 0 #3f3f3f; }
-.slot .dur { position: absolute; left: 12%; right: 12%; bottom: 10%; height: 3px; background: #222; }
-.slot .dur i { display: block; height: 100%; }
-.slot.locked { background: #4a4a4a; box-shadow: inset 2px 2px #2a2a2a, inset -2px -2px #6a6a6a; }
-.slot .lockimg { inset: 18% 26% 34%; width: 48%; height: 48%; opacity: .85; }
-.slot .cond { position: absolute; left: 0; right: 0; bottom: 1px; font: 700 9px/1.1 sans-serif; color: #e8e8e8; text-align: center; white-space: nowrap; overflow: hidden; }
+.xpbar { flex: 1; height: 8px; border-radius: var(--radius-pill); background: #ece5d4; overflow: hidden; }
+.xpbar i { display: block; height: 100%; background: var(--accent); border-radius: var(--radius-pill); }
+/* 持ち物の枠：サイトのクリーム色・角丸・薄い線にそろえる（くわしいページ・検索カード・町のチェストで同じ形） */
+.inv { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; }
+.slot { display: block; vertical-align: top; }
+.slot, .islot { position: relative; width: 48px; height: 48px; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: #fbf7ec; box-shadow: 0 1px 2px rgba(60,45,20,.08); cursor: pointer; min-width: 0; flex: none; }
+.islot { width: 44px; height: 44px; cursor: default; }
+.slot img, .islot img { position: absolute; inset: 16%; width: 68%; height: 68%; image-rendering: pixelated; }
+.slot .n, .islot .n { position: absolute; right: 3px; bottom: 2px; font: 700 11px/1 sans-serif; color: var(--ink); background: rgba(255,253,247,.9); border-radius: 6px; padding: 1px 3px; }
+.slot .dur, .islot .dur { position: absolute; left: 8px; right: 8px; bottom: 4px; height: 3px; border-radius: 2px; background: #e3dccb; overflow: hidden; }
+.slot .dur i, .islot .dur i { display: block; height: 100%; }
+.islot.vacant, .slot.vacant { background: #f8f4ea; box-shadow: none; }
+.slot.locked { background: transparent; border-style: dashed; box-shadow: none; opacity: .6; }
+.slot .lockimg { inset: 20% 30% 40%; width: 40%; height: 40%; opacity: .7; }
+.slot .cond { position: absolute; left: 0; right: 0; bottom: 3px; font: 700 9px/1.1 sans-serif; color: var(--sub); text-align: center; white-space: nowrap; overflow: hidden; }
+.invmore { margin: 6px 0 0; font-size: 13px; color: var(--sub); }
 .vcard .lvline { font-size: 12px; color: var(--sub); }
 
 /* ---- 関係・立ち話・プロフィール ---- */
@@ -281,11 +285,11 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .chip.nightchip{background:#1f2a4a;color:#e8ecff}
 
 /* 町のチェスト（マインクラフト風のます目） */
-.mcslots { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 4px; padding: 6px; background: #c6c6c6; border: 3px solid; border-color: #fff #555 #555 #fff; border-radius: 2px; }
-.mcslot { position: relative; display: flex; flex-direction: column; align-items: center; padding: 6px 2px 4px; background: #8b8b8b; border: 2px solid; border-color: #373737 #fff #fff #373737; }
+.mcslots { display: grid; grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: 6px; }
+.mcslot { position: relative; display: flex; flex-direction: column; align-items: center; padding: 8px 2px 6px; background: #fbf7ec; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 1px 2px rgba(60,45,20,.08); }
 .mcslot img { image-rendering: pixelated; width: 32px; height: 32px; }
-.mcslot b { position: absolute; right: 4px; top: 22px; color: #fff; font-size: 14px; text-shadow: 2px 2px 0 #3f3f3f; font-variant-numeric: tabular-nums; }
-.mcslot span { margin-top: 4px; font-size: 11px; color: #fff; text-shadow: 1px 1px 0 #3f3f3f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.mcslot b { position: absolute; right: 4px; top: 4px; color: var(--ink); font-size: 12px; background: rgba(255,253,247,.9); border-radius: 6px; padding: 0 4px; font-variant-numeric: tabular-nums; }
+.mcslot span { margin-top: 4px; font-size: 11px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .btag.chesttag { background: #7a4e22; color: #fff3d6; font-weight: 700; text-decoration: none; cursor: pointer; }
 
 /* 一覧のカード：内側の左右に余白 */
@@ -325,3 +329,21 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .vlinks{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}
 .vlinks .btn{min-width:140px}
 .restot { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+/* 検索カードの持ち物の枠（あいた枠は空っぽに見える） */
+.islots { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 5px; margin: 2px 0 4px; }
+.islot { display: block; }
+/* 町のチェスト：今つくっている物と、分けた中身 */
+.chg { font-size: 14px; margin: 12px 0 6px; color: #3d4a3f; }
+.goalname { margin: 0 0 4px; }
+.goalstage { margin: 0 0 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.goallist { list-style: none; padding: 0; margin: 0 0 4px; display: grid; gap: 4px; }
+.goallist li { display: grid; grid-template-columns: 22px 1fr auto; grid-template-rows: auto 6px; column-gap: 6px; align-items: center; font-size: 13px; }
+.goallist li img, .goallist li .dot { grid-row: 1 / 3; width: 20px; height: 20px; margin: 0; image-rendering: pixelated; }
+.goallist li .pbar { grid-column: 2 / 4; }
+.goallist li.done .gc { color: #2e7d32; font-weight: 700; }
+.gc { font-variant-numeric: tabular-nums; }
+.pbar { display: inline-block; width: 100%; min-width: 80px; height: 6px; background: #e3ddd0; border-radius: 3px; overflow: hidden; vertical-align: middle; }
+.goalstage .pbar { width: 140px; }
+.pbar i { display: block; height: 100%; background: #6a9f4e; }
+.dot.r-wood { background: #b07a45; } .dot.r-stone { background: #8d939b; } .dot.r-food { background: #6aa84f; }
+#chestcard { scroll-margin-top: 64px; }

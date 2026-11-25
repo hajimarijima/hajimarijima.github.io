@@ -180,6 +180,25 @@ const ICONS = {
     puffy(px, g, { c: { c: hex('#34343c'), shine: 0.35, grain: 0.1 } }, 'coal');
     put(px, 6, 6, [210, 210, 220]); put(px, 9, 8, [150, 150, 165]);
   },
+  torch(px) {
+    // たいまつ：ななめの棒の先に石炭、その上に炎（中は明るい黄色）
+    const g = shapeGrid();
+    line(g, 5, 14, 10, 6.5, 1.8, 'w');
+    disc(g, 10.6, 5.6, 2.0, 'c');
+    poly(g, [[9.2, 4.6], [10.2, 0.8], [11.4, 2.6], [12.6, 1.4], [12.6, 4.8], [11.2, 5.4]], 'f');
+    puffy(px, g, { w: { c: hex('#9a6a3a'), shine: 0.2 }, c: { c: hex('#34343c'), shine: 0.3 }, f: { c: hex('#f39a2a'), shine: 0.6 } }, 'torch');
+    put(px, 11, 3, hex('#fff2a0')); put(px, 11, 4, hex('#ffd860')); put(px, 12, 3, hex('#ffd860'));
+  },
+  shield(px) {
+    // 盾：木の板 3 枚を鉄のふちで囲み、まん中に鉄のこぶ。左上が明るく右下が暗い
+    const g = shapeGrid();
+    poly(g, [[3, 2], [13, 2], [13, 10], [8, 15], [3, 10]], 'r');
+    poly(g, [[4.2, 3.2], [11.8, 3.2], [11.8, 9.5], [8, 13.4], [4.2, 9.5]], 'w');
+    disc(g, 8, 7.5, 1.6, 'b');
+    puffy(px, g, { r: { c: hex('#7d858e'), shine: 0.35 }, w: { c: hex('#9a6436'), shine: 0.2, grain: 0.08 }, b: { c: hex('#c9cfd6'), shine: 0.6 } }, 'shield');
+    for (let y = 4; y < 13; y++) { if (y < 6 || y > 9) { put(px, 6, y, hex('#6e4524')); put(px, 10, y, hex('#6e4524')); } } // 板のつぎ目（こぶの所はよける）
+    put(px, 8, 7, hex('#c9cfd6')); put(px, 7, 7, hex('#eef2f6'));
+  },
   wheat(px) {
     // 小麦の束：黄金色の太い穂 3 本が上でふくらみ、下を紐で縛る。穂のまわりは濃い縁で 1 本ずつ分け、粒は 1 段ごとに互いちがい
     const art = [

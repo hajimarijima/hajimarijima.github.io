@@ -341,6 +341,8 @@ function stepDay(S) {
   const need = {};
   for (const r of RES) need[r] = Math.max(0, (cost[r] || 0) - state.resources[r]);
   need.food += Math.max(0, active.length * 4 - state.resources.food);
+  // 遠出と寝る場所の決まり（config.hours.far）
+  const FAR = config.hours.far || { near: 28, homeR: 28, treeR: 15 };
 
   const daysIn = (v) => day - v.joinedDay + 1;
   const ensureLife = (L, v) => {
@@ -392,6 +394,12 @@ function stepDay(S) {
   if (active.length && !world.chest.day) { world.chest.day = day; hist('event', '村のまん中にチェストを置いた。集めた物は、ここに入れる。'); }
 
   const today = { weather: state.weather, jobs: { wood: 0, stone: 0, food: 0 }, gained: { wood: 0, stone: 0, food: 0 }, built: [], trips: 0, crafted: [], leveled: [] };
+  // 立てたたいまつは燃えつきる：1 晩に burnPerNight 本ずつ減る（足りなくなれば、見張りがまた作る）
+  if (config.guardGear && (state.store.torch || 0) > 0) {
+    state.store.torch = Math.max(0, state.store.torch - (config.guardGear.burnPerNight ?? 1));
+    if (!state.store.torch) delete state.store.torch;
+    syncRes();
+  }
   // ---- 5. 24 時間：1 時間に 1 つ行動する（数は config.json の hours） ----
   const H = config.hours;
   const R4 = makeRng(state.seed + ':hours:' + day); // 1 時間ごとの行動は別の乱数（投票・天気・生えかわりの流れを変えない）
@@ -483,26 +491,88 @@ function stepDay(S) {
     return Math.min(1, got / H.mealFood);
   };
 
+  // ---- 見張りの装備（config.guardGear）：夜の見張りの時間に、作業台で たいまつ・剣・盾 を作る ----
+  // はじめは道具か素手。作ったたいまつはチェストに入れ、村のまわりに立てる（町の地図は state.store.torch を見て立てる）
+  const GG = config.guardGear || null;
+  const replaceStore = (s) => { for (const k of Object.keys(state.store)) delete state.store[k]; Object.assign(state.store, s); syncRes(); };
+  const guardCraft = (c, h) => {
+    if (!GG || !built.includes('workbench')) return null;
+    if ((today.guardCrafts || 0) >= (GG.perNight || 1)) return null; // 1 晩に作るのは少しずつ
+    const L = c.L;
+    const done = (code) => { today.guardCrafts = (today.guardCrafts || 0) + 1; return code; };
+    if (GG.torch && (state.store.torch || 0) < GG.torch.keep) {
+      const p = CR.plan(state.store, { from: GG.torch.from }, CC);
+      if (p.ok) {
+        p.store.torch = (p.store.torch || 0) + GG.torch.makes; replaceStore(p.store);
+        c.ev.push({ h, text: `${tm(h)}、作業台でたいまつを${GG.torch.makes}本作った。` });
+        today.crafted.push({ who: c.v.key, item: 'torch' });
+        first('torch', 'はじめてたいまつを作った。夜の村のまわりに立てて、明るくする。', { item: 'torch' });
+        return done('cr:torch');
+      }
+    }
+    // 剣を持つのは見張り役の swordMax 人まで（持っている人は、より良い剣に作り直す）
+    const swordsNow = Object.values(life).filter((l) => l && l.inv && I.getTool(l.inv, 'sword')).length;
+    if (GG.sword && (swordsNow < (GG.swordMax || 3) || I.getTool(L.inv, 'sword'))) {
+      const cur = I.getTool(L.inv, 'sword');
+      const ch = CR.choose(state.store, 'sword', CC, { built, have: cur ? I.toolTier(cur.item) : 'hand' });
+      if (ch.key && (cur || L.inv.slice(0, L.slots).some((s) => !s))) {
+        I.removeTool(L.inv, 'sword');
+        if (I.addTool(L.inv, L.slots, ch.key, CC.tiers[ch.recipe.tier].durability)) {
+          replaceStore(ch.store);
+          c.ev.push({ h, text: `${tm(h)}、見張りのために${ITEMS[ch.key].name}を作った。` });
+          today.crafted.push({ who: c.v.key, item: ch.key });
+          first('sword', `はじめて${ITEMS[ch.key].name}を作った。見張りが素手で戦わなくてよくなった。`, { item: ch.key });
+          return done('cr:' + ch.key);
+        }
+      }
+    }
+    if (GG.shield && (state.store.shield || 0) < GG.shield.keep) {
+      const p = CR.plan(state.store, { from: GG.shield.from }, CC);
+      if (p.ok) {
+        p.store.shield = (p.store.shield || 0) + 1; replaceStore(p.store);
+        c.ev.push({ h, text: `${tm(h)}、作業台で盾を作った。` });
+        today.crafted.push({ who: c.v.key, item: 'shield' });
+        first('shield', 'はじめて盾を作った。見張りが矢やこぶしを盾で受けられる。', { item: 'shield' });
+        return done('cr:shield');
+      }
+    }
+    return null;
+  };
+
   // ---- 木・岩をえらぶ ----
   let bedMade = false; // 今日だれかがベッドを作った
   let noTree = false, noRock = false; // もう選べる木・岩がない（その日はもう探さない。選べる物は 1 日の中では増えない）
+  // 近くになければ、だんだん遠くへ（いちばん近い物から選ぶので、探す広さは島ぜんたいまで広がる）。
+  // 遠く（チェストから FAR.near より先）になる時は、もう遠くで働いている仲間のそばを先に探す（あちこちに散らばらない）
+  const isFar = (o) => !!o && dist(o, world.chest) > FAR.near;
+  const farAnchor = (c) => { for (const x of ctxs) if (x !== c && x.pos && isFar(x.pos)) return x.pos; return null; };
   const nextTree = (from, c) => {
     if (noTree) return null;
-    const cand = IX.trees.nearest(from.x, from.z, from === center ? 8 : 2, (t) => t.state === 'tree' && !t.gone && !claimT.has(t.id));
+    const ok = (t) => t.state === 'tree' && !t.gone && !claimT.has(t.id);
+    let cand = IX.trees.nearest(from.x, from.z, from === center ? 8 : 2, ok);
     if (!cand.length) { noTree = true; return null; }
-    const t = from === center ? R4.pick(cand) : cand[0];
+    let t = from === center ? R4.pick(cand) : cand[0];
+    const an = from === center && isFar(cand[0]) && farAnchor(c);
+    if (an) { cand = IX.trees.nearest(an.x, an.z, 1, ok); if (cand.length) t = cand[0]; }
     if (!t.logs) t.logs = R4.int(GA.treeLogs[0], GA.treeLogs[1]);
-    void c; return t;
+    return t;
   };
-  const nextRock = (from) => {
+  const nextRock = (from, c) => {
     if (noRock) return null;
-    const cand = IX.rocks.nearest(from.x, from.z, from === center ? 4 : 2, (r) => r.hp > 0 && !r.gone && !claimR.has(r.id));
+    const ok = (r) => r.hp > 0 && !r.gone && !claimR.has(r.id);
+    let cand = IX.rocks.nearest(from.x, from.z, from === center ? 4 : 2, ok);
     if (!cand.length) { noRock = true; return null; }
-    const r = from === center ? R4.pick(cand) : cand[0];
+    let r = from === center ? R4.pick(cand) : cand[0];
+    const an = from === center && isFar(cand[0]) && farAnchor(c);
+    if (an) { cand = IX.rocks.nearest(an.x, an.z, 1, ok); if (cand.length) r = cand[0]; }
     O.ensureBlocks(state.seed, r, config.ores);
     return r;
   };
   const objOf = {};
+  const farPlace = (o) => (Math.abs(o.x) > Math.abs(o.z + 1) ? (o.x > 0 ? '東' : '西') : (o.z < -1 ? '北' : '南')) + (o.hp !== undefined ? 'の山' : 'の森');
+  // 木にもたれて寝る木：村のまん中から FAR.treeR 以内（広場のふちから数マス）の木だけ。人ごとに決まった 1 本
+  const nearTrees = IX.trees.nearest(center.x, center.z, 16, (t) => t.state === 'tree' && !t.gone && dist(t, center) <= FAR.treeR);
+  const sleepTree = (c) => { const ok = nearTrees.filter((t) => t.state === 'tree' && !t.gone); return ok.length ? ok[hashStr('st:' + c.v.key) % ok.length] : null; };
   const treeOK = (t) => t && t.state === 'tree' && !t.gone;
   const stumpOK = (t) => t && t.state === 'stump' && t.dig && !t.gone;
   const rockOK = (r) => r && r.hp > 0 && !r.gone;
@@ -528,7 +598,7 @@ function stepDay(S) {
     const help = helpable('rock', c);
     let r = null;
     if (help.length && R4.chance(H.joinChance)) r = help[0].o;
-    else r = nextRock(c.at && !c.fresh ? c.at : center);
+    else r = nextRock(c.at && !c.fresh ? c.at : center, c);
     if (!r) return null;
     objOf[r.id] = r; c.rock = r.id; claim(claimR, r.id, 1);
     return { action: 'dig', o: r };
@@ -629,8 +699,14 @@ function stepDay(S) {
     if (L.zz && L.sleepy <= 0 && !(L.chrono === '朝型' && h < (H.wakeEarliest ?? 5))) { delete L.zz; L.awakeH = 0; L.sleepy = 0; }
     if (!L.zz) {
       if (L.awakeH >= H.lateAfter && sinceBed(c, h) < 6) L.sleepy += H.lateBoost; // 寝る時刻を過ぎた
-      if (L.sleepy >= H.sleepAt) {
-        L.zz = L.bed ? 'bed' : !L.home && (objOf[c.tree] || objOf[c.lastTree] || hashStr('tree:' + L.chrono + c.v.key) % 2) ? 'tree' : 'ground';
+      // 寝る時刻に遠くにいたら、まず 1 時間歩いて村へ帰る（夜型で遠くの岩を掘っていた人も）
+      if (L.sleepy >= H.sleepAt && c.pos && dist(c.pos, world.chest) > FAR.homeR) {
+        c.pos = null; c.fresh = true; c.homeWalk = (c.homeWalk || 0) + 1; c.homeAt = c.homeAt ?? h; c.goHome = true;
+      } else if (L.sleepy >= H.sleepAt) {
+        // 寝る場所：ベッド → 家・テントのそば → 村のまん中の近くの木（遠くの森では寝ない）
+        c.sleepTree = L.bed || L.home ? null : sleepTree(c);
+        L.zz = L.bed ? 'bed' : !L.home && c.sleepTree && (objOf[c.tree] || objOf[c.lastTree] || hashStr('tree:' + L.chrono + c.v.key) % 2) ? 'tree' : 'ground';
+        c.pos = null;
         L.sleepy = Math.min(L.sleepy, H.sleepAt + 10);
         c.sleptAt = h; c.sleepPlace = L.zz;
       }
@@ -641,7 +717,7 @@ function stepDay(S) {
       L.hunger = Math.max(0, L.hunger - H.hungerSleep);
       if (L.hunger > 0) L.hp = Math.min(NE.max, L.hp + g.hp); else L.hp = Math.max(1, L.hp - H.starveHp);
       if (night && outdoorSleep(L)) c.outNight = true;
-      const tr = L.zz === 'tree' && (objOf[c.tree] || objOf[c.lastTree]);
+      const tr = L.zz === 'tree' && (c.sleepTree || sleepTree(c));
       return 's' + L.zz[0] + (tr ? ':' + tr.id : '');
     }
     L.awakeH++;
@@ -657,6 +733,7 @@ function stepDay(S) {
       L.sleepy += H.awake + (heavy ? H.awakeHeavy : 0);
       return code;
     };
+    if (c.goHome) { c.goHome = false; return finish('wh', 'light'); }
     // 2. おなかがすいた → 食べる
     if (NE.eat > 0 && L.hunger <= H.eatBelow && c.meals < H.maxMeals) {
       const k = eat(c);
@@ -678,7 +755,9 @@ function stepDay(S) {
     }
     // 今日の仕事は workHours 時間まで（あとは休む。夜なら見張り）
     if (c.fullStop || c.work >= H.workHours) {
-      if (night) { c.guardH = (c.guardH || 0) + 1; return finish('w', 'light'); }
+      // 遠くで仕事を終えたら、まず 1 時間歩いて村へ帰る
+      if (c.pos && dist(c.pos, world.chest) > FAR.homeR) { c.pos = null; c.fresh = true; c.homeWalk = (c.homeWalk || 0) + 1; c.homeAt = c.homeAt ?? h; return finish('wh', 'light'); }
+      if (night) { const gc = guardCraft(c, h); if (gc) return finish(gc, 'light'); c.guardH = (c.guardH || 0) + 1; return finish('w', 'light'); }
       return finish(freeHour(c, h), 'free');
     }
     // 整地
@@ -734,6 +813,25 @@ function stepDay(S) {
         return finish('cr:bed', 'light');
       }
     }
+    // 遠くの木・岩：今いる所から遠ければ、まず 1 時間歩いて行く（その日の仕事の時間が減る）
+    const o = a && a.o;
+    if (o && (a.action === 'chop' || a.action === 'dig' || a.action === 'stump') && isFar(o) && (!c.pos || dist(c.pos, o) > 14)) {
+      // 歩いて着いても働く時間が残らない時は、行かずに今日の仕事をおしまいにする（遠くにいれば村へ帰る）
+      if (c.work >= H.workHours - 1) {
+        if (a.action === 'dig') { claim(claimR, o.id, -1); c.rock = null; } else if (a.action === 'chop') { claim(claimT, o.id, -1); c.tree = null; }
+        c.work = H.workHours;
+        if (c.pos && dist(c.pos, world.chest) > FAR.homeR) { c.pos = null; c.fresh = true; c.homeWalk = (c.homeWalk || 0) + 1; c.homeAt = c.homeAt ?? h; return finish('wh', 'light'); }
+        return night ? finish('w', 'light') : finish(freeHour(c, h), 'free');
+      }
+      c.pos = o; c.walkOut = (c.walkOut || 0) + 1; c.work++; // 歩く 1 時間も仕事の時間（workHours）に数える
+      if (!c.farNote) {
+        const what = a.action === 'dig' ? '岩' : '木';
+        const nearLeft = a.action === 'dig' ? IX.rocks.any(world.chest.x, world.chest.z, FAR.near, (r) => r.hp > 0 && !r.gone) : IX.trees.any(world.chest.x, world.chest.z, FAR.near, (t) => t.state === 'tree' && !t.gone);
+        c.farNote = { h, text: `${tm(h)}、${nearLeft ? `${what}を探して` : `近くの${what}がなくなったので、`}${farPlace(o)}まで歩いた。` };
+        c.ev.push(c.farNote);
+      }
+      return finish('wk:' + o.id, 'light');
+    }
     return doWork(c, h, night, a, kind, finish);
   }
 
@@ -755,7 +853,7 @@ function stepDay(S) {
       const w = hourWork.get(o.id) || { kind: kindW, o, who: [] };
       w.who.push({ key: v.key, pow, c, drop: st.drop, tier });
       hourWork.set(o.id, w);
-      L.targets.push(o.id); c.at = o; c.fresh = false;
+      L.targets.push(o.id); c.at = o; c.fresh = false; c.pos = o;
       c.tgt = c.tgt || {}; c.tgt[o.id] = (c.tgt[o.id] || 0) + 1;
       wear();
       return finish(code + ':' + o.id, 'heavy');
@@ -938,6 +1036,9 @@ function stepDay(S) {
   let noFood = false;
   for (const c of ctxs) {
     const L = c.L, v = c.v;
+    // 仕事のおわりに持っていた物（サイトの持ち物の枠に出す。夜にチェストへ入れる前の中身。道具の耐久もそのまま）
+    L.held = L.inv.slice(0, L.slots).map((s) => (s ? { ...s } : null));
+    while (L.held.length && L.held[L.held.length - 1] === null) L.held.pop();
     unloadAll(c); // 夜、持っている物をぜんぶチェストへ入れる（往復には数えない）
     L.targets = [...new Set(L.targets)];
     L.hours = HR.encodeHours(c.codes);
@@ -989,6 +1090,7 @@ function stepDay(S) {
     else if (c.off === 'weak') put(-0.9, '体に力が入らないので、今日は家で休んだ。');
     if (diaryExtra[v.key]) put(-0.5, diaryExtra[v.key]);
     if (c.levelH) put(c.levelAt, `${tm(c.levelAt)}から、${c.level.what}の草をぬいて、石をどけて、地面をならした。`);
+    if (c.homeWalk) put(c.homeAt, `${tm(c.homeAt)}、遠くから村まで歩いて帰った。`);
     // おもな仕事の文は、いちばん長く起きていたあいだ（寝る時間で区切る）の、最初の仕事の時刻に置く。
     // それより前の起きていたあいだの仕事（夜型の 0〜1 時など）は「もう少し働いた」と別に書く
     const wh = c.workHs || [];

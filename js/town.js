@@ -14,12 +14,14 @@ import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, J
 import { makeSky, jstHour, parseTime, phaseName } from './daynight.js';
 import { hourOf, hourText, isNight } from './hours.js';
 import { tagName } from './search.js';
+import { goalHtml, chestHtml } from './chestview.js';
 // 動画の書き出し（?video=1）で開いた時
 let IS_VIDEO = false;
 import { makeTerrain, BLOCK } from './terrain_gen.js';
 import { makeTerrainView } from './terrain.js';
 import { SpatialHash, TILE } from './tilemap.js';
-import { makeMob, animateMob, makeArrow, arrowAt } from './mobs.js';
+import { makeClouds } from './clouds.js';
+import { makeMob, animateMob, makeArrow, arrowAt, flashMob, fadeMob, makeHitFx, hitFxAt, MOB_SCALE } from './mobs.js';
 import { makeChunkObjects, makeFx, setRock, rockScale, setTreeState, setTreeFall, setTreeCrack, makeDebris, makeChest, setChestOpen, makeMarker, strikeAt, breakTime, dropPos, chipList, DIG, CHOP, FALL_END } from './blocks.js';
 
 // 時刻：ふだんは日本時間の今。?time=morning / day / evening / night や ?time=21:30 で切りかえて確かめられる。
@@ -121,7 +123,7 @@ async function main() {
   sun.castShadow = !LITE;
   sun.shadow.mapSize.set(small ? 1024 : 2048, small ? 1024 : 2048);
   Object.assign(sun.shadow.camera, { left: -62, right: 62, top: 62, bottom: -62, near: 1, far: 200 });
-  sun.shadow.bias = -0.0005;
+  sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03; // 影のしま模様（チカチカ）を防ぐ
   scene.add(sun);
 
   // 地面：どこまでも続く地形（チャンクごとに作り、カメラから離れたら捨てる）。町の中は平らで、南は海
@@ -225,6 +227,23 @@ async function main() {
     emitters.push({ wx: camp.x, wy: 1.2, wz: camp.z, dark: true, thin: true, t: 0 });
     lightAnchors.push({ x: camp.x, y: 1.4, z: camp.z });
   }
+  // 立てたたいまつ（作業台で 棒＋石炭 から作る。チェストのたいまつの数だけ、posts 本まで村のまわりに立てる）。作るまでは夜はたき火だけで暗い
+  const nTorch = Math.min((config.guardGear && config.guardGear.posts) || 0, (state.store && state.store.torch) || 0);
+  const torchFlames = [];
+  if (active.length && nTorch > 0) {
+    const cx = camp ? camp.x : 0, cz = camp ? camp.z : 0, R0 = hasPlaza ? 14 : 9;
+    for (let i = 0; i < nTorch; i++) {
+      const a = (i / nTorch) * Math.PI * 2 + 0.4;
+      const q = { x: cx + Math.cos(a) * R0, z: cz + Math.sin(a) * R0 };
+      const t = new THREE.Group(); t.position.set(q.x, 0, q.z);
+      box(0.16, 1.5, 0.16, 0x7a5232, 0, 0.75, 0, t); box(0.22, 0.2, 0.22, 0x2a2624, 0, 1.6, 0, t);
+      const f1 = box(0.2, 0.3, 0.2, 0xffb03a, 0, 1.86, 0, t), f2 = box(0.11, 0.16, 0.11, 0xfff0a0, 0, 2.06, 0, t);
+      for (const f of [f1, f2]) { f.castShadow = false; f.material = new THREE.MeshBasicMaterial({ color: f.material.color }); }
+      torchFlames.push(f1, f2); scene.add(t);
+      lightAnchors.push({ x: q.x, y: 2.1, z: q.z });
+    }
+  }
+  anim.torches = torchFlames;
   // 整地する前の村のまん中（草と小石）
   if (!world.square || !world.square.leveled) scene.add(makeDebris(world.debris || []));
   // チェスト（集めた物が入る）
@@ -255,6 +274,9 @@ async function main() {
   }
   // 昼と夜
   const sky = makeSky(scene, { hemi, sun, sunDist: 60, lightAnchors, maxLights: LITE ? 2 : 8, dome: true, camera, radius: 320 });
+  // 雲：薄く平たい箱を重ねた落ち着いた雲（js/clouds.js、戦いの確かめページと同じ）。ゆっくり流れる
+  const clouds = makeClouds(scene, { count: LITE ? 10 : 18, area: 240, height: 95, speed: 1.4, scale: 1.7, opacity: 0.8 });
+  const cloudDay = new THREE.Color(0xffffff), cloudNight = new THREE.Color(0x4a5570), cloudCol = new THREE.Color();
   sky.set(hourNow(), { x: 0, z: 0 });
   const homeless = active.filter((v) => !(life[v.key] || {}).home);
   const tentPos = [], tentAt = {};
@@ -337,6 +359,9 @@ async function main() {
     if (a.action === 'stump') { a.action = 'chop'; a.stump = true; }
     if (a.action === 'fish') a.target = 'pond';
     if (a.action === 'ranch') a.target = penB ? penB.id : null;
+    // 遠くの木・岩まで歩く 1 時間：その仕事場へ向かって歩く（着いたらそのまま仕事の形）。寝る前に村へ帰る 1 時間：家・テントへ
+    if (a.action === 'walkout') { const o = objById[a.target]; a.action = o && o.hp !== undefined ? 'dig' : 'chop'; a.walking = true; }
+    if (a.action === 'walkhome') a.action = 'rest';
     return a;
   }
   const sameAct = (a, b) => a && b && a.action === b.action && a.target === b.target && a.place === b.place && !!a.stump === !!b.stump;
@@ -354,11 +379,14 @@ async function main() {
       // 幹にせなかをあずけて座る（幹と反対を向く）。幹は四角（はば 1.3 × 木の大きさ）なので、平らな面に背中をつける
       // 1 本の木には、肩が当たらない 向かい合わせの 2 面まで。いっぱいなら 近くの別の木へ
       const old = lying.findIndex((s) => s.key === p.v.key && s.tree); if (old >= 0) lying.splice(old, 1);
+      // 村のまん中から treeR 以内（広場のふちから数マス）の木だけ。遠くの森では寝ない。なければ地面
+      const treeR = ((config.hours && config.hours.far) || {}).treeR || 15;
+      const nearBase = (t) => Math.hypot(t.x - camp.x, t.z - camp.z) <= treeR + 0.01;
       const t0 = a.target && objById[a.target];
       if (!treeIx) nearestTree(p.home);
-      const near = treeIx.nearest(p.home.x, p.home.z, 8).filter((t) => Math.hypot(t.x - p.home.x, t.z - p.home.z) < 34);
+      const near = treeIx.nearest(camp.x, camp.z, 16).filter(nearBase);
       const sh = hash(p.v.key + 'tree') % Math.max(1, near.length);
-      const cands = [...(t0 && t0.state === 'tree' && !t0.gone ? [t0] : []), ...near.slice(sh), ...near.slice(0, sh)];
+      const cands = [...(t0 && t0.state === 'tree' && !t0.gone && nearBase(t0) ? [t0] : []), ...near.slice(sh), ...near.slice(0, sh)];
       for (const t of cands) {
         const toward = Math.round(Math.atan2(p.home.x - t.x, p.home.z - t.z) / (Math.PI / 2));
         // 幹の半分＋もたれた時に いちばん後ろへ出る所（頭の後ろ）。2 頭身は頭が大きいので もう少し離す
@@ -848,6 +876,17 @@ async function main() {
     p.guard = pushOutPt(onRing(postR, s)); p.guardS = s;
     if (nightAt(curHour) && p.act && p.act.action !== 'sleep') setAct(p, p.act, true); // 起きている夜の見張り
   }
+  // 見張りの装備：作業台で作った剣（いちばん良い物）、なければたいまつ、なければ今の道具か素手。盾は作ってあれば左腕に
+  const TIER_RANK = ['wood', 'stone', 'iron', 'gold', 'diamond'];
+  function guardGear(p) {
+    if (p.gear) return p.gear;
+    const inv = ((life[p.v.key] || {}).inv || []).filter(Boolean);
+    const swords = inv.map((s) => /^(\w+)_sword$/.exec(s.item)).filter(Boolean).map((m) => m[1]).filter((t) => TIER_RANK.includes(t));
+    const best = swords.sort((a, b) => TIER_RANK.indexOf(b) - TIER_RANK.indexOf(a))[0];
+    const has = (k) => inv.some((s) => s.item === k) || ((state.store || {})[k] || 0) > 0;
+    p.gear = { tool: best ? 'sword:' + best : has('torch') ? 'torch' : p.toolKey || null, shield: has('shield') };
+    return p.gear;
+  }
   function pushOutPt(pt) { const q = freePt(pt); pt.x = q.x; pt.z = q.z; return pt; }
   const guards = people.filter((p) => p.guard);
   const mobs = [];
@@ -857,35 +896,54 @@ async function main() {
       const m = makeMob(g.type); m.visible = false; scene.add(m);
       const target = guards.length ? guards[i % guards.length] : null;
       const arrows = g.type === 'skeleton' ? [0, 1, 2].map(() => { const a = makeArrow(); a.scale.setScalar(1.6); a.visible = false; scene.add(a); return a; }) : null;
-      mobs.push({ m, type: g.type, i, target, off: i * 3.1, side: (i % 3 - 1) * 3.2, arrows });
+      const fx = makeHitFx(); scene.add(fx); // 当たった所の火花と煙
+      mobs.push({ m, type: g.type, i, target, off: i * 3.1, side: (i % 3 - 1) * 3.2, arrows, fx });
     }
   }
+  // 近くで戦う敵（ゾンビ・クモ）の 1 回のやりとり：敵がなぐる（盾で受ける）→ 見張りが振りかぶって打つ → 敵が赤く光って下がる。何回か打たれたら逃げる
+  const MELEE = { zombie: { ex: 2.4, n: 3 }, spider: { ex: 2.0, n: 2 } };
+  const Q_SWING = 0.45, Q_HIT = Q_SWING + (1 - Q_SWING) * 0.75; // 見張りが振り始める所・当たる所（strike の 0.75）
+  // 見張りが打つ所：敵の手前 3。柵があれば柵の内側（一歩前）まで
+  const meleeSpot = (mb, goal) => { const G = mb.target.guard, dx = goal.x - G.x, dz = goal.z - G.z, dl = Math.hypot(dx, dz) || 1, r = ringR ? Math.min(1.4, dl) : Math.max(0, dl - 3); return { x: G.x + (dx / dl) * r, z: G.z + (dz / dl) * r }; };
+  const meleeGoal = (mb, start) => {
+    const G = mb.target && mb.target.guard;
+    if (!G || ringR) return onRing(mobR, (mb.target ? mb.target.guardS : 0) + (mb.i % 2 ? 1.3 : -1.3)); // 柵があれば柵の外で止まる
+    const dx = start.x - G.x, dz = start.z - G.z, dl = Math.hypot(dx, dz) || 1, sd = (mb.i % 2 ? 1 : -1) * Math.min(1, Math.floor(mb.i / guards.length)) * 1.4;
+    return { x: G.x + (dx / dl) * 6 - (dz / dl) * sd, z: G.z + (dz / dl) * 6 + (dx / dl) * sd }; // 持ち場の少し先まで来る（見張りが走って迎え撃つ）
+  };
   TM0.ready = performance.now();
   Object.assign(window.TOWN, { mobs, people, timing: Object.fromEntries(Object.entries(TM0).map(([k, v]) => [k, Math.round(v - TM0.start)])) }); // 確かめ用
   const MOB_CYCLE = 34; // 近づく → 戦う → 逃げる を、夜の間くり返して見せる
   function updateMobs(time, n, h) {
     const nightOn = n > 0.55, dawn = h < 12 && n > 0.15 && n <= 0.55;
+    for (const g of guards) { g.duel = null; g.blockA = false; g.dodge = 0; g.faceAt = null; g.want = null; }
     for (const mb of mobs) {
       const { m } = mb;
+      mb.fx.visible = false;
       if (!nightOn && !dawn) { m.visible = false; continue; }
       const start = { x: from.x * 0.85 + fside.x * mb.side, z: from.z * 0.85 + fside.z * mb.side };
-      const archer = mb.type === 'skeleton';
-      const goal = onRing(archer ? mobR + 9 : mobR, (mb.target ? mb.target.guardS : 0) + (mb.i % 2 ? 1.3 : -1.3));
+      const archer = mb.type === 'skeleton', ME = MELEE[mb.type] || MELEE.zombie;
+      const goal = archer ? onRing(mobR + 9, (mb.target ? mb.target.guardS : 0) + (mb.i % 2 ? 1.3 : -1.3)) : meleeGoal(mb, start);
       const L = Math.hypot(goal.x - start.x, goal.z - start.z);
       const sp = mb.type === 'spider' ? 2.6 : mb.type === 'skeleton' ? 1.9 : 1.4;
-      const tw = L / sp, tf = archer ? 6.6 : 4.5, SHOT = 2.2;
+      const tw = L / sp, tf = archer ? 6.6 : ME.ex * ME.n, SHOT = 2.2;
       if (mb.arrows) for (const a of mb.arrows) a.visible = false;
       mb.shoot = false;
+      flashMob(m, 0); fadeMob(m, 1);
       if (dawn) { // 朝日：ゾンビは燃え、ほかは森へ帰る
         const k = Math.min(1, (0.55 - n) / 0.3);
         if (mb.type === 'zombie') { m.position.set(goal.x, 0, goal.z); animateMob(m, 'burn', time, k); m.visible = k < 1; }
-        else { const q = Math.min(1, k * 1.2); m.position.set(goal.x + (start.x - goal.x) * q, 0, goal.z + (start.z - goal.z) * q); m.rotation.y = Math.atan2(start.x - goal.x, start.z - goal.z); animateMob(m, 'flee', time); m.visible = q < 1; }
+        else { const q = Math.min(1, k * 1.2); m.position.set(goal.x + (start.x - goal.x) * q, 0, goal.z + (start.z - goal.z) * q); m.rotation.y = Math.atan2(start.x - goal.x, start.z - goal.z); animateMob(m, 'flee', time); fadeMob(m, (1 - q) / 0.3); } // 森の端まで走ってから薄くなって消える
         continue;
       }
-      m.scale.setScalar(1.7); m.position.y = 0;
+      m.scale.setScalar(MOB_SCALE); m.position.y = 0;
       const u = (time + mb.off) % MOB_CYCLE;
       mb.fight = false;
-      if (u < tw) { const k = u / tw; m.position.set(start.x + (goal.x - start.x) * k, 0, start.z + (goal.z - start.z) * k); m.rotation.y = Math.atan2(goal.x - start.x, goal.z - start.z); animateMob(m, 'walk', time); }
+      const G0 = mb.target && mb.target.guard ? mb.target : null, spot = G0 && !archer ? meleeSpot(mb, goal) : null;
+      if (u < tw) {
+        const k = u / tw; m.position.set(start.x + (goal.x - start.x) * k, 0, start.z + (goal.z - start.z) * k); m.rotation.y = Math.atan2(goal.x - start.x, goal.z - start.z); animateMob(m, 'walk', time);
+        if (spot && !G0.duel && !G0.want && Math.hypot(m.position.x - G0.guard.x, m.position.z - G0.guard.z) < 13) { G0.want = spot; G0.faceAt = { x: m.position.x, z: m.position.z }; } // 見つけたら走って行く
+      }
       else if (u < tw + tf && archer) {
         const k = ((u - tw) % SHOT) / SHOT;
         m.position.set(goal.x, 0, goal.z);
@@ -893,8 +951,30 @@ async function main() {
         m.rotation.y = Math.atan2(tg.x - goal.x, tg.z - goal.z);
         animateMob(m, 'shoot', time, k); mb.shoot = true;
       }
-      else if (u < tw + tf) { const k = ((u - tw) % 1.5) / 1.5; m.position.set(goal.x, 0, goal.z); animateMob(m, 'hit', time, k); mb.fight = true; }
-      else { const k = Math.min(1, (u - tw - tf) / (tw * 0.6)); if (archer) mb.shoot = false; m.position.set(goal.x + (start.x - goal.x) * k, 0, goal.z + (start.z - goal.z) * k); m.rotation.y = Math.atan2(start.x - goal.x, start.z - goal.z); animateMob(m, 'flee', time); if (k >= 1) m.visible = false; }
+      else if (u < tw + tf) {
+        const u2 = u - tw, q = (u2 % ME.ex) / ME.ex, G = mb.target;
+        const tg = G ? G.guard || G.pos : { x: 0, z: 0 };
+        const dx = goal.x - tg.x, dz = goal.z - tg.z, dl = Math.hypot(dx, dz) || 1;
+        // 打たれたら後ろへはじかれ、次のやりとりまでにまた前へ出る
+        const rec = q >= Q_HIT ? (q - Q_HIT) / (1 - Q_HIT) : -1;
+        const kb = rec >= 0 ? 0.95 * Math.min(1, rec * 7) * (1 - rec) * (1 - rec) : 0;
+        m.position.set(goal.x + (dx / dl) * kb, 0, goal.z + (dz / dl) * kb);
+        m.rotation.y = Math.atan2(-dx, -dz);
+        if (q < Q_SWING) animateMob(m, 'punch', time, q / Q_SWING);
+        else animateMob(m, 'hit', time, rec >= 0 ? Math.min(1, rec * 1.6) : 0);
+        if (rec >= 0) flashMob(m, Math.max(0, 1 - rec * 2.4)); // 当たった瞬間に赤く光る
+        mb.fight = true;
+        // 火花：見張りの一撃が当たった所（敵の胸）と、敵のこぶしが盾に当たった所
+        const tHit = (q - Q_HIT) * ME.ex, tPunch = (q - 0.17) * ME.ex;
+        const top = mb.type === 'spider' ? 0.9 : 2.0;
+        if (tHit >= 0 && tHit < 0.45) hitFxAt(mb.fx, m.position.x - (dx / dl) * 0.45, top, m.position.z - (dz / dl) * 0.45, tHit / 0.45, mb.i);
+        else if (tPunch >= 0 && tPunch < 0.3) hitFxAt(mb.fx, tg.x + (dx / dl) * 1.2, 1.95, tg.z + (dz / dl) * 1.2, tPunch / 0.3 * 0.8, mb.i + 3);
+        if (G && !G.duel && spot) G.want = spot;
+        if (G && !G.duel) G.duel = { q, x: m.position.x, z: m.position.z, strike: q >= Q_SWING ? (q - Q_SWING) / (1 - Q_SWING) : null, block: q > 0.06 && q < 0.3, hit: rec >= 0 && rec < 0.35 };
+      }
+      else { const k = Math.min(1, (u - tw - tf) / (tw * 0.6)); if (archer) mb.shoot = false;
+        const tf2 = u - tw - tf; if (spot && !G0.duel && !G0.want && tf2 < 1.4 && !ringR) { const dx = goal.x - G0.guard.x, dz = goal.z - G0.guard.z, dl = Math.hypot(dx, dz) || 1, c = 2.5 * Math.min(1, tf2); G0.want = { x: spot.x + (dx / dl) * c, z: spot.z + (dz / dl) * c }; G0.faceAt = { x: m.position.x, z: m.position.z }; } // 逃げたら少し追う
+        m.position.set(goal.x + (start.x - goal.x) * k, 0, goal.z + (start.z - goal.z) * k); m.rotation.y = Math.atan2(start.x - goal.x, start.z - goal.z); animateMob(m, 'flee', time); fadeMob(m, (1 - k) / 0.3); } // 森の端まで走ってから、少しずつ薄くなって消える
     }
   }
   function updateArrows(time, n) {
@@ -905,15 +985,24 @@ async function main() {
       const goal = onRing(mobR + 9, (mb.target ? mb.target.guardS : 0) + (mb.i % 2 ? 1.3 : -1.3));
       const tw = Math.hypot(goal.x - start.x, goal.z - start.z) / 1.9, u = (time + mb.off) % MOB_CYCLE;
       const tg = mb.target ? mb.target.guard || mb.target.pos : { x: 0, z: 0 };
+      const G = mb.target;
+      const dx = goal.x - tg.x, dz = goal.z - tg.z, dl = Math.hypot(dx, dz) || 1;
+      const shooting = u > tw && u < tw + 6.6;
+      if (G && shooting && !G.duel) G.faceAt = { x: goal.x, z: goal.z }; // 弓を引いている敵の方を向く
       mb.arrows.forEach((a, j) => {
         const rel = u - tw - j * 2.2 - 0.6 * 2.2; // 弦を放った時から
+        // 来る矢に、1 本目と 3 本目は盾で受け、2 本目は横へよける
+        if (G && rel > -0.45 && rel < 0.55) { if (j === 1) G.dodge = Math.max(G.dodge, Math.sin(Math.min(1, (rel + 0.45) / 1.0) * Math.PI)); else G.blockA = true; }
         if (rel < 0 || u > tw + 6.6 + tw * 0.6) return;
-        const dx = goal.x - tg.x, dz = goal.z - tg.z, dl = Math.hypot(dx, dz) || 1;
-        // 柵があれば柵の横木に、なければ見張りの少し手前の地面に刺さる
-        const to = ringR ? { ...onRing(ringR, (mb.target ? mb.target.guardS : 0) + (j - 1) * 1.1), y: 0.95 } : { x: tg.x + (dx / dl) * (1.6 + j * 0.7) + (j - 1) * 0.8 * (-dz / dl), y: 0.12, z: tg.z + (dz / dl) * (1.6 + j * 0.7) + (j - 1) * 0.8 * (dx / dl) };
+        if (j !== 1 && rel > 1.8) return; // 盾に刺さった矢は、振って落とす
+        // 盾で受けた矢は盾に、よけた矢は見張りのいた所の地面（柵があれば柵の横木）に刺さる
+        const toShield = { x: tg.x + (dx / dl) * 0.9, y: 1.95, z: tg.z + (dz / dl) * 0.9 };
+        const to = j !== 1 ? toShield : ringR ? { ...onRing(ringR, (G ? G.guardS : 0) + 0.6), y: 0.95 } : { x: tg.x - (dx / dl) * 0.3, y: 0.1, z: tg.z - (dz / dl) * 0.3 };
         const fr = { x: goal.x - (dx / dl) * 0.6, y: 2.6, z: goal.z - (dz / dl) * 0.6 };
         a.visible = true;
         arrowAt(a, fr, to, rel / 0.5, 1.4);
+        const pf = (rel - 0.5) / 0.35;
+        if (pf >= 0 && pf < 1) hitFxAt(mb.fx, to.x, to.y, to.z, pf * (j !== 1 ? 1 : 0.6), j + mb.i); // 刺さった所に火花（地面なら土けむり）
       });
     }
   }
@@ -1048,16 +1137,31 @@ async function main() {
       return;
     }
     if (p.mode === 'toguard' || p.mode === 'guard') {
-      setTool(p.ch, 'torch'); setCarry(p.ch, null); setShield(p.ch, true);
-      p.ch.userData.block = mobs.some((mb) => mb.shoot && mb.target === p); // 矢が来たら盾を上げる
+      const GG = guardGear(p); setTool(p.ch, GG.tool); setCarry(p.ch, null); setShield(p.ch, GG.shield); // 持っている物で戦う（はじめは道具か素手）
+      const D = p.duel;
+      p.ch.userData.block = !!((D && D.block) || p.blockA); // 敵のこぶし・矢が来たら盾を上げる
+      let ox = 0, oz = 0;
       if (p.mode === 'toguard') { pose = 'walk'; if (walkTo(p, p.routes.night, dt)) p.mode = 'guard'; }
       else {
-        p.ch.rotation.y = Math.atan2(fdir.x, fdir.z); // 森の方を見張る
-        pose = mobs.some((mb) => mb.fight && mb.target === p) ? 'chop' : 'idle'; // 敵が来たらたいまつを振って追い払う
+        // 森の方を見張る。敵が来たらその方を向き、なぐり合う間は一歩前へ（打つ時はもう少し踏みこむ）。矢は盾で受けるか、横へよける
+        const face = D || p.faceAt;
+        const at = { x: p.pos.x + (p.fightGo ? p.fightGo.x : 0), z: p.pos.z + (p.fightGo ? p.fightGo.z : 0) };
+        turnTo(p.ch, face ? Math.atan2(face.x - at.x, face.z - at.z) : Math.atan2(fdir.x, fdir.z), dt);
+        const fx = Math.sin(p.ch.rotation.y), fz = Math.cos(p.ch.rotation.y);
+        // 敵を見つけたら走って打つ所まで行き、終わったら歩いて持ち場へ戻る（持ち場からのずれ W）
+        const W = p.fightGo || (p.fightGo = { x: 0, z: 0 }), wx = p.want ? p.want.x - p.pos.x : 0, wz = p.want ? p.want.z - p.pos.z : 0;
+        const wd = Math.hypot(wx - W.x, wz - W.z), st = Math.min(wd, (p.want ? 5.2 : 2.2) * dt), moving = wd > 0.08;
+        if (moving) { W.x += ((wx - W.x) / wd) * st; W.z += ((wz - W.z) / wd) * st; }
+        if (moving && !D && !p.faceAt) turnTo(p.ch, Math.atan2(wx - W.x, wz - W.z), dt);
+        const lunge = D && D.strike !== null ? Math.max(0, Math.sin(Math.min(1, D.strike / 0.85) * Math.PI)) * 0.45 : 0;
+        const tx = fx * lunge + fz * (p.dodge || 0) * 1.1, tz = fz * lunge - fx * (p.dodge || 0) * 1.1;
+        const O = p.fightOff || (p.fightOff = { x: 0, z: 0 }), k = Math.min(1, dt * 10);
+        O.x += (tx - O.x) * k; O.z += (tz - O.z) * k; ox = O.x + W.x; oz = O.z + W.z;
+        pose = D && D.strike !== null ? 'strike' : moving && !D ? 'walk' : (p.dodge || 0) > 0.2 ? 'walk' : 'idle';
       }
       keepApart(p);
-      p.ch.position.set(p.pos.x, 0, p.pos.z);
-      if (p.lod === 'full') animate(p.ch,pose, time + (hash(p.v.key) % 100) / 10);
+      p.ch.position.set(p.pos.x + ox, 0, p.pos.z + oz);
+      if (p.lod === 'full') animate(p.ch, pose, time + (hash(p.v.key) % 100) / 10, D && D.strike !== null ? D.strike : null);
       return;
     }
     if (p.rest) { setTool(p.ch, null); setCarry(p.ch, null); keepApart(p); p.ch.position.set(p.pos.x, 0, p.pos.z); if (p.lod === 'full') animate(p.ch,'idle', time + (hash(p.v.key) % 100) / 10); return; }
@@ -1289,6 +1393,8 @@ async function main() {
     camStep(dt);
     terrain.update(controls.target);
     sky.follow(camera);
+    if ((frame & 3) === 0) { cloudCol.copy(cloudDay).lerp(cloudNight, Math.min(1, Math.max(0, sky.n))); clouds.tint(cloudCol, 0.8 - Math.max(0, sky.n) * 0.15); }
+    clouds.update(time, { x: controls.target.x, z: controls.target.z });
     // 霧：描く距離の上限の手前からかすませる（カメラが離れるほど遠くへ）
     // やわらかく：かすみ始めを手前にして、遠くほど空の色（地平線の色）に溶ける
     scene.fog.far = dist * 0.7 + VIEW_UNITS * 0.95; scene.fog.near = Math.min(dist * 0.6, scene.fog.far * 0.22);
@@ -1354,9 +1460,7 @@ function renderPanel(D) {
   const plan = state.plan;
   const nextEl = document.getElementById('next');
   if (plan) {
-    const c = config.buildings[plan.build].cost;
-    nextEl.innerHTML = `<b>${esc(config.buildings[plan.build].name)}</b>` + (plan.site ? `（${esc(plan.site.label)}）` : '（場所は投票中）') + '<br>' +
-      Object.entries(c).map(([r, n]) => `${RES[r]} ${Math.min(state.resources[r], n)}/${n}`).join('・') + (plan.site && !plan.leveled ? '・整地はこれから' : '');
+    nextEl.innerHTML = `<b>${esc(config.buildings[plan.build].name)}</b>` + (plan.site ? `（${esc(plan.site.label)}）` : '（場所は投票中）') + ' <a href="#chestcard">あつまり具合を見る</a>';
   } else nextEl.textContent = active.length ? '投票で決めます。' : '村人が来たら、投票で決めます。';
   const hm = (iso) => { const d = new Date(iso); return `${(d.getUTCHours() + 9) % 24}時`; };
   const votes = state.votes || [];
@@ -1364,14 +1468,12 @@ function renderPanel(D) {
     ? votes.map((v) => `<b>${esc(v.question)}</b>（${hm(v.opensAt)}〜${hm(v.closesAt)}）<br>` + v.options.map((o) => `${esc(o.key + ' ' + o.name)} <span class="muted">${v.votes[o.key]}票</span>`).join(' / ')).join('<br>') + ' <a href="vote.html">票を見る</a>'
     : active.length ? '次の投票は、今の建物ができたあとに開きます。<a href="vote.html">くわしく</a>' : '村人が来たら「何を建てる？」の投票が始まります。';
   // 町のチェスト
+  // 町のチェスト：木材・石・食べ物の量 → 今つくっている物（あつまった数／いる数）→ 中身（材料・部品・食べ物・道具・その他）
   const IT = config.items;
-  const ORD = ['log', 'planks', 'stick', 'cobble', 'coal', 'iron', 'gold', 'diamond', 'berry', 'wheat', 'carrot', 'potato', 'apple', 'fish_funa', 'fish_masu', 'fish_koi', 'fish_namazu', 'egg', 'milk', 'wool', 'mushroom', 'seeds', 'sapling', 'stump', 'old_coin', 'pearl', 'driftwood', 'old_boot'];
-  const rank = (k) => (ORD.includes(k) ? ORD.indexOf(k) : 99);
-  const rows = Object.entries(state.store || {}).filter(([, n]) => n > 0).sort((a, b) => rank(a[0]) - rank(b[0]));
   const totals = '<p class="restot">' + ['wood', 'stone', 'food'].map((r) => `<span class="chip"><i class="dot" style="background:${RES_COLOR[r]}"></i>${RES[r]} <b>${state.resources[r]}</b></span>`).join('') + '</p>';
-  document.getElementById('chest').innerHTML = totals + (rows.length
-    ? '<div class="mcslots">' + rows.map(([k, n]) => `<div class="mcslot" title="${esc((IT[k] || {}).name || k)}"><img src="icons/${k}.png" alt="" width="32" height="32" onerror="this.style.visibility='hidden'"><b>${n}</b><span>${esc((IT[k] || {}).name || k)}</span></div>`).join('') + '</div>'
-    : '<p class="muted">まだ空っぽです。</p>');
+  document.getElementById('chest').innerHTML = totals +
+    '<h3 class="chg">今つくっている物</h3>' + goalHtml(state, config, hourNow()) +
+    chestHtml(state.store || {}, config);
   const nt = state.nextTool;
   document.getElementById('nexttool').textContent = nt ? `次に作る道具：${(IT[nt.item] || {}).name || nt.item}（${nt.text}）` : '';
   document.getElementById('join').innerHTML = `インスタの投稿に「<b>${esc(config.joinWord)}</b>」とコメントすると、次の日から村人になります。`;

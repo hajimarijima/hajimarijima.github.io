@@ -5,6 +5,7 @@ import { initAuth } from './auth.js';
 import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, JOB, ACTION, RES, fmtDate, homeName, buildingLabel, showError, KIND, KIND_COLOR, MBTI, LETTER, mdText, villagerUrl, faceCanvas, emptyNote, lookDataUrl, loadImage, drawFigure, gaugeHtml, loadDiary } from './common.js';
 import { BODIES, BODY_LABEL } from './skingen.js';
 import { decodeHours, parseCode, hourOf, hourText } from './hours.js';
+import { heldOf } from './invslots.js';
 
 // 今の時刻（日本時間。?hour=N で決められる）の行動と、1 日の予定（同じ行動が続く所をまとめる）
 function hourRows(L) {
@@ -30,9 +31,12 @@ async function main() {
   const D = await loadAll();
   const key = new URLSearchParams(location.search).get('k');
   const v = D.active.find((x) => x.key === key) || D.active[0];
-  if (!v) { document.getElementById('main').innerHTML = '<h1>村人</h1>' + emptyNote(D.config) + '<p class="muted"><a href="index.html">町を見る</a></p>'; return; }
+  if (!v) { document.getElementById('main').innerHTML = '<h1>村人</h1>' + emptyNote(D.config) + '<p class="muted"><a href="./">町を見る</a></p>'; return; }
   const L = D.life[v.key] || { gathered: { wood: 0, stone: 0, food: 0 }, built: [], diary: [] };
   document.title = v.display + ' | はじまり島';
+  // プロフィールの欄は、config.json の ui.profileSection が true の時だけ出す（今は出さない）
+  const ps = document.getElementById('profsec');
+  if (ps) ps.hidden = !(D.config.ui && D.config.ui.profileSection);
   document.getElementById('name').textContent = v.display;
   document.getElementById('info').innerHTML = [
     ['参加した日', `${fmtDate(v.joined)}（${v.joinedDay}日目）`],
@@ -278,19 +282,23 @@ function renderInventory(L, config) {
   const box = document.getElementById('inv');
   const info = document.getElementById('invinfo');
   const locks = L.locks || [];
-  for (let i = 0; i < IC.max; i++) {
+  // 夜にチェストへ入れる前（その日の仕事のおわり）の中身。古いデータは今の持ち物
+  const held = heldOf(L);
+  // 使える枠と、次に開く 2 マスまで（鍵のマスを全部は並べない）。のこりは一行で
+  const showLocked = Math.min(2, IC.max - slots);
+  for (let i = 0; i < slots + showLocked; i++) {
     const cell = document.createElement('button');
     cell.type = 'button';
     cell.className = 'slot';
     let tip = '';
     if (i < slots) {
-      const s = (L.inv || [])[i];
+      const s = held.list[i];
       if (s) {
         const it = items[s.item] || { name: s.item };
         cell.innerHTML = `<img class="pixel" src="icons/${s.item}.png" alt="">` + (s.n > 1 ? `<span class="n">${s.n}</span>` : '') +
           (s.dur !== undefined ? `<span class="dur"><i style="width:${(s.dur / s.max) * 100}%;background:${s.dur / s.max > 0.5 ? '#4ec04e' : s.dur / s.max > 0.2 ? '#e0c040' : '#d84a3a'}"></i></span>` : '');
         tip = it.name + (s.n ? ` ${s.n} 個` : '') + (s.dur !== undefined ? `（耐久 ${s.dur}/${s.max}）` : '');
-      } else tip = 'あき';
+      } else { tip = 'あき'; cell.classList.add('vacant'); }
     } else {
       const lk = locks[i - slots];
       cell.classList.add('locked');
@@ -301,7 +309,9 @@ function renderInventory(L, config) {
     cell.addEventListener('click', () => { info.textContent = (i + 1) + ' 番の枠：' + tip; });
     box.append(cell);
   }
-  info.textContent = '枠を押すと中身が出ます。鍵の枠は開く条件です。';
+  const more = IC.max - slots - showLocked;
+  if (more > 0) { const p = document.createElement('p'); p.className = 'invmore'; p.textContent = `ほかに あと ${more} 枠。レベルや住んだ日数で開きます。`; box.after(p); }
+  info.textContent = held.label + '。枠を押すと中身が出ます。点線の枠は次に開く条件です。';
 }
 
 main().catch(showError);

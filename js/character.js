@@ -312,18 +312,20 @@ export function setCarry(ch, kind) {
   if (P.carry) P.front.add(P.carry);
 }
 
-// 見張りの盾（木の板に鉄のふち）。左腕に付け、矢が来たら前に上げる
+// 見張りの盾（木の板に鉄のふち）。左の前腕の外側にベルトで付け、体の前に構える。矢や攻撃が来たら腕ごと上げて顔の前で受ける
 const shieldMats = { wood: new THREE.MeshLambertMaterial({ color: 0x8a5a32 }), wood2: new THREE.MeshLambertMaterial({ color: 0x744a28 }), rim: new THREE.MeshLambertMaterial({ color: 0x6a7078 }), boss: new THREE.MeshLambertMaterial({ color: 0xb8bec4 }) };
 export function setShield(ch, on) {
   const P = ch.userData.parts;
   if (!!P.shield === on) return;
-  if (P.shield) { P.larm.remove(P.shield); P.shield = null; return; }
-  const g = new THREE.Group(); g.position.set(0.5 * PX, -9 * PX, 0);
-  // 腕の向き（-y）が前を向いた時に、板が前を向くように：厚みは y
-  for (let i = 0; i < 3; i++) g.add(box(0.14, 0.05, 0.5, i % 2 ? shieldMats.wood2 : shieldMats.wood, -0.14 + i * 0.14, 0, 0));
-  g.add(box(0.46, 0.06, 0.05, shieldMats.rim, 0, 0, 0.24)); g.add(box(0.46, 0.06, 0.05, shieldMats.rim, 0, 0, -0.24));
-  g.add(box(0.1, 0.08, 0.1, shieldMats.boss, 0, -0.04, 0));
-  P.larm.add(g); P.shield = g;
+  if (P.shield) { P.shield.parent?.remove(P.shield); P.shield = null; return; }
+  // 縦長の板（厚みは z）。位置と向きは animate の placeShield で毎コマ左手の前に合わせる
+  const g = new THREE.Group();
+  for (let i = 0; i < 3; i++) g.add(box(0.15, 0.56, 0.05, i % 2 ? shieldMats.wood2 : shieldMats.wood, -0.15 + i * 0.15, 0, 0));
+  g.add(box(0.5, 0.05, 0.065, shieldMats.rim, 0, 0.27, 0)); g.add(box(0.5, 0.05, 0.065, shieldMats.rim, 0, -0.27, 0));
+  g.add(box(0.05, 0.5, 0.07, shieldMats.rim, 0.24, 0, 0)); g.add(box(0.05, 0.5, 0.07, shieldMats.rim, -0.24, 0, 0)); // 上下のふちと重ならない長さ・厚み（チカチカ防ぎ）
+  g.add(box(0.12, 0.12, 0.06, shieldMats.boss, 0, 0, 0.04));
+  g.add(box(0.06, 0.16, 0.05, shieldMats.rim, 0, -0.02, -0.045)); // 裏の取っ手（手がここを握る）
+  P.larm.parent.add(g); P.shield = g; placeShield(P);
 }
 
 // 打った時に飛ぶかけら（石・木くず）
@@ -357,8 +359,8 @@ export function fishCycle(t) {
   const reel = c >= 0.7 && c < 0.88 ? Math.sin((c - 0.7) / 0.18 * Math.PI) : 0;
   return { c, sink, reel, caught: c >= 0.74 && c < 0.95 };
 }
-// pose: 'idle' | 'talk' | 'walk' | 'chop' | 'dig' | 'gather' | 'carry' | 'fish'
-export function animate(ch, pose, t) {
+// pose: 'idle' | 'talk' | 'walk' | 'chop' | 'dig' | 'gather' | 'carry' | 'fish' | 'strike'（見張りが敵をたたく。phase: 0..1 の 1 振り分、0.75 で当たる）
+export function animate(ch, pose, t, phase = null) {
   const P = ch.userData.parts;
   const seed = ch.userData.seed || 0;
   P.body.position.y = 0; P.body.rotation.set(0, 0, 0);
@@ -381,10 +383,10 @@ export function animate(ch, pose, t) {
     if (pose === 'carry') { P.rarm.rotation.x = -1.2; P.larm.rotation.x = -1.2; P.rarm.rotation.z = 0.12; P.larm.rotation.z = -0.12; }
     else { P.rarm.rotation.x = -s * 0.9; P.larm.rotation.x = s * 0.9; }
     P.body.position.y = Math.abs(Math.cos(t * 6.2)) * 0.03;
-  } else if (pose === 'dig' || pose === 'chop') {
+  } else if (pose === 'dig' || pose === 'chop' || pose === 'strike') {
     // 振りかぶる → 振り下ろす → 当たって小さく止まる → もどす
     const dig = pose === 'dig';
-    const c = (t * (dig ? 1.3 : 1.6)) % 1;
+    const strike = pose === 'strike', c = strike && phase !== null ? phase : (t * (dig ? 1.3 : 1.6)) % 1;
     const H0 = dig ? 0.45 : 0.5, H1 = dig ? 0.65 : 0.75, H2 = dig ? 0.76 : 0.85; // 振り下ろし開始・当たる・止まり終わり
     const up = dig ? -3.0 : -2.5, hit = dig ? -0.85 : -1.45, rest = dig ? -0.9 : -1.1;
     let a, lean, twist = 0, recoil = 0;
@@ -394,7 +396,7 @@ export function animate(ch, pose, t) {
     else { const k = (c - H2) / (1 - H2); const e = k * k * (3 - 2 * k); a = hit + (rest - hit) * e; lean = (dig ? 0.32 : 0.2) * (1 - e); twist = (dig ? 0 : -0.1) * (1 - e); }
     // 手首を返す量：振り下ろしで前へ返し、当たったところで止める
     const k1 = c < H0 ? -0.45 * (c / H0) : c < H1 ? -0.45 + 0.85 * ((c - H0) / (H1 - H0)) : c < H2 ? 0.4 : 0.4 * (1 - (c - H2) / (1 - H2));
-    if (ch.userData.oneHand) {
+    if (ch.userData.oneHand || strike) {
       // 片手：利き手で振り、手首を返す。もう片方はバランスを取る（前に出す）か、体の横に下ろす
       P.rarm.rotation.set(a, 0, 0.1);
       if (P.tool) P.tool.rotation.x = Math.PI / 2 + k1;
@@ -411,7 +413,7 @@ export function animate(ch, pose, t) {
     P.body.position.y = -Math.abs(lean) * 0.08;
     P.head.rotation.x = 0.2 + lean * 0.3; // 当てる所を見る
     const p = c >= H1 ? (c - H1) / 0.28 : -1;
-    if (dig) chips(P, 'stone', p, 0, 3 * PX, 19 * PX); else chips(P, 'wood', p, 0, 13 * PX, 15 * PX);
+    if (dig) chips(P, 'stone', p, 0, 3 * PX, 19 * PX); else if (!strike) chips(P, 'wood', p, 0, 13 * PX, 15 * PX);
   } else if (pose === 'fish') {
     // 両手でさおを前に出して待つ。うきが沈んだら、さおを上へ振り上げる
     breathe(0.3);
@@ -494,12 +496,27 @@ export function animate(ch, pose, t) {
     // 話す時の手ぶりは、2 頭身では腕が短く太いので ごく小さく（前へ出すと胸から離れた箱に見える）
     if (pose === 'talk' && !P.tool) { P.rarm.rotation.x *= 0.35; P.rarm.rotation.z = -0.04; }
     // 振る時も、手を体のまん中へ寄せて、道具が体の前を通るようにする
-    if (P.tool && (pose === 'dig' || pose === 'chop') && ch.userData.oneHand) P.rarm.rotation.z = 0.5;
+    if (P.tool && (pose === 'dig' || pose === 'chop' || pose === 'strike') && (ch.userData.oneHand || pose === 'strike')) P.rarm.rotation.z = 0.5;
   }
   // 盾を持っていて矢が来ている時は、左腕を前に上げて盾で受ける（少し身をかがめる）
-  if (P.shield && ch.userData.block) { P.larm.rotation.set(-1.45, 0.25, -0.2); P.body.rotation.x = Math.max(P.body.rotation.x, 0.12); P.head.rotation.x = -0.1; }
-  else if (P.shield) P.larm.rotation.set(-1.0, 0.2, -0.15); // 盾を前に構えておく
+  if (P.shield) {
+    // 構え：ひじを曲げたように腕を少し前へ出し、体の前（胸からおなか）を盾でかくす。受ける時は腕を前へ上げて顔の前に
+    const up = ch.userData.block ? 1 : 0;
+    P.larm.rotation.set(up ? -1.3 : -0.55, 0, up ? -0.55 : -0.42);
+    if (up) { P.body.rotation.x = Math.max(P.body.rotation.x, 0.1); P.head.rotation.x = -0.05; }
+  }
   if (ch.userData.smooth) smoothPose(ch, P, t);
+  if (P.shield) placeShield(P);
+}
+// 盾は腕の子にせず体に付け、毎コマ「左手の先」の少し前へ置く。板は縦で前向き（受ける時は少し上向き）。
+// 腕は必ず板の後ろ側に来るので、どの姿勢でも腕や手が板を突き抜けない。手は板の裏の取っ手を握る位置になる
+const _hv = new THREE.Vector3(), _e = new THREE.Euler();
+function placeShield(P) {
+  const a = P.larm, g = P.shield;
+  _hv.set(0, -11 * PX, 0).multiply(a.scale).applyEuler(a.rotation).add(a.position); // 手の位置（体の中の座標）
+  const up = Math.min(1, Math.max(0, (-a.rotation.x - 0.55) / 0.75)); // 0＝構え 1＝受け
+  g.position.set(_hv.x - 0.5 * PX, _hv.y + (1 - up) * 1.5 * PX, _hv.z + 3.4 * PX + up * 1.2 * PX);
+  g.rotation.set(-0.12 - up * 0.25, 0, 0);
 }
 // 動きの切りかわり（待つ→歩く など）を、ゆるやかな曲線でつなぐ：前のコマの角度から、今の角度へ少しずつ寄せる。
 // 寄せる速さは時間で決めるので、コマの数がちがっても同じ。大きく時間がとんだ時（画面の外から戻った時）はそのまま

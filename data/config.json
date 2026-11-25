@@ -431,6 +431,14 @@
       "value": {
         "food": 1.2
       }
+    },
+    "torch": {
+      "name": "たいまつ",
+      "value": {}
+    },
+    "shield": {
+      "name": "盾",
+      "value": {}
     }
   },
   "buildings": {
@@ -1884,10 +1892,43 @@
     },
     "freeStamina": 1,
     "freeDiaryP": 0.6,
-    "note": "1 日は 24 時間。村人は 1 時間に 1 つ行動する。決める順：眠気が sleepAt → 寝る／おなかが eatBelow 以下 → チェストの食べ物を食べる（1 回 mealFood、1 日 maxMeals 回まで）／行動力（stamina）が restBelow 以下 → 休む／持ち物がいっぱい → チェストへ運ぶ（チェストが carryNear 以内なら、ついでに置いて仕事を続ける。遠くて 1 時間かけて運ぶのは maxTrips 回まで。それをこえたら今日の仕事はおしまい）／その日 workHours 時間働いたら、あとは軽いこと（free の重みで、散歩・仲のいい人とおしゃべり・池のそばで海をながめる・畑に水・柵の動物をなでる・荷物運びの手伝いから 1〜2 時間ずつ選ぶ。とれる物はなく、行動力が freeStamina 戻る。日記には freeDiaryP の日だけ 1 つ書く）。夜なら見張り。ただ休むのは行動力が少ない時だけ／道具がない・こわれた・良い物が作れる → 作る／ベッドの材料がある → ベッドを作る／それ以外は道具の仕事（できなければ別の仕事）。眠気は起きている 1 時間に awake（重い仕事は awakeHeavy 足す）増え、起きて lateAfter 時間たって寝る時刻（bedtime、朝型・夜型ごとの幅から人ごとに決まる。プロフィールで決めていない人の nightShare が夜型。朝型は wakeEarliest 時まではまどろんで起きない）を過ぎると lateBoost 増える。寝ると寝る場所ごとに sleepDrop 減って 0 で起きる。ベッドは眠気・行動力（sleepStamina）・体力（sleepHp）の戻りが早い。木・切り株・岩のかたまり（1 つ blockWork）は仕事の量（treeWork × 木の大きさ・stumpWork）を、道具の 1 時間の力（power）でけずる。何人かで同じ木・岩をたたくと力を足す（joinChance でだれかの木を手伝う）。整地は levelHours 人・時間。夜（night の時刻）は悪くない：採掘はそのまま、釣りは nightFishP で夜だけの魚（nightFish）、外の木切り・畑はたいまつ（torchItem、まだ無いアイテム）がなければ nightSlow 倍。夜に起きている人は見張りになって敵を減らし、家のない人が外で寝ると outsideHurtP で敵にケガをさせられることがある（死なない）。道具は働いた 1 時間に toolWearPerHour へる。原木は木の logs × logScale。草むらの実は 1 日に村ぜんたいで草むらの bushShare の割合までとれる。workHours・logScale・blockWork・bushShare は、前の 1 日 1 回のしくみと集まる量がだいたい同じになるように合わせた。ベッドは村で 1 日 1 つまで、チェストに bedKeep（羊毛など）を残せる時だけ作る"
+    "note": "1 日は 24 時間。村人は 1 時間に 1 つ行動する。決める順：眠気が sleepAt → 寝る／おなかが eatBelow 以下 → チェストの食べ物を食べる（1 回 mealFood、1 日 maxMeals 回まで）／行動力（stamina）が restBelow 以下 → 休む／持ち物がいっぱい → チェストへ運ぶ（チェストが carryNear 以内なら、ついでに置いて仕事を続ける。遠くて 1 時間かけて運ぶのは maxTrips 回まで。それをこえたら今日の仕事はおしまい）／その日 workHours 時間働いたら、あとは軽いこと（free の重みで、散歩・仲のいい人とおしゃべり・池のそばで海をながめる・畑に水・柵の動物をなでる・荷物運びの手伝いから 1〜2 時間ずつ選ぶ。とれる物はなく、行動力が freeStamina 戻る。日記には freeDiaryP の日だけ 1 つ書く）。夜なら見張り。ただ休むのは行動力が少ない時だけ／道具がない・こわれた・良い物が作れる → 作る／ベッドの材料がある → ベッドを作る／それ以外は道具の仕事（できなければ別の仕事）。眠気は起きている 1 時間に awake（重い仕事は awakeHeavy 足す）増え、起きて lateAfter 時間たって寝る時刻（bedtime、朝型・夜型ごとの幅から人ごとに決まる。プロフィールで決めていない人の nightShare が夜型。朝型は wakeEarliest 時まではまどろんで起きない）を過ぎると lateBoost 増える。寝ると寝る場所ごとに sleepDrop 減って 0 で起きる。ベッドは眠気・行動力（sleepStamina）・体力（sleepHp）の戻りが早い。木・切り株・岩のかたまり（1 つ blockWork）は仕事の量（treeWork × 木の大きさ・stumpWork）を、道具の 1 時間の力（power）でけずる。何人かで同じ木・岩をたたくと力を足す（joinChance でだれかの木を手伝う）。整地は levelHours 人・時間。夜（night の時刻）は悪くない：採掘はそのまま、釣りは nightFishP で夜だけの魚（nightFish）、外の木切り・畑はたいまつ（torchItem、まだ無いアイテム）がなければ nightSlow 倍。夜に起きている人は見張りになって敵を減らし、家のない人が外で寝ると outsideHurtP で敵にケガをさせられることがある（死なない）。道具は働いた 1 時間に toolWearPerHour へる。原木は木の logs × logScale。草むらの実は 1 日に村ぜんたいで草むらの bushShare の割合までとれる。workHours・logScale・blockWork・bushShare は、前の 1 日 1 回のしくみと集まる量がだいたい同じになるように合わせた。ベッドは村で 1 日 1 つまで、チェストに bedKeep（羊毛など）を残せる時だけ作る",
+    "far": {
+      "note": "遠出：選べる木・岩がチェストから near より遠い時は、行きに 1 時間歩く（その 1 時間も workHours に数えるので、働ける時間が減る）。遠くで働いている仲間がいれば、そのそばを先に選ぶ。その日の仕事を終えた時と寝る時刻に、チェストから homeR より遠くにいたら、1 時間歩いて村へ帰る。木にもたれて寝る時は、村のまん中から treeR 以内の木だけ（なければ地面。家・ベッドがあればそこ）",
+      "near": 28,
+      "homeR": 28,
+      "treeR": 15
+    }
   },
   "nameTags": {
     "note": "村人の頭の上の名前札。かくしていない人は @ユーザー名、かくしている人はあだ名。近い人だけに出し、重なる札は上へずらすか隠す。video は動画の書き出し（?video=1）でも @ユーザー名 を出すか（false にすると動画ではだれでもあだ名）",
     "video": true
+  },
+  "ui": {
+    "note": "画面の出し入れ。profileSection は村人のページの「プロフィール」の欄（ログイン・コメントで送る）。今は出さない（コメントのプロフィールの読み取りは毎日の更新で続ける）",
+    "profileSection": false
+  },
+  "guardGear": {
+    "note": "見張りの装備。夜の見張りの時間に、作業台（workbench）があれば作る。はじめは道具か素手。たいまつは棒＋石炭で makes 本できて、チェストに keep 本より少なければ作る。作ったたいまつは村のまわりに posts 本まで立てる（立てるまで夜は暗いまま）。剣は crafting.recipes の剣（木→石→…）を、持っていない見張りが作る。盾は板＋丸石で、keep 枚まで作る。1 晩に作るのは perNight 個まで。剣を持つのは見張り役の swordMax 人まで（持っている人は良い剣に作り直す）。立てたたいまつは 1 晩に burnPerNight 本ずつ燃えつきる",
+    "torch": {
+      "from": {
+        "stick": 1,
+        "coal": 1
+      },
+      "makes": 4,
+      "keep": 8
+    },
+    "sword": true,
+    "shield": {
+      "from": {
+        "planks": 6,
+        "cobble": 1
+      },
+      "keep": 3
+    },
+    "posts": 8,
+    "perNight": 1,
+    "swordMax": 3,
+    "burnPerNight": 1
   }
 }
