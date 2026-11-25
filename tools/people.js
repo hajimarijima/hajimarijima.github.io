@@ -70,17 +70,17 @@ function upsertVillager(villagers, { igId, username, joined, joinedDay, source, 
 // ---------- コメント ----------
 // Graph API のコメント: { id, text, timestamp, from: { id, username }, username }
 const commentUser = (c) => ({ igId: c.from && c.from.id, username: (c.from && c.from.username) || c.username });
-// 「参加したい」「参加します」「参加」を登録として読む（前の言葉「住民登録」も念のため読む）。
+// 「住みたい」「すみたい」「参加したい」「参加します」「参加」を登録として読む（前の言葉「住民登録」も念のため読む）。
 // 「参加しない」「参加できない」「不参加」は登録にしない。word は config.joinWord（足したい言葉があれば追加される）
-const JOIN_WORDS = ['参加したい', '参加します', '参加', '住民登録'];
-const NOT_JOIN = /参加(し|でき)ない|参加しません|参加できません|不参加/;
+const JOIN_WORDS = ['住みたい', 'すみたい', '参加したい', '参加します', '参加', '住民登録'];
+const NOT_JOIN = /参加(し|でき)ない|参加しません|参加できません|不参加|(住|す)みたくない|(住|す)めない/;
 const isJoin = (text, word) => {
   const t = norm(text);
   if (NOT_JOIN.test(t)) return false;
   return [...JOIN_WORDS, ...(word ? [norm(word)] : [])].some((w) => t.includes(w));
 };
 
-// 「参加したい ピッケル」「参加したい 釣り」から最初の道具を読む（config.startTools）。
+// 「住みたい ピッケル」「参加したい 釣り」から最初の道具を読む（config.startTools）。
 // いちばん前に書いてある道具の言葉を使う。敵が出ない間は剣（needsEnemies）は選べない。言葉がなければ null
 function parseStartTool(text, startTools, { enemies = false } = {}) {
   const opts = ((startTools && startTools.options) || []).filter((o) => enemies || !o.needsEnemies);

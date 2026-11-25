@@ -2,7 +2,7 @@
   "name": "minna-no-machi",
   "version": "0.1.0",
   "private": true,
-  "description": "インスタの参加者が村人になる「みんなで町づくり」",
+  "description": "インスタの参加者が村人になる「はじまり島」",
   "scripts": {
     "skins": "node tools/gen_skins.js",
     "reset": "node tools/init.js",

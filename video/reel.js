@@ -1,6 +1,6 @@
 // インスタのリール用の縦動画（1080x1920）。window.renderFrame(t) で t 秒のコマを描く。
 // tools/render_video.js がブラウザでこれを開いて、コマを書き出す。
-// 見せるのは 0 日目〜2 日目だけ。順番：だれもいない → 参加（「参加したい ピッケル」の人が木のつるはしを持って来る）
+// 見せるのは 0 日目〜2 日目だけ。順番：だれもいない → 参加（「住みたい ピッケル」の人が木のつるはしを持って来る）
 // → 最初の道具を選べる → その人が岩を掘る → 整地 → 何を建てる？ → どこに建てる？ → 木を切る → 夜 → 道具を作る
 // → 建て始める → チェストの中 → 池で釣り（2 日目）→ これから（イメージ）：畑が育つ・柵の動物。
 // 歩く速さは人がふつうに歩くくらい（2.6／秒、背の高さ 3.8）。遠くへ行く所は歩かせずに場面を切りかえる。
@@ -33,7 +33,7 @@ const WHAT = D.decisions.find((d) => d.kind === 'what'), WHERE = D.decisions.fin
 const SITE = D2.plan && D2.plan.site ? D2.plan.site : { x: WHERE.options.find((o) => o.key === WHERE.key).x, z: WHERE.options.find((o) => o.key === WHERE.key).z };
 const byAction = (day, a) => day.active.filter((k) => day.life[k][0] === a);
 const LEVELERS = byAction(D1, 'level').slice(0, 2);
-const KJ = D1.active.find((k) => D1.life[k][7] === 'pickaxe' && D1.life[k][0] === 'dig') || byAction(D1, 'dig')[0]; // 「参加したい ピッケル」の人（1 日目に岩を掘った）
+const KJ = D1.active.find((k) => D1.life[k][7] === 'pickaxe' && D1.life[k][0] === 'dig') || byAction(D1, 'dig')[0]; // 「住みたい ピッケル」の人（1 日目に岩を掘った）
 const KDG = KJ;
 const KCH = byAction(D1, 'chop')[0];                 // 1 日目に木を切った人
 const KFI = byAction(D2, 'fish')[0] || null;          // 2 日目、池で釣りをした人（村ではじめて魚を釣った）
@@ -227,7 +227,7 @@ const fishLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new TH
 
 // ---------- 村人 ----------
 const VIL = Object.fromEntries(D.villagers.map((v) => [v.key, v]));
-const CREW = [KJ, ...D1.active.filter((k) => k !== KJ)].slice(0, 5); // 先頭は「参加したい ピッケル」の人
+const CREW = [KJ, ...D1.active.filter((k) => k !== KJ)].slice(0, 5); // 先頭は「住みたい ピッケル」の人
 const chars = {};
 for (const key of new Set([...CREW, ...D2.active])) {  // 釣りをした人も D2.active に入っている
   const v = VIL[key];
@@ -620,7 +620,7 @@ const CAP = SAFE_BOTTOM - 190;
 const RB0 = RK.t1 + breakTime(0, VD, RK.hits), RB1 = RK.t1 + breakTime(1, VD, RK.hits);
 const CAPS = [
   [0.4, T.join, ['まだ、だれもいない'], { y: H / 2 + 330, size: 84 }],
-  [T.join + 0.2, T.pick, ['「参加したい」のコメントで、', '村人が 1 人ずつ']],
+  [T.join + 0.2, T.pick, ['「住みたい」のコメントで、', '村人が 1 人ずつ']],
   [T.rock + 0.1, RB0 + 0.2, ['つるはしを選んだ人は、', 'まず岩を掘る']],
   [RB0 + 0.2, RB1 + 0.6, ['決まった回数たたくと、1 つ落ちる']],
   [RB1 + 0.6, T.level, ['最後は、くだけて消える']],
@@ -696,7 +696,7 @@ function commentCards(t) {
     ctx.restore();
   });
 }
-function commentText(key) { const s = START(key); return s && !START_AUTO(key) ? `参加したい ${START_WORD[s]}` : '参加したい'; }
+function commentText(key) { const s = START(key); return s && !START_AUTO(key) ? `住みたい ${START_WORD[s]}` : '住みたい'; }
 const villagerCount = (t) => T_APPEAR.filter((a) => a - 0.12 <= t).length;
 
 // ---------- 投票カード（A/B/C・票が伸びる・決まる） ----------
@@ -870,7 +870,7 @@ function pickCard(t, a, b) {
     ctx.globalAlpha = s;
     mcSlot(x + 60, ry, S); mcIcon(icon, x + 60 + 18, ry + 18, S - 36, 1);
     ctx.textAlign = 'left'; ctx.fillStyle = '#2f2a22'; ctx.font = `700 60px ${FONT}`; ctx.fillText(name, x + 250, ry + 52);
-    ctx.fillStyle = '#6f6656'; ctx.font = `700 40px ${FONT}`; ctx.fillText(`${job}・「参加したい ${word}」`, x + 250, ry + 116);
+    ctx.fillStyle = '#6f6656'; ctx.font = `700 40px ${FONT}`; ctx.fillText(`${job}・「住みたい ${word}」`, x + 250, ry + 116);
     ctx.globalAlpha = 1;
   });
   ctx.textAlign = 'center'; ctx.fillStyle = '#6f6656'; ctx.font = `700 36px ${FONT}`;
@@ -981,7 +981,7 @@ window.renderFrame = (t) => {
     const k = ease((t - T.end) / 0.6);
     ctx.fillStyle = `rgba(12, 20, 14, ${0.22 * k})`; ctx.fillRect(0, 0, W, H);
     caption(['あなたも', '村人に。'], SAFE_TOP + 250, 100, clamp01((t - T.end - 0.2) / 0.35));
-    caption(['コメントに', '『参加したい』'], SAFE_BOTTOM - 210, 94, clamp01((t - T.end - 0.9) / 0.35), { color: '#ffe08a' });
+    caption(['コメントに', '『住みたい』'], SAFE_BOTTOM - 210, 94, clamp01((t - T.end - 0.9) / 0.35), { color: '#ffe08a' });
   }
 };
 

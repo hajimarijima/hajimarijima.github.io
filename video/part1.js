@@ -1,7 +1,7 @@
 // リール「パート 1：0 日目」（縦 1080×1920・27 秒）。window.renderFrame(t) で t 秒のコマを描く。
 // tools/render_video.js --page video/part1.html --name part1_day0 で書き出す。
 // 中身は本番の 0 日目（data/world.json をそのまま読む。書きかえない）。村人は 0 人、名前は出さない。
-// 順番：空から島（朝焼け）→ 広場の予定地・チェストの場所・木・岩 → 「ここに町を作ります」→ 参加の仕方と最初の道具 4 つ → 「参加したい」の呼びかけ＋明日の小さな予告（夕焼け。1 日目の A・B・C の中身はまだ出さない）
+// 順番：空から島（朝焼け）→ 広場の予定地・チェストの場所・木・岩 → 「ここに町を作ります」→ 参加の仕方と最初の道具 4 つ → 「住みたい」の呼びかけ＋明日の小さな予告（夕焼け。1 日目の A・B・C の中身はまだ出さない）
 import * as THREE from 'three';
 import { makeSky } from '../js/daynight.js';
 import { makeTerrain, BLOCK } from '../js/terrain_gen.js';
@@ -126,11 +126,11 @@ function caption(lines, y, size, alpha = 1, opts = {}) {
   ctx.restore();
 }
 const fadeIO = (t, a, b, f = 0.3) => Math.min(clamp01((t - a) / f), clamp01((b - t) / f));
-// 左上：パート 1・0 日目
+// 左上：島の名前とパート 1・0 日目
 function badges() {
   ctx.save(); ctx.textBaseline = 'middle';
   ctx.font = `700 46px ${FONT}`;
-  const p = 'パート 1', pw = ctx.measureText(p).width;
+  const p = 'はじまり島　パート 1', pw = ctx.measureText(p).width;
   ctx.fillStyle = 'rgba(255, 224, 138, 0.96)'; roundRect(56, SAFE_TOP, pw + 56, 76, 38); ctx.fill();
   ctx.fillStyle = '#2f2a1a'; ctx.fillText(p, 84, SAFE_TOP + 39);
   ctx.font = `700 84px ${FONT}`;
@@ -180,12 +180,12 @@ function joinCard(t) {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = '#7a6a4a'; ctx.font = `700 46px ${FONT}`; ctx.fillText('参加の仕方', W / 2, y + 70);
   const step = (t0) => clamp01((t - t0) / 0.3);
-  // 1：コメントに『参加したい』
+  // 1：コメントに『住みたい』
   let k = step(T.join + 0.4);
   if (k > 0) {
     ctx.globalAlpha = a * k;
     ctx.fillStyle = '#2f4a37'; ctx.font = `700 64px ${FONT}`; ctx.fillText('コメントに', W / 2, y + 160);
-    ctx.fillStyle = '#c0392b'; ctx.font = `700 84px ${FONT}`; ctx.fillText('『参加したい』', W / 2, y + 255);
+    ctx.fillStyle = '#c0392b'; ctx.font = `700 84px ${FONT}`; ctx.fillText('『住みたい』', W / 2, y + 255);
   }
   // 2：道具を書くと、その道具で始まる
   k = step(T.join + 1.6);
@@ -193,7 +193,7 @@ function joinCard(t) {
     ctx.globalAlpha = a * k;
     ctx.fillStyle = '#2f4a37'; ctx.font = `700 50px ${FONT}`; ctx.fillText('道具を書くと、その道具で始まる', W / 2, y + 370);
     ctx.fillStyle = '#efe7d3'; roundRect(x + 90, y + 410, w - 180, 84, 42); ctx.fill();
-    ctx.fillStyle = '#5a4a2a'; ctx.font = `700 46px ${FONT}`; ctx.fillText('例：参加したい ピッケル', W / 2, y + 452);
+    ctx.fillStyle = '#5a4a2a'; ctx.font = `700 46px ${FONT}`; ctx.fillText('例：住みたい ピッケル', W / 2, y + 452);
   }
   // 3：最初の道具 4 つ
   const n = TOOLS.length, cw = 190, gx = (w - cw * n) / (n + 1);
@@ -212,7 +212,7 @@ function joinCard(t) {
   ctx.restore();
 }
 function nextCard(t) {
-  // しめ：「参加したい」の呼びかけを大きく。下に小さく明日の予告（選ぶ中身は出さない）
+  // しめ：「住みたい」の呼びかけを大きく。下に小さく明日の予告（選ぶ中身は出さない）
   const a = clamp01((t - T.next - 0.4) / 0.4);
   if (a <= 0) return;
   ctx.fillStyle = `rgba(12, 16, 24, ${0.32 * a})`; ctx.fillRect(0, 0, W, H);
@@ -223,8 +223,8 @@ function nextCard(t) {
   ctx.fillStyle = '#fffdf6'; roundRect(x, y, w, h, 48); ctx.fill();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = '#2f4a37'; ctx.font = `700 76px ${FONT}`; ctx.fillText('コメントに', W / 2, y + 120);
-  ctx.fillStyle = '#c0392b'; ctx.font = `700 120px ${FONT}`; ctx.fillText('『参加したい』', W / 2, y + 270);
-  ctx.fillStyle = '#2f4a37'; ctx.font = `700 76px ${FONT}`; ctx.fillText('で、あなたも村人に', W / 2, y + 430);
+  ctx.fillStyle = '#c0392b'; ctx.font = `700 120px ${FONT}`; ctx.fillText('『住みたい』', W / 2, y + 270);
+  ctx.fillStyle = '#2f4a37'; ctx.font = `700 76px ${FONT}`; ctx.fillText('で、はじまり島の村人に', W / 2, y + 430);
   // 押したくなる小さな矢印（コメント欄の方＝下）
   const bob = Math.sin(t * 6) * 8;
   ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.moveTo(W / 2 - 34, y + 520 + bob); ctx.lineTo(W / 2 + 34, y + 520 + bob); ctx.lineTo(W / 2, y + 566 + bob); ctx.closePath(); ctx.fill();
@@ -235,7 +235,8 @@ function nextCard(t) {
 
 // ---------- 1 コマ ----------
 const CAPS = [
-  [0.6, 5.9, ['まだ、だれもいない島'], { y: H / 2 + 260, size: 84 }],
+  [0.3, 5.9, ['はじまり島'], { y: H / 2 + 90, size: 150, color: '#ffe08a' }],
+  [0.9, 5.9, ['まだ、だれもいない島'], { y: H / 2 + 300, size: 76 }],
   [T.site + 0.3, T.town - 0.1, ['ここが、村のまん中になる所'], {}],
   [T.town + 0.2, T.join - 0.1, ['ここに町を作ります', '村人は 0 人'], { y: SAFE_BOTTOM - 260, size: 74, colors: ['#fffdf4', '#ffe08a'] }],
 ];
@@ -268,7 +269,7 @@ window.renderFrame = (t) => {
   callout('チェストの場所', CHEST, 1.6, lab(T.site + 2.0), '#8a6420', 140);
   callout('木', TREE, 7.5, lab(T.site + 3.0), '#3d7a3a', 90);
   callout('岩', ROCK, 1.6, lab(T.site + 3.8), '#5a5f66', 120);
-  CAPS.forEach(([a, b, lines, o]) => caption(lines, o.y || SAFE_BOTTOM - 180, o.size || 64, fadeIO(t, a, b)));
+  CAPS.forEach(([a, b, lines, o]) => caption(lines, o.y || SAFE_BOTTOM - 180, o.size || 64, fadeIO(t, a, b), o));
   joinCard(t);
   nextCard(t);
   badges();

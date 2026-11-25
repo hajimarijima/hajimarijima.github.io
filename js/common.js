@@ -45,13 +45,13 @@ export function nav(current) {
   const items = [['index.html', '町'], ['history.html', '歴史'], ['vote.html', '投票'], ['people.html', '村人'], ['relations.html', '関係'], ['skins.html', 'スキン']];
   const el = document.createElement('header');
   el.className = 'site-head';
-  el.innerHTML = '<a class="brand" href="index.html"><span class="brand-pre">みんなで</span>町づくり</a><nav>' +
+  el.innerHTML = '<a class="brand" href="index.html">はじまり島</a><nav>' +
     items.map(([h, t]) => `<a href="${h}"${h === current ? ' class="on"' : ''}>${t}</a>`).join('') + '</nav>';
   document.body.prepend(el);
 }
 
 // 村人が 0 人の時の案内（どの画面でも同じ言葉）
-export const emptyText = (config) => `まだだれもいません。コメントに『${(config && config.joinWord) || '参加したい'}』で村人に`;
+export const emptyText = (config) => `まだだれもいません。コメントに『${(config && config.joinWord) || '住みたい'}』で村人に`;
 export function emptyNote(config) { return `<p class="empty">${esc(emptyText(config))}</p>`; }
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

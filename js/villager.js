@@ -13,7 +13,7 @@ async function main() {
   const v = D.active.find((x) => x.key === key) || D.active[0];
   if (!v) { document.getElementById('main').innerHTML = '<h1>村人</h1>' + emptyNote(D.config) + '<p class="muted"><a href="index.html">町を見る</a></p>'; return; }
   const L = D.life[v.key] || { gathered: { wood: 0, stone: 0, food: 0 }, built: [], diary: [] };
-  document.title = v.display + ' | みんなで町づくり';
+  document.title = v.display + ' | はじまり島';
   document.getElementById('name').textContent = v.display;
   document.getElementById('info').innerHTML = [
     ['参加した日', `${fmtDate(v.joined)}（${v.joinedDay}日目）`],

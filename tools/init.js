@@ -139,7 +139,7 @@ if (demo) NAMES.forEach((name, i) => {
 });
 
 const state = {
-  title: 'みんなで町づくり',
+  title: 'はじまり島',
   seed, startDate: start, day: 0, date: addDays(start, -1),
   demo,
   resources: { wood: 0, stone: 0, food: 10 },
