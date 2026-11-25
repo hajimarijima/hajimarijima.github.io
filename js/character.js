@@ -428,6 +428,31 @@ export function animate(ch, pose, t) {
     P.rarm.rotation.x = -1.0 + c * 0.35; P.larm.rotation.x = -0.9 - c * 0.35;
     P.head.rotation.x = 0.3;
     breathe(0.25);
+  } else if (pose === 'water') {
+    // 畑に水をやる：立ったまま、両手を前に出して、ゆっくり左右にふりながら水をまく（しゃがむ「集める」とは別の形）
+    breathe(0.3);
+    const s = Math.sin(t * 1.6 + seed * 5);
+    P.rarm.rotation.set(-1.05 + s * 0.08, s * 0.25, 0.25); P.larm.rotation.set(-0.95 + s * 0.08, s * 0.25, -0.25);
+    P.body.rotation.x = 0.12; P.body.rotation.y = s * 0.12;
+    P.head.rotation.x = 0.35;
+    P.rleg.rotation.x = 0.1; P.lleg.rotation.x = -0.1;
+  } else if (pose === 'lie') {
+    // 寝る：あお向けに横になる（頭は後ろ側）。ベッドの上なら ch.userData.lieY だけ上げる。ゆっくり息をする
+    P.body.rotation.x = -Math.PI / 2;
+    P.body.position.y = 2.2 * PX + (ch.userData.lieY || 0);
+    P.rarm.rotation.z = -0.12; P.larm.rotation.z = 0.12;
+    P.rleg.rotation.z = -0.04; P.lleg.rotation.z = 0.04;
+    P.head.rotation.y = 0.35 * (seed < 0.5 ? 1 : -1); // 顔を少し横へ
+    breathe(0.25 * (1 + Math.sin(t * 0.5 + seed * 7)));
+  } else if (pose === 'sit') {
+    // 木にもたれて眠る：脚を前へ投げ出して座り、少し後ろへもたれ、首をかしげる
+    const hipY = P.rleg.position.y;
+    P.body.position.y = -hipY + 1.5 * PX;
+    P.body.rotation.x = -0.1; // 後ろへ少しだけ（頭の後ろが幹に入らない角度。town.js の幹からの間と合わせてある）
+    P.rleg.rotation.set(-1.45, 0, -0.1); P.lleg.rotation.set(-1.45, 0, 0.1);
+    P.rarm.rotation.set(-0.35, 0, -0.15); P.larm.rotation.set(-0.35, 0, 0.15);
+    P.head.rotation.x = 0.35; P.head.rotation.z = 0.25 * (seed < 0.5 ? 1 : -1);
+    breathe(0.3);
   } else {
     // 立っている：呼吸＋ときどき周りを見る・伸びをする（人ごとに違う）
     breathe(0.35);
@@ -439,7 +464,8 @@ export function animate(ch, pose, t) {
       // 話す：うなずきと身ぶり
       P.head.rotation.x = Math.max(0, Math.sin(t * 5 + seed * 9)) * 0.12;
       const g = Math.max(0, Math.sin(t * 2.3 + seed * 4));
-      P.rarm.rotation.x = -0.5 - g * 0.6; P.rarm.rotation.z = 0.25;
+      // 腕は肩から離さず、ひじ下を少し前に出す小さな手ぶり（z は外向きにして胸へめりこませない）
+      P.rarm.rotation.x = -0.3 - g * 0.3; P.rarm.rotation.y = 0; P.rarm.rotation.z = -0.08;
       P.head.rotation.y = Math.sin(t * 0.7 + seed) * 0.1;
     } else if (u < 0.22) {
       // 首を回して周りを見る
@@ -457,7 +483,7 @@ export function animate(ch, pose, t) {
     }
   }
   // 2 頭身は頭が重く大きいので、体の前かがみと首の傾きを小さくする（大きく傾けると頭が地面に付いて見える）
-  if (ch.userData.chibi) {
+  if (ch.userData.chibi && pose !== 'lie' && pose !== 'sit') {
     P.body.rotation.x *= 0.35; P.head.rotation.x *= 0.5; P.body.position.y *= 0.5;
     // 道具を持って立つ・歩く時は、腕を前に出して体の前で持つ（大きな頭のかげや体の後ろに隠れないように）
     if (P.tool && (pose === 'idle' || pose === 'walk' || pose === 'talk') && P.toolKind !== 'basket') {
@@ -465,6 +491,8 @@ export function animate(ch, pose, t) {
       P.tool.rotation.x = Math.PI / 2 - 0.2;
       P.tool.rotation.y = 1.2; // 道具の絵の面を前へ向ける（正面から形が分かる。真横向きのままだと棒にしか見えない）
     } else if (P.tool) P.tool.rotation.y = 0;
+    // 話す時の手ぶりは、2 頭身では腕が短く太いので ごく小さく（前へ出すと胸から離れた箱に見える）
+    if (pose === 'talk' && !P.tool) { P.rarm.rotation.x *= 0.35; P.rarm.rotation.z = -0.04; }
     // 振る時も、手を体のまん中へ寄せて、道具が体の前を通るようにする
     if (P.tool && (pose === 'dig' || pose === 'chop') && ch.userData.oneHand) P.rarm.rotation.z = 0.5;
   }

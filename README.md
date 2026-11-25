@@ -9,7 +9,7 @@ GitHub Pages（`○○.github.io`）にこのフォルダの中身をそのま�
 |---|---|
 | `index.html` | 町の 3D 地図（three.js 0.160.0 を jsdelivr から読む） |
 | `villager.html?k=…` | 村人のページ（3D の姿・仕事・家・集めた資源・建物・日記） |
-| `history.html` / `vote.html` / `people.html` / `skins.html` | 歴史・投票・村人の一覧・スキン 200 枚の一覧 |
+| `history.html` / `vote.html` / `people.html` | 歴史・投票・村人の一覧（村人さがし） |
 | `data/config.json` | 建物の値段と見た目、投票の候補と時間、フォロワーの節目で増える候補、道具のレシピと段階、木と岩が戻る日数、敵を出すか |
 | `data/villagers.json` | 村人（表示名・スキン番号・参加日） |
 | `data/world.json` | 木・岩・草むら・畑・建物の位置と状態 |
@@ -288,7 +288,7 @@ Instagram のログイン API は、プロの（ビジネス・クリエイタ�
 - ログインした本人は、村人ページの「見た目」で体の種類（男性・女性・指定なし）を選べます。体の種類を変えた時だけ、「別のを引く」で 1 回だけ引き直せます。引き直した後のボタンは「引き直しは使いました」になり、押せません（`profileFields` の `look`、`体:シード:回数` の形で保存）。
 - 引き直した回数は、Firestore のプロフィールと `villagers.json` の `lookRerolls` に残ります。sim は `lookRerolls` を見て 2 回目を断るので、ページを開き直しても回数は戻りません。
 - 「体型」（`profileFields` の `body`）で、通常と 2 頭身を選べます。何度でも変えられ、引き直しの回数とは別です。sim が取り込んで `villagers.json` の `body: "normal" | "chibi"` とプロフィールの `body` に入れ、町の画面・村人ページ・動画はその体型で描きます。`?chibi=1` を付けると、全員を 2 頭身で試せます（`js/character.js` の `chibiOf`）。
-- `skins.html` の「見た目を作る」で、24 体をその場で見くらべられます。`skins/見本24.png` は男性・女性・指定なしを 8 体ずつ並べた見本です。
+- `skins/見本24.png` は男性・女性・指定なしを 8 体ずつ並べた見本です。
 
 ## 何人まで参加できるか（測り方と軽量化）
 

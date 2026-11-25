@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const assert = require('assert');
+process.env.TOWN_SALT_QUIET = '1'; // テストは開発用の塩で動かす（警告は出さない。子の sim.js にも引きつがれる）
 const P = require('../tools/people');
 const STORE = require('../tools/store'); // world.json（地図の文字）と日記（人ごとのファイル）を読む
 
@@ -70,6 +71,49 @@ t('名前かくし：hidden.json の人はあだ名・名前は JSON に残ら�
   assert.ok(!('name' in v));
   assert.ok(!JSON.stringify(vs).includes('secret_cat'));
   assert.strictEqual(v.display, P.nickname(v.key));
+});
+
+t('名前かくし：公開ファイルのどこからも、かくした人のユーザー名・インスタ ID がたどれない（塩入りの印）', () => {
+  const crypto = require('crypto');
+  const hc = sample.joinComments.find((c) => (c.from && c.from.username || c.username) === 'secret_cat');
+  assert.ok(hc, '見本に secret_cat の参加コメントがある');
+  const uname = 'secret_cat', igid = hc.from && hc.from.id ? String(hc.from.id) : null;
+  const SALT = 'test-salt-' + Date.now();
+  const hm = (s) => crypto.createHmac('sha256', SALT).update(s).digest('hex');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-priv-'));
+  fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+  // hidden.json には名前ではなく塩入りの印だけ（tools/hide.js と同じ形）
+  fs.writeFileSync(path.join(dir, 'hidden.json'), JSON.stringify(['hmac:' + hm('user:' + uname).slice(0, 16)]));
+  const env = { ...process.env, TOWN_DATA: dir, TOWN_SALT: SALT, TOWN_SALT_QUIET: '1' };
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+  node('tools/init.js', '--seed', 'test', '--start', '2026-11-01');
+  const inboxDir = path.join(dir, 'inbox'); fs.mkdirSync(inboxDir);
+  const inbox = path.join(inboxDir, 'instagram.json'); // 生のコメントは inbox/ にだけ置く（.gitignore で公開しない）
+  fs.writeFileSync(inbox, JSON.stringify({ followers: sample.followers, joinComments: sample.joinComments, voteComments: null }));
+  node('tools/sim.js', '--inbox', inbox);
+  node('tools/sim.js', '--days', '2');
+  const vs = JSON.parse(fs.readFileSync(path.join(dir, 'villagers.json'), 'utf8'));
+  const hv = vs.find((v) => v.hidden);
+  assert.ok(hv, 'かくした人も村人になっている');
+  // 公開されるファイル（inbox/ 以外ぜんぶ）を集める
+  const files = [];
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (e.name !== 'inbox') walk(p); } else files.push(p); } };
+  walk(dir);
+  const text = files.map((f) => fs.readFileSync(f, 'utf8')).join('\n').toLowerCase();
+  // だれでも計算できる形（塩なし・開発用の塩）の印。どれも公開ファイルに入っていてはいけない
+  const plain = (s) => crypto.createHash('sha256').update(s).digest('hex');
+  const dev = (s) => crypto.createHmac('sha256', 'town-dev-salt-NOT-SECRET').update(s).digest('hex');
+  const bad = [uname];
+  if (igid) bad.push(igid);
+  for (const h of [plain, dev]) {
+    bad.push(h('user:' + uname).slice(0, 16), h('key:user:' + uname).slice(0, 10));
+    if (igid) bad.push(h('ig:' + igid).slice(0, 16), h('key:ig:' + igid).slice(0, 10));
+  }
+  for (const b of bad) assert.ok(!text.includes(b.toLowerCase()), '公開ファイルに入っている：' + b);
+  // 印は塩入りの HMAC になっている（塩を知らなければ名前から作れない）
+  assert.strictEqual(hv.userHash, hm('user:' + uname).slice(0, 16));
+  if (igid) assert.strictEqual(hv.key, hm('key:ig:' + igid).slice(0, 10));
+  assert.ok(!('name' in hv) && hv.display === P.nickname(hv.key));
 });
 
 // ---------- 町を動かして確かめる ----------
@@ -407,13 +451,64 @@ t('鉱石：鉄・金・ダイヤを掘ると履歴に「〇〇が鉄鉱石を�
   const h2 = JSON.parse(fs.readFileSync(path.join(dir2, 'history.json'), 'utf8'));
   assert.deepStrictEqual(h2.filter((x) => x.type === 'find').map((x) => x.text), finds.map((x) => x.text));
 });
-t('投票：最初の候補は普通の村の建物だけ。時計台などの特別な建物はフォロワー 50 人から候補に入る', () => {
+t('投票：候補は普通の村の建物だけ。時計台などの特別な建物はフォロワーが増えても自動では候補に入らない', () => {
   const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
   const plain = new Set(['hut', 'house', 'well', 'storehouse', 'workbench', 'fence', 'workshop', 'watch', 'garden', 'plaza', 'shop', 'lamps', 'wall', 'inn', 'farm', 'canal', 'pen']);
   for (const b of config.firstChoices.concat(config.choicePool)) assert.ok(plain.has(b), b);
   assert.ok(config.firstChoices.includes('workbench'), '作業台は最初から選べる');
-  const ct = config.milestones.find((m) => m.adds.includes('clocktower'));
-  assert.ok(ct && ct.at >= 50, '時計台は 50 人以降');
+  assert.ok(!('milestones' in config), 'フォロワーの節目で候補を足す決まりはない');
+  assert.ok(config.buildings.clocktower, '時計台そのものは config に残る（手で選べば建てられる）');
+  // フォロワーが 1000 人になっても、候補に特別な建物は入らない
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-ms-'));
+  fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+  const env = { ...process.env, TOWN_DATA: dir };
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js'), '--seed', 'ms', '--start', '2026-11-01'], { env });
+  const inbox = path.join(dir, 'inbox.json');
+  fs.writeFileSync(inbox, JSON.stringify({ followers: 1000, joinComments: sample.joinComments, voteComments: null }));
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/sim.js'), '--inbox', inbox, '--days', '3'], { env });
+  const st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
+  const offered = new Set([...(st.pool || []), ...st.votes.flatMap((v) => (v.options || []).map((o) => o.build).filter(Boolean))]);
+  for (const b of offered) assert.ok(plain.has(b), '候補に特別な建物：' + b);
+});
+
+// ---------- 建物のリクエスト（tools/requests.js） ----------
+const RQ = require('../tools/requests');
+const RCFG = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+t('リクエスト：いろいろな言い方を建物に読む。ただの感想・A/B/C の票は数えない', () => {
+  const cases = { '図書館たててほしい': ['library'], '温泉ほしい！': ['onsen'], 'おんせん欲しいです': ['onsen'], '灯台つくって〜': ['lighthouse'], '時計台がいいな': ['clocktower'],
+    '港と風車ができたらうれしい': ['port', 'windmill'], 'パン屋さんお願いします': ['bakery'], '大噴水ほしい': ['fountain'], '教会たてて': ['cathedral'] };
+  for (const [s, ids] of Object.entries(cases)) assert.deepStrictEqual(RQ.parseRequest(s, RCFG).ids.sort(), ids.sort(), s);
+  assert.strictEqual(RQ.parseRequest('図書館きれい', RCFG), null, '「ほしい」がなければ数えない');
+  assert.deepStrictEqual(RQ.parseRequest('ジェットコースターつくって', RCFG), { ids: [], other: 'ジェットコースター' });
+  const { req } = RQ.tally([{ text: 'A', from: { id: '1' } }, { text: 'Bがいい', from: { id: '2' } }], RCFG, 1);
+  assert.deepStrictEqual(req.buildings, {}, 'A/B/C の票はリクエストにしない');
+});
+t('リクエスト：1 人 1 建物 1 回。日をまたいでも同じ人は増えない', () => {
+  const c = (id, text) => ({ text, from: { id, username: 'user' + id } });
+  let { req, seen } = RQ.tally([c('1', '温泉ほしい'), c('1', 'やっぱり温泉ほしい！'), c('2', 'おんせんたてて'), c('1', '図書館ほしい')], RCFG, 3);
+  assert.strictEqual(req.buildings.onsen.count, 2);
+  assert.strictEqual(req.buildings.library.count, 1);
+  ({ req, seen } = RQ.tally([c('1', '温泉ほしい'), c('3', '温泉お願い')], RCFG, 5, req, seen));
+  assert.strictEqual(req.buildings.onsen.count, 3, '次の日に同じ人が書いても増えない・新しい人は増える');
+  assert.deepStrictEqual([req.buildings.onsen.firstDay, req.buildings.onsen.lastDay], [3, 5]);
+  assert.strictEqual(req.buildings.onsen.name, '温泉');
+});
+t('リクエスト：その他はよくない言葉を捨て、20 文字まで。ユーザー名・ID は残らない', () => {
+  const cs = [{ text: 'しねって書いた看板ほしい', from: { id: '11', username: 'bad_guy' } }, { text: 'くそでかい滑り台つくって', from: { id: '12', username: 'x' } },
+    { text: 'あいうえおかきくけこさしすせそたちつてとなにぬねの 作って', from: { id: '13', username: 'long_name_user' } }, { text: 'https://example.com ほしい', from: { id: '14', username: 'spam' } },
+    { text: '温泉ほしい', from: { id: '98765', username: 'secret_cat' } }, { text: '観覧車ほしい', username: 'only_name' }];
+  const { req, seen } = RQ.tally(cs, RCFG, 2);
+  const out = JSON.stringify(req) + JSON.stringify(seen);
+  assert.ok(!/しね|くそ|http/.test(out), 'よくない言葉・リンクは入らない');
+  assert.ok(req.other.every((o) => Array.from(o.text).length <= 20), '20 文字まで');
+  assert.ok(req.other.some((o) => o.text === '観覧車'));
+  for (const s of ['bad_guy', 'long_name_user', 'secret_cat', 'only_name', '98765', P.igHash('98765'), P.userHash('only_name')]) assert.ok(!out.includes(s), '残っている：' + s);
+  // ファイルに書いても同じ
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-req-'));
+  RQ.updateFiles(dir, cs, RCFG, 2);
+  const files = fs.readFileSync(path.join(dir, 'requests.json'), 'utf8') + fs.readFileSync(path.join(dir, 'requests_seen.json'), 'utf8');
+  for (const s of ['secret_cat', 'only_name', '98765']) assert.ok(!files.includes(s));
+  assert.ok(RQ.ranking(JSON.parse(fs.readFileSync(path.join(dir, 'requests.json'), 'utf8'))).includes('温泉'));
 });
 
 // ---------- 道具作り ----------
@@ -732,6 +827,180 @@ t('体型：normal と chibi だけ通す・何度でも変えられる（見た
   }
   assert.strictEqual(vs[0].lookRerolls, 1); // 引き直しの回数は増えない
   assert.deepStrictEqual(vs[0].look, { body: 'female', seed: 9 });
+});
+
+// ---------- 投稿ツール（tools/poster）のブラウザを使わない部分 ----------
+t('投稿ツール：引数の読み取り（既定は非公開・まちがいは断る）', () => {
+  const PL = require('../tools/poster/lib.js');
+  let r = PL.parseArgs(['youtube', 'a.mp4', 'c.txt', '--title', 'たいとる']);
+  assert.deepStrictEqual(r, { cmd: 'youtube', args: ['a.mp4', 'c.txt'], flags: { dryRun: false, title: 'たいとる', visibility: 'private' } });
+  r = PL.parseArgs(['youtube', 'a.mp4', 'c.txt', '--visibility=Unlisted', '--dry-run']);
+  assert.strictEqual(r.flags.visibility, 'unlisted'); assert.strictEqual(r.flags.dryRun, true);
+  assert.strictEqual(PL.parseArgs(['instagram', 'a.mp4', 'c.txt', '--dry-run']).flags.dryRun, true);
+  assert.strictEqual(PL.parseArgs(['comments', 'https://www.instagram.com/p/AbC_12-x/', '--out', 'x.json']).flags.out, 'x.json');
+  assert.strictEqual(PL.parseArgs(['comments', 'https://www.instagram.com/reel/AbC123/?igsh=1']).cmd, 'comments');
+  assert.deepStrictEqual(PL.parseArgs(['dm', '@Hanako.Town', 'm.txt']).args, ['hanako.town', 'm.txt']);
+  assert.deepStrictEqual(PL.parseArgs(['login']).args, []);
+  for (const bad of [[], ['tweet'], ['youtube', 'a.mp4'], ['youtube', 'a.mp4', 'c.txt', '--visibility', 'secret'], ['youtube', 'a.mp4', 'c.txt', '--title'],
+    ['instagram', 'a.mp4', 'c.txt', '--title', 'x'], ['comments', 'https://example.com/p/x'], ['comments', 'u', '--dry-run'], ['dm', 'bad name!', 'm.txt'], ['login', '--zzz']]) {
+    assert.throws(() => PL.parseArgs(bad), Error, JSON.stringify(bad));
+  }
+  const y = PL.youtubeText('1行目の説明 <b>\n2行目', '');
+  assert.strictEqual(y.title, '1行目の説明 ＜b＞'); assert.ok(!/[<>]/.test(y.description));
+  assert.strictEqual([...PL.youtubeText('x', 'あ'.repeat(150)).title].length, 100);
+  assert.throws(() => PL.youtubeText('  \n ', ''));
+  assert.strictEqual(PL.isUploadDone('アップロード中… 45%'), false);
+  assert.strictEqual(PL.isUploadDone('アップロード完了 ... 処理しています'), true);
+  assert.strictEqual(PL.isUploadDone('Checks complete. No issues found.'), true);
+  assert.strictEqual(PL.isUploadDone(''), false);
+});
+t('投稿ツール：DM は 1 日 20 件まで・40〜90 秒あける・同じ人に 2 回送らない', () => {
+  const PL = require('../tools/poster/lib.js');
+  const t0 = Date.parse('2026-11-25T01:00:00Z'); // 日本時間 10 時
+  const log = PL.loadDmLog('');
+  assert.deepStrictEqual(PL.dmCheck(log, 'a', t0), { ok: true, waitMs: 0, today: 0 });
+  PL.dmRecord(log, '@A', t0, () => 0);
+  assert.strictEqual(PL.dmCheck(log, 'a', t0 + 999e3).ok, false, '同じ人（大文字・@ ちがい）は断る');
+  assert.strictEqual(PL.dmCheck(log, 'b', t0 + 10e3).waitMs, 30e3, '最短 40 秒あける');
+  assert.strictEqual(PL.dmCheck(log, 'b', t0 + 41e3).waitMs, 0);
+  for (const r of [() => 0, () => 0.5, () => 0.999999]) { const w = PL.randomWaitMs(r); assert.ok(w >= 40e3 && w <= 90e3, String(w)); }
+  for (let i = 1; i < 20; i++) PL.dmRecord(log, 'u' + i, t0 + i * 100e3);
+  const late = t0 + 20 * 100e3;
+  assert.ok(!PL.dmCheck(log, 'zz', late).ok && /20/.test(PL.dmCheck(log, 'zz', late).reason), '21 件目は断る');
+  assert.ok(PL.dmCheck(log, 'zz', Date.parse('2026-11-25T15:30:00Z')).ok, '日本時間で次の日になれば送れる');
+  const again = PL.loadDmLog(JSON.stringify(log));
+  assert.strictEqual(again.sent.length, 20); assert.strictEqual(again.nextAt, log.nextAt);
+});
+t('投稿ツール：画面から読んだコメントを registrationsFrom の形にする', () => {
+  const PL = require('../tools/poster/lib.js');
+  const raw = [
+    { username: 'owner', text: '参加したい人はコメントしてね', time: '2026-11-01T09:00:00.000Z', isCaption: true },
+    { username: 'Taro_Pan', text: ' 参加したい ピッケル ', time: '2026-11-01T12:00:00.000Z' },
+    { username: 'new_hanako', text: '参加したいです！', time: '2026-11-01T10:00:00.000Z' },
+    { username: 'new_hanako', text: '参加したいです！', time: '2026-11-01T10:00:00.000Z' }, // 2 回読んだもの
+    { username: 'x', text: '', time: '2026-11-01T10:00:00.000Z' },
+  ];
+  const c = PL.shapeComments(raw, Date.parse('2026-11-02T00:00:00Z'));
+  assert.strictEqual(c.length, 2);
+  assert.deepStrictEqual(c.map((x) => x.username), ['new_hanako', 'taro_pan'], '古い順・名前は小文字');
+  assert.deepStrictEqual(c[1].from, { id: 'taro_pan', username: 'taro_pan' });
+  assert.strictEqual(c[1].text, '参加したい ピッケル'); assert.strictEqual(c[1].time, c[1].timestamp);
+  assert.ok(/^web_[0-9a-f]{12}$/.test(c[0].id));
+  assert.strictEqual(PL.shapeComments([{ username: 'n', text: 'a', time: 'きのう' }], 0)[0].time, '1970-01-01T00:00:00.000Z');
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/config.json'), 'utf8'));
+  const regs = P.registrationsFrom(c, cfg.joinWord, cfg.startTools);
+  assert.strictEqual(regs.length, 2);
+  assert.deepStrictEqual(regs.map((r) => [r.igId, r.username]), [['new_hanako', 'new_hanako'], ['taro_pan', 'taro_pan']]);
+});
+
+// ---------- 1 日 24 時間の行動 ----------
+const HR = require('../js/hours.js');
+const HC = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8')).hours;
+const hourRun = (() => {
+  let memo = null;
+  return () => {
+    if (memo) return memo;
+    const one = () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-hours-'));
+      fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+      const env = { ...process.env, TOWN_DATA: dir };
+      execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js'), '--demo'], { env });
+      execFileSync(process.execPath, [path.join(ROOT, 'tools/sim.js'), '--demo', '--days', '3'], { env });
+      const life = STORE.readLife(dir), vs = JSON.parse(fs.readFileSync(path.join(dir, 'villagers.json'), 'utf8'));
+      fs.rmSync(dir, { recursive: true, force: true });
+      return { life, vs };
+    };
+    memo = [one(), one()];
+    return memo;
+  };
+})();
+t('24 時間：村人はみんな 1 日 24 個の行動を持つ（L.action も残る）', () => {
+  const { life, vs } = hourRun()[0];
+  const act = vs.filter((v) => life[v.key] && life[v.key].hours);
+  assert.ok(act.length >= 5, '行動のある村人 ' + act.length);
+  for (const v of act) {
+    const arr = HR.decodeHours(life[v.key].hours);
+    assert.strictEqual(arr.length, 24, v.key + ' ' + life[v.key].hours);
+    assert.ok(arr.every((c) => HR.parseCode(c).action), '知らない記号 ' + life[v.key].hours);
+    assert.ok(life[v.key].action, 'その日のおもな行動 L.action');
+    assert.strictEqual(HR.encodeHours(arr), life[v.key].hours, 'まとめ直しても同じ');
+  }
+});
+t('24 時間：2 人で同じ木を切ると 1 人より早い／木の斧 1 人でおよそ 1 時間', () => {
+  const need = HC.treeWork;
+  const one = HR.hoursToFinish(need, [HC.power.wood]), two = HR.hoursToFinish(need * 2, [HC.power.wood, HC.power.wood]);
+  assert.strictEqual(one, 1, '木の斧 1 人で 1 時間');
+  const big = need * 3; // 大きな木
+  assert.ok(HR.hoursToFinish(big, [HC.power.wood, HC.power.stone]) < HR.hoursToFinish(big, [HC.power.wood]), '手伝うと早い');
+  assert.ok(two <= one);
+  assert.ok(HC.power.hand < HC.power.wood && HC.power.wood < HC.power.stone && HC.power.stone < HC.power.iron, '素手 < 木 < 石 < 鉄');
+  const r = HR.addWork(0, big, [{ key: 'a', pow: 12 }, { key: 'b', pow: 24 }]);
+  assert.ok(r.done && Math.abs(r.share.b - 2 / 3) < 1e-9, '力の割合で分ける');
+});
+t('24 時間：切り株を掘るのにも時間がかかる（素手は木の斧より遅い）', () => {
+  assert.ok(HR.hoursToFinish(HC.stumpWork, [HC.power.wood]) >= 1);
+  assert.ok(HR.hoursToFinish(HC.stumpWork, [HC.power.hand]) > HR.hoursToFinish(HC.stumpWork, [HC.power.wood]));
+  const { life } = hourRun()[0];
+  const all = Object.values(life).map((L) => HR.decodeHours(L.hours)).flat();
+  assert.ok(all.some((c) => HR.parseCode(c).action === 'stump'), '切り株を掘る時間がある');
+});
+t('24 時間：ベッドで寝ると、木や地面より早く戻る', () => {
+  const b = HR.sleepGain('bed', HC), g = HR.sleepGain('ground', HC), tr = HR.sleepGain('tree', HC);
+  assert.ok(b.sleepy > g.sleepy && b.stamina > g.stamina && b.hp > g.hp);
+  assert.ok(b.sleepy > tr.sleepy);
+  const hoursTo = (place) => Math.ceil(HC.sleepAt / HR.sleepGain(place, HC).sleepy);
+  assert.ok(hoursTo('bed') < hoursTo('ground') && hoursTo('bed') >= 5 && hoursTo('ground') <= 9, `ベッド ${hoursTo('bed')} 時間・地面 ${hoursTo('ground')} 時間`);
+});
+t('24 時間：夜にも起きて動く村人がいる（寝る時刻は人ごとにちがう）', () => {
+  const { life } = hourRun()[0];
+  const hs = Object.values(life).filter((L) => L.hours).map((L) => HR.decodeHours(L.hours));
+  const nightAwake = hs.filter((a) => a.some((c, h) => HR.isNight(h, HC) && HR.parseCode(c).action !== 'sleep'));
+  assert.ok(nightAwake.length > 0, '夜に起きている人');
+  const firstSleep = new Set(hs.map((a) => a.findIndex((c, h) => h >= 12 && HR.parseCode(c).action === 'sleep')));
+  assert.ok(firstSleep.size >= 2, '寝る時刻は 1 つに決まっていない');
+  for (const a of hs) { const n = a.filter((c) => HR.parseCode(c).action === 'sleep').length; assert.ok(n >= 4 && n <= 11, '寝る時間 ' + n); }
+});
+t('24 時間：同じ種なら同じ 1 日になる', () => {
+  const [a, b] = hourRun();
+  const pick = (r) => JSON.stringify(Object.keys(r.life).sort().map((k) => [k, r.life[k].hours, r.life[k].action, r.life[k].diary]));
+  assert.strictEqual(pick(a), pick(b));
+});
+
+// ---------- 村人さがし（js/search.js） ----------
+const SR = require('../js/search.js');
+// 名前かくしは本物の流れ（upsertVillager → applyPrivacy）で作る
+const searchList = () => {
+  const hidden = new Set([P.userHash('secret.user')]), vs = [];
+  P.upsertVillager(vs, { username: 'Taro_Yamada', joined: '2026-11-01', joinedDay: 1 }, hidden);
+  P.upsertVillager(vs, { username: 'hanako.k', joined: '2026-11-01', joinedDay: 2 }, hidden);
+  P.upsertVillager(vs, { username: 'secret.user', joined: '2026-11-01', joinedDay: 3 }, hidden);
+  return vs;
+};
+t('村人さがし：一部・大文字小文字・全角・先頭の @ を気にせず見つかる', () => {
+  const vs = searchList();
+  for (const q of ['taro', 'TARO', '@taro_y', '＠ＴＡＲＯ', ' yamada ', '@@Taro_Yamada']) assert.deepStrictEqual(SR.searchVillagers(vs, q).map((v) => v.name), ['Taro_Yamada'], q);
+  assert.deepStrictEqual(SR.searchVillagers(vs, 'zzz'), []);
+  assert.deepStrictEqual(SR.searchVillagers(vs, '@'), [], '@ だけでは出さない');
+  assert.strictEqual(SR.findExact(vs, '@hanako.k').name, 'hanako.k');
+  assert.strictEqual(SR.findExact(vs, 'hanako'), null, '?who= はぴったりの人だけ');
+});
+t('村人さがし：名前をかくした人はユーザー名では見つからず、あだ名でだけ見つかる', () => {
+  const vs = searchList(), s = vs.find((v) => v.hidden);
+  assert.ok(s && !s.name, 'かくした人の名前は公開データに入らない');
+  for (const q of ['secret.user', 'secret', '@secret.user']) assert.ok(!SR.searchVillagers(vs, q).includes(s), q);
+  assert.strictEqual(SR.findExact(vs, 'secret.user'), null);
+  // もし名前が残っていても、かくした人はユーザー名では引かない
+  const leak = { ...s, name: 'secret.user' };
+  assert.deepStrictEqual(SR.searchVillagers([leak], 'secret'), []);
+  assert.deepStrictEqual(SR.searchVillagers(vs, s.display).map((v) => v.key), [s.key], 'あだ名では見つかる');
+});
+t('村人さがし：インスタのリンクは、かくしていない人のユーザー名だけ', () => {
+  const vs = searchList(), s = vs.find((v) => v.hidden), taro = vs.find((v) => v.name === 'Taro_Yamada');
+  assert.strictEqual(SR.igUrl(taro), 'https://www.instagram.com/taro_yamada/');
+  assert.strictEqual(SR.igUrl(s), null);
+  assert.strictEqual(SR.igUrl({ ...s, name: 'secret.user' }), null, 'かくした人は名前が残っていてもリンクなし');
+  assert.strictEqual(SR.igUrl({ name: '村人1', hidden: false }), null, 'ユーザー名の形でなければリンクなし');
+  assert.strictEqual(SR.igUrl({ name: 'a/../b', hidden: false }), null);
 });
 
 console.log(`\nぜんぶ通りました（${ok} 件）`);

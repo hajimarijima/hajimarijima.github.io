@@ -1,6 +1,6 @@
 // オフラインでも開けるようにする。町のデータ（data/*.json）は毎日変わるので、まずネットから取り、つながらない時だけ前のを使う。
-const CACHE = 'town-v2';
-const CORE = ['./', './index.html', './people.html', './villager.html', './vote.html', './history.html', './skins.html',
+const CACHE = 'town-v3';
+const CORE = ['./', './index.html', './people.html', './villager.html', './vote.html', './history.html',
   './css/style.css', './js/common.js', './js/town.js', './js/character.js', './js/villager.js', './manifest.webmanifest', './icons/icon-192.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {

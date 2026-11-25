@@ -4,6 +4,25 @@ import { makeCharacter, animate, setTool, setAccent, chibiOf } from './character
 import { initAuth } from './auth.js';
 import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, JOB, ACTION, RES, fmtDate, homeName, buildingLabel, showError, KIND, KIND_COLOR, MBTI, LETTER, mdText, villagerUrl, faceCanvas, emptyNote, lookDataUrl, loadImage, drawFigure, gaugeHtml, loadDiary } from './common.js';
 import { BODIES, BODY_LABEL } from './skingen.js';
+import { decodeHours, parseCode, hourOf, hourText } from './hours.js';
+
+// 今の時刻（日本時間。?hour=N で決められる）の行動と、1 日の予定（同じ行動が続く所をまとめる）
+function hourRows(L) {
+  const arr = decodeHours(L.hours);
+  if (arr.length !== 24) return [];
+  const q = Number(new URLSearchParams(location.search).get('hour'));
+  const h = Number.isFinite(q) && new URLSearchParams(location.search).has('hour') ? ((Math.floor(q) % 24) + 24) % 24 : (new Date().getUTCHours() + 9) % 24;
+  const runs = [];
+  arr.forEach((c, i) => {
+    const t = hourText(parseCode(c)) || '—';
+    const last = runs[runs.length - 1];
+    if (last && last.t === t) last.b = i; else runs.push({ a: i, b: i, t });
+  });
+  const plan = runs.map((r) => `${r.a}${r.b > r.a ? '〜' + r.b : ''}時 ${r.t}`).join('／');
+  const rows = [['今していること', `${h}時・${hourText(hourOf(L, h)) || '—'}`], ['きょうの 24 時間', plan]];
+  rows.push(['ねる所', (L.bed ? 'ベッド' : '木かげや地面') + (L.chrono ? `・${L.chrono}` : '')]);
+  return rows;
+}
 
 nav('people.html');
 
@@ -18,11 +37,12 @@ async function main() {
   document.getElementById('info').innerHTML = [
     ['参加した日', `${fmtDate(v.joined)}（${v.joinedDay}日目）`],
     ['今の仕事', `${JOB[L.job] || 'まだなし'}${L.action ? '（' + ACTION[L.action] + '）' : ''}`],
+    ...hourRows(L),
     ['住んでいる家', homeName(L, D.world, D.config)],
     ['最初の道具', startToolText(v, L, D.config)],
     ['体力', gaugeHtml('heart', L.hp, (D.config.needs || {}).max || 20) + (L.restWhy === 'weak' ? ' <small class="muted">休んで戻している</small>' : '')],
     ['おなか', gaugeHtml('food', L.hunger, (D.config.needs || {}).max || 20)],
-    ['スキン', v.look ? `${esc(BODY_LABEL[v.look.body] || '')}・${v.look.seed} 番（プロフィールで選んだ見た目）` : `${v.skin} 番 <a href="skins.html#s${v.skin}">一覧で見る</a>`],
+    ['スキン', v.look ? `${esc(BODY_LABEL[v.look.body] || '')}・${v.look.seed} 番（プロフィールで選んだ見た目）` : `${v.skin} 番`],
     ['体型', v.body === 'chibi' ? '2 頭身' : '通常'],
   ].map(([k, val]) => `<dt>${k}</dt><dd>${k === 'スキン' || k === '体力' || k === 'おなか' ? val : esc(val)}</dd>`).join('') + (v.hidden ? '<dt>表示</dt><dd>名前をかくしてあだ名で出しています</dd>' : '');
   document.getElementById('stats').innerHTML = ['wood', 'stone', 'food'].map((r) => `<div class="stat"><b>${Math.floor(L.gathered[r])}</b><small>${RES[r]}</small></div>`).join('');

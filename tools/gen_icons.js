@@ -257,6 +257,56 @@ const ICONS = {
   fish_koi(px) { fishIcon(px, '#d8682a', '#f2e6d8', 'koi'); },
   fish_masu(px) { fishIcon(px, '#6f8f9a', '#e8b0b8', 'masu'); },
   fish_namazu(px) { fishIcon(px, '#4e4a40', '#8a8474', 'namazu', true); },
+  // 夜だけ釣れる魚。ホタルメダカ：小さめの青緑の魚で、背と尾に光る点
+  fish_hotaru(px) {
+    fishIcon(px, '#2f5a66', '#bfe3c8', 'hotaru');
+    for (const [x, y, k] of [[8, 6, 1.0], [10, 6, 0.85], [14, 7, 0.9], [14, 10, 0.8], [6, 7, 0.7]]) put(px, x, y, tone(hex('#e6ff6a'), 1 + k * 0.2));
+    put(px, 9, 5, tone(hex('#e6ff6a'), 0.9));
+  },
+  // ツキウナギ：夜の池の細長い魚。濃い紺の体がうねり、背に月のような黄色い斑
+  fish_tsuki(px) {
+    const g = shapeGrid();
+    for (const [x0, y0, x1, y1] of [[1.5, 11.5, 5, 9.5], [5, 9.5, 8.5, 10.5], [8.5, 10.5, 12, 7.5], [12, 7.5, 14.5, 4.5]]) line(g, x0, y0, x1, y1, 2.6, 'b');
+    for (const [x0, y0, x1, y1] of [[2.5, 12.3, 5, 10.6], [5, 10.6, 8.5, 11.6]]) line(g, x0, y0, x1, y1, 1, 'w');
+    puffy(px, g, { b: { c: hex('#2c3452'), shine: 0.45 }, w: { c: hex('#9aa6c8'), flat: true } }, 'tsuki');
+    put(px, 14, 4, [20, 20, 28]); put(px, 13, 4, [235, 235, 245]);
+    for (const [x, y] of [[9, 9], [10, 9], [6, 9]]) put(px, x, y, hex('#f4dc6a'));
+  },
+  // ベッド：木の枠に赤い掛け布団、頭の側に白いまくら（斜めから見た箱）
+  bed(px) {
+    // 左が頭の板、まくら、掛け布団（上の面と前の垂れ）、木の枠、脚。光は左上から
+    const art = [
+      '................',
+      '................',
+      '................',
+      '.hh.............',
+      '.hHh............',
+      '.hHhwwwW........',
+      '.hHhwwwwRRRRRR..',
+      '.hHhWwwRRRRRRRR.',
+      '.hHhRRRRRRRRRRRr',
+      '.hHhrrrrrrrrrrrr',
+      '.hHhrrrrrrrrrrrr',
+      '.hHhFFFFFFFFFFFf',
+      '.hHhffffffffffff',
+      '.d.d.........d.d',
+      '................',
+      '................',
+    ];
+    const at = (x, y) => (x < 0 || y < 0 || x >= S || y >= S ? '.' : art[y][x]);
+    const wood = hex('#a87040'), woodL = hex('#c88c54'), woodD = hex('#6e4524'), red = hex('#cc3c3c'), redL = hex('#e86058'), redD = hex('#962a30'), white = hex('#f4f1e8'), whiteD = hex('#cfcabc');
+    const COL = { h: woodD, H: woodL, w: white, W: whiteD, R: red, r: redD, F: woodL, f: wood, d: woodD };
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const ch = at(x, y); if (ch === '.') continue;
+      let c = COL[ch];
+      if (ch === 'R' && (at(x, y - 1) === '.' || at(x - 1, y) === 'w' || at(x - 1, y) === 'W')) c = redL;      // 布団の上の縁は明るい
+      if (ch === 'R' && (x + y) % 5 === 0) c = tone(red, 0.9);                                                   // しわ
+      if (ch === 'r' && y === 9) c = tone(redD, 1.12);
+      if (ch === 'w' && (at(x, y - 1) === '.')) c = tone(white, 1.04);
+      if ((at(x + 1, y) === '.' || at(x, y + 1) === '.') && ch !== 'd') c = tone(c, 0.62);                       // 右下の縁はかげ
+      put(px, x, y, c);
+    }
+  },
   carrot(px) {
     const g = shapeGrid();
     poly(g, [[4, 14], [10.5, 5.5], [12.5, 7.5]], 'o');

@@ -32,7 +32,10 @@ function stepNight(S) {
   const nGuard = Math.min(able.length, 1 + Math.floor(able.length / 6) + (hasWatch ? 1 : 0));
   // 前の晩に見張った人は、なるべく休ませる
   const last = new Set((S.state.night && S.state.night.guards) || []);
-  const guards = R.shuffle(able).sort((a, b) => last.has(a.key) - last.has(b.key)).slice(0, nGuard).map((v) => v.key);
+  // 24 時間の sim から：夜に起きていた人（S.guards）がそのまま見張りになる。外で寝ていた人（S.outside）は敵にケガをさせられることがある
+  const shuffled = R.shuffle(able);
+  const guards = Array.isArray(S.guards) ? S.guards.filter((k) => able.some((v) => v.key === k)) : shuffled.sort((a, b) => last.has(a.key) - last.has(b.key)).slice(0, nGuard).map((v) => v.key);
+  const outside = (S.outside || []).filter((k) => life[k] && !guards.includes(k));
   const a = R.range(Math.PI * 0.85, Math.PI * 2.15); // 北・西・東の森から（南は海）
   const from = { x: +(Math.cos(a) * 52).toFixed(1), z: +(Math.min(12, Math.sin(a) * 52)).toFixed(1) };
   const night = { day, defense, guards, from, quiet: false, groups: [], count: 0, result: 'quiet', damage: [], hurt: [], hid: [] };
@@ -46,7 +49,7 @@ function stepNight(S) {
   }
   // 来る数：日がたつほど少しふえ、守りが強いほど減る
   const base = R.int(2, 3 + Math.floor(day / 5));
-  const count = Math.max(1, base - Math.floor(defense / 3));
+  const count = Math.max(1, base - Math.floor(defense / 3) - (Array.isArray(S.guards) ? Math.floor(guards.length / 4) : 0)); // 起きている人が多いほど減る
   const kinds = [['zombie', 5], ['skeleton', day >= 3 ? 3 : 0], ['spider', day >= 4 ? 2 : 0]];
   const tally = {};
   for (let i = 0; i < count; i++) { const t = R.weighted(kinds); tally[t] = (tally[t] || 0) + 1; }
@@ -74,13 +77,15 @@ function stepNight(S) {
   const fields = (world.fields || []).filter((f) => f.stage > 0);
   if (fields.length && R.chance(0.7)) { const f = R.pick(fields); f.stage = 0; night.damage.push({ kind: 'field', id: f.id }); dmg.push('畑がひとつ荒らされた'); }
   if (R.chance(0.5) && S.state.res && S.state.res.food > 2) { const n = Math.min(Math.floor(S.state.res.food), R.int(2, 5)); S.state.res.food -= n; night.damage.push({ kind: 'food', n }); dmg.push(`倉庫の食べ物が ${n} 減った`); }
-  if (!dmg.length || R.chance(0.35)) {
-    const k = R.pick(guards);
+  const pool = guards.concat(outside);
+  if (pool.length && (!dmg.length || R.chance(0.35))) {
+    const k = R.pick(pool);
     life[k].hurt = day + 1; // 次の日は休む
     night.hurt.push(k); night.damage.push({ kind: 'hurt', who: k });
     dmg.push(`${names([k])[0]}が軽いケガをした（1 日休む）`);
-    diary(k, '夜の見張りでケガをした。明日は休む。');
+    diary(k, guards.includes(k) ? '夜の見張りでケガをした。明日は休む。' : '外で寝ていたら敵にひっかかれて、ケガをした。明日は休む。');
   }
+  if (!dmg.length) dmg.push('みんな無事だった');
   for (const k of guards) if (!night.hurt.includes(k)) diary(k, `夜の見張りで、${mobText(night.groups)}と戦った。`);
   hist('night', `${day}日目の夜、${mobText(night.groups)}が来た。${gText}がたいまつで追い払ったが、${dmg.join('、')}。朝日でゾンビは燃え、ほかは森へ帰った。`, { night: day, who: guards });
   return night;

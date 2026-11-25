@@ -42,7 +42,7 @@ export async function loadDiary(key, L) {
 }
 
 export function nav(current) {
-  const items = [['index.html', '町'], ['history.html', '歴史'], ['vote.html', '投票'], ['people.html', '村人'], ['relations.html', '関係'], ['skins.html', 'スキン']];
+  const items = [['index.html', '町'], ['history.html', '歴史'], ['vote.html', '投票'], ['people.html', '村人'], ['relations.html', '関係']];
   const el = document.createElement('header');
   el.className = 'site-head';
   el.innerHTML = '<a class="brand" href="index.html">はじまり島</a><nav>' +

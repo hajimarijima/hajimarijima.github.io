@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>はじまり島 投稿</title>
+<link rel="icon" href="/icon.png">
+<style>
+:root { --bg: #f4f1ea; --card: #fff; --ink: #2b2a27; --sub: #6d6a63; --line: #ddd7cb; --accent: #2f7d5b; --accent-ink: #fff; --warn: #b5482f; --log: #1f2320; --log-ink: #d8e6dc; }
+@media (prefers-color-scheme: dark) { :root { --bg: #1b1c1a; --card: #262825; --ink: #ecebe6; --sub: #a8a59c; --line: #3b3d38; --accent: #4fae84; --accent-ink: #0f1a14; --warn: #e07a5f; --log: #111311; --log-ink: #cfe3d6; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 "Yu Gothic UI", "Meiryo", system-ui, sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 20px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+h1 img { width: 28px; height: 28px; border-radius: 6px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+button { font: inherit; font-weight: 600; min-height: 52px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; padding: 8px 10px; width: 100%; }
+button.main { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-size: 18px; }
+button.stop { color: var(--warn); }
+button[aria-selected="true"] { background: var(--ink); color: var(--bg); }
+button:disabled { opacity: .5; cursor: default; }
+label { display: block; font-size: 14px; color: var(--sub); margin: 10px 0 4px; }
+input[type=text], input[type=url], select, textarea { font: inherit; width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+textarea { min-height: 120px; resize: vertical; }
+.checks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.check { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); font-size: 16px; margin: 0; cursor: pointer; }
+.check input { width: 22px; height: 22px; }
+.dry { margin-top: 10px; background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.hint { color: var(--sub); font-size: 13px; margin: 6px 0 0; }
+.err { color: var(--warn); font-weight: 600; min-height: 1.5em; margin: 8px 0 0; }
+pre#log { background: var(--log); color: var(--log-ink); border-radius: 8px; padding: 10px; height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-all; font: 13px/1.5 Consolas, "MS Gothic", monospace; margin: 0; }
+#shot img { width: 100%; border-radius: 8px; border: 1px solid var(--line); margin-top: 8px; }
+.list { list-style: none; padding: 0; margin: 8px 0 0; max-height: 360px; overflow: auto; }
+.list li { border-bottom: 1px solid var(--line); padding: 8px 2px; }
+.list b { margin-right: 8px; }
+.list small { color: var(--sub); }
+.big { font-size: 28px; font-weight: 700; }
+.hidden { display: none; }
+@media (max-width: 480px) { .row, .checks { grid-template-columns: 1fr; } .row3 { grid-template-columns: repeat(3, 1fr); } button { min-height: 48px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1><img src="/icon.png" alt="">はじまり島 投稿</h1>
+
+  <section class="card">
+    <div class="row">
+      <button id="loginYt">YouTube に ログイン</button>
+      <button id="loginIg">Instagram に ログイン</button>
+    </div>
+    <p class="hint">はじめに 1 回だけ。開いた Chrome で自分でログインして、終わったら その Chrome を閉じます。</p>
+  </section>
+
+  <div class="row3" role="tablist" style="margin-bottom:12px">
+    <button role="tab" data-tab="post" aria-selected="true">投稿</button>
+    <button role="tab" data-tab="comments" aria-selected="false">コメント</button>
+    <button role="tab" data-tab="dm" aria-selected="false">DM</button>
+  </div>
+
+  <label class="check dry card" style="padding:0 14px"><input type="checkbox" id="dry" checked> 試し（最後の手前で止める）</label>
+
+  <!-- 投稿 -->
+  <section class="card" data-panel="post">
+    <label for="videoSel">動画（video フォルダの mp4）</label>
+    <select id="videoSel"></select>
+    <label for="videoPath">または、ファイルの場所を貼り付け</label>
+    <input type="text" id="videoPath" placeholder="D:\VoiceStudio\town\video\out.mp4">
+    <label for="title">YouTube のタイトル（空なら説明の 1 行目）</label>
+    <input type="text" id="title" maxlength="100">
+    <label for="caption">キャプション（説明）</label>
+    <textarea id="caption" placeholder="ここに書いた文が YouTube の説明と Instagram のキャプションになります"></textarea>
+    <div class="checks">
+      <label class="check"><input type="checkbox" id="useYt" checked> YouTube</label>
+      <label class="check"><input type="checkbox" id="useIg" checked> Instagram</label>
+    </div>
+    <label for="vis">YouTube の公開設定</label>
+    <select id="vis">
+      <option value="private" selected>非公開</option>
+      <option value="unlisted">限定公開</option>
+      <option value="public">公開</option>
+    </select>
+  </section>
+
+  <!-- コメント -->
+  <section class="card hidden" data-panel="comments">
+    <label for="postUrl">Instagram の投稿の URL</label>
+    <input type="url" id="postUrl" placeholder="https://www.instagram.com/p/XXXX/">
+    <p class="hint">読んだコメントは data/inbox_comments.json に保存します。</p>
+    <ul class="list" id="commentList"></ul>
+  </section>
+
+  <!-- DM -->
+  <section class="card hidden" data-panel="dm">
+    <div class="row">
+      <div><label>今日 送れる残り</label><div class="big" id="dmLeft">-</div></div>
+      <div><label>今日 送った数</label><div class="big" id="dmToday">-</div></div>
+    </div>
+    <p class="hint" id="dmNext"></p>
+    <label for="dmUser">相手のユーザー名</label>
+    <input type="text" id="dmUser" placeholder="@username">
+    <label for="dmMsg">メッセージ</label>
+    <textarea id="dmMsg"></textarea>
+    <p class="hint">1 日 20 件まで。同じ人には 2 回送りません。送りすぎると Instagram に止められます。</p>
+    <label>送った人</label>
+    <ul class="list" id="dmList"></ul>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <button class="main" id="run">実行</button>
+      <button class="stop" id="stop" disabled>止める</button>
+    </div>
+    <p class="err" id="err" role="alert"></p>
+    <label>ようす</label>
+    <pre id="log">まだ何もしていません。</pre>
+    <div id="shot"></div>
+  </section>
+</main>
+<script>
+const TOKEN = '__TOKEN__';
+const $ = (id) => document.getElementById(id);
+let tab = 'post', since = 0, jobId = null, timer = null, lastShot = '';
+
+async function api(method, p, body) {
+  const r = await fetch(p, { method, headers: { 'X-Token': TOKEN, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({ error: '返事が読めません' }));
+  if (!r.ok) throw new Error(j.error || ('エラー ' + r.status));
+  return j;
+}
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const showErr = (m) => { $('err').textContent = m || ''; };
+
+function setTab(t) {
+  tab = t;
+  for (const b of document.querySelectorAll('[role=tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === t));
+  for (const s of document.querySelectorAll('[data-panel]')) s.classList.toggle('hidden', s.dataset.panel !== t);
+  $('run').textContent = { post: '実行（投稿）', comments: 'コメントを読む', dm: 'DM を送る' }[t];
+  $('dry').closest('label').classList.toggle('hidden', t === 'comments');
+  if (t === 'comments') loadComments();
+}
+for (const b of document.querySelectorAll('[role=tab]')) b.onclick = () => setTab(b.dataset.tab);
+
+async function refresh() {
+  const s = await api('GET', '/api/state');
+  const sel = $('videoSel'), keep = sel.value;
+  sel.innerHTML = s.videos.length ? s.videos.map((v) => `<option value="${esc(v.path)}">${esc(v.name)}（${(v.size / 1048576).toFixed(1)} MB）</option>`).join('') : '<option value="">（video フォルダに mp4 がありません）</option>';
+  if (keep && s.videos.some((v) => v.path === keep)) sel.value = keep;
+  $('dmLeft').textContent = s.dm.remaining + ' 件';
+  $('dmToday').textContent = s.dm.today + ' / ' + s.dm.max;
+  $('dmNext').textContent = s.dm.nextAt ? '次に送れるのは ' + new Date(s.dm.nextAt).toLocaleTimeString('ja-JP') + ' から' : '';
+  $('dmList').innerHTML = s.dm.sent.length ? s.dm.sent.map((x) => `<li><b>@${esc(x.username)}</b><small>${esc(new Date(x.at).toLocaleString('ja-JP'))}</small></li>`).join('') : '<li><small>まだ送っていません</small></li>';
+  showShot(s.shot);
+  return s;
+}
+function showShot(shot) {
+  if (!shot) return;
+  const key = shot.name + shot.mtime;
+  if (key === lastShot) return;
+  lastShot = key;
+  $('shot').innerHTML = `<label>いちばん新しい画面（${esc(shot.name)}）</label><img alt="画面の写真" src="/api/shot?name=${encodeURIComponent(shot.name)}&token=${TOKEN}&t=${shot.mtime}">`;
+}
+async function loadComments() {
+  const c = await api('GET', '/api/comments').catch(() => null);
+  if (!c) return;
+  $('commentList').innerHTML = c.comments.length ? c.comments.map((x) => `<li><b>@${esc(x.username)}</b><small>${esc(new Date(x.time).toLocaleString('ja-JP'))}</small><div>${esc(x.text)}</div></li>`).join('') : '<li><small>まだ読んでいません</small></li>';
+}
+
+function busy(on) {
+  for (const b of document.querySelectorAll('#run, #loginYt, #loginIg')) b.disabled = on;
+  $('stop').disabled = !on;
+}
+async function start(p, body) {
+  showErr('');
+  try {
+    const j = await api('POST', p, body);
+    jobId = j.id; since = 0; $('log').textContent = '';
+    busy(true); poll();
+  } catch (e) { showErr(e.message); }
+}
+async function poll() {
+  clearTimeout(timer);
+  try {
+    const j = await api('GET', '/api/job?since=' + since);
+    if (j.id === jobId) {
+      if (j.lines.length) { $('log').textContent += j.lines.join('\n') + '\n'; $('log').scrollTop = 1e9; }
+      since = j.next;
+      if (j.done) { busy(false); if (j.code !== 0) showErr('うまくいきませんでした。ようすと画面を見てください'); await refresh(); if (tab === 'comments') loadComments(); return; }
+    }
+    if (since % 3 === 0) refresh().catch(() => {});
+  } catch (e) { showErr('サーバーにつながりません: ' + e.message); }
+  timer = setTimeout(poll, 700);
+}
+
+$('loginYt').onclick = () => start('/api/login', { site: 'youtube' });
+$('loginIg').onclick = () => start('/api/login', { site: 'instagram' });
+$('stop').onclick = () => api('POST', '/api/stop', {}).catch((e) => showErr(e.message));
+$('run').onclick = () => {
+  const dryRun = $('dry').checked;
+  if (tab === 'post') {
+    const video = $('videoPath').value.trim() || $('videoSel').value;
+    const body = { video, title: $('title').value, caption: $('caption').value, youtube: $('useYt').checked, instagram: $('useIg').checked, visibility: $('vis').value, dryRun };
+    if (!dryRun && !confirm('本当に投稿します（試しではありません）。よいですか？')) return;
+    return start('/api/post', body);
+  }
+  if (tab === 'comments') return start('/api/comments', { url: $('postUrl').value });
+  if (!dryRun && !confirm('@' + $('dmUser').value.replace(/^@/, '') + ' に本当に送ります。よいですか？')) return;
+  return start('/api/dm', { username: $('dmUser').value, message: $('dmMsg').value, dryRun });
+};
+
+// 窓が開いている間は合図を送る。閉じたらサーバーが止まる
+const beat = () => api('POST', '/api/beat', {}).catch(() => {});
+beat(); setInterval(beat, 10000);
+addEventListener('pagehide', () => navigator.sendBeacon('/api/bye?token=' + TOKEN));
+
+setTab('post');
+refresh().then((s) => { if (s.job && !s.job.done) { jobId = s.job.id; since = 0; $('log').textContent = ''; busy(true); poll(); } }).catch((e) => showErr(e.message));
+</script>
+</body>
+</html>

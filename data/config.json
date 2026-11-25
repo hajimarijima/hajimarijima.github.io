@@ -414,6 +414,23 @@
     "stump": {
       "name": "切り株",
       "value": {}
+    },
+    "bed": {
+      "name": "ベッド",
+      "value": {},
+      "furniture": true
+    },
+    "fish_hotaru": {
+      "name": "ホタルメダカ",
+      "value": {
+        "food": 0.5
+      }
+    },
+    "fish_tsuki": {
+      "name": "ツキウナギ",
+      "value": {
+        "food": 1.2
+      }
     }
   },
   "buildings": {
@@ -1077,57 +1094,6 @@
       }
     }
   },
-  "milestones": [
-    {
-      "at": 50,
-      "adds": [
-        "onsen",
-        "clocktower",
-        "port"
-      ]
-    },
-    {
-      "at": 100,
-      "adds": [
-        "school",
-        "library",
-        "bathhouse"
-      ]
-    },
-    {
-      "at": 300,
-      "adds": [
-        "windmill",
-        "smithy",
-        "ranch",
-        "bakery"
-      ]
-    },
-    {
-      "at": 1000,
-      "adds": [
-        "market",
-        "theater",
-        "watchtower"
-      ]
-    },
-    {
-      "at": 3000,
-      "adds": [
-        "castle",
-        "cathedral",
-        "observatory"
-      ]
-    },
-    {
-      "at": 10000,
-      "adds": [
-        "fountain",
-        "museum",
-        "station"
-      ]
-    }
-  ],
   "profileWord": "プロフ",
   "profileForm": {
     "url": "",
@@ -1236,6 +1202,18 @@
       "note": "仕事を決める時に少し優先されます（農業 = 畑、漁業 = 釣り、牧場 = 動物の世話）"
     },
     {
+      "id": "chrono",
+      "label": "朝型・夜型",
+      "type": "select",
+      "options": [
+        "朝型",
+        "夜型"
+      ],
+      "public": true,
+      "effect": "sleep",
+      "note": "寝る時刻が変わります（えらばないと自動で決まります）"
+    },
+    {
       "id": "startTool",
       "label": "最初の道具",
       "type": "select",
@@ -1285,7 +1263,9 @@
       "fish_masu",
       "milk",
       "fish_koi",
-      "fish_namazu"
+      "fish_namazu",
+      "fish_hotaru",
+      "fish_tsuki"
     ]
   },
   "gather": {
@@ -1625,7 +1605,16 @@
         }
       }
     },
-    "toolVoteEvery": 5
+    "toolVoteEvery": 5,
+    "furniture": {
+      "note": "家具。ベッドは板 3 と羊毛 3（羊毛は柵のヒツジからもらう）。持っている人は家（家がなければテント）のそばに置いて寝る",
+      "bed": {
+        "from": {
+          "planks": 3,
+          "wool": 3
+        }
+      }
+    }
   },
   "enemies": {
     "enabled": false,
@@ -1653,7 +1642,6 @@
     "wall",
     "inn"
   ],
-  "milestonesNote": "フォロワーがこの数に届くと、特別な建物が投票の候補に入る（序盤は普通の村の建物だけ）",
   "fishing": {
     "note": "池や海べで釣る。1 回の作業でうきが沈む見こみは biteChance（良い釣りざおほど多い）。釣れた物は、まず treasure と junk の確率を見て、どちらでもなければ fish の重みで魚を選ぶ",
     "biteChance": 0.45,
@@ -1785,7 +1773,7 @@
     ]
   },
   "needs": {
-    "note": "体力とおなか（0〜max、アイコン 1 つで 2）。おなかは毎日 hungerBase と、働いた分 hungerWork へり、食べると eat 戻る。おなか 0 だと体力が starve 減る（死なない）。おなかが regenAt 以上なら体力が regen 戻る。体力が restBelow 以下なら次の日は休んで restHeal 戻る",
+    "note": "体力とおなか（0〜max、アイコン 1 つで 2）。おなかは毎日 hungerBase と、働いた分 hungerWork へり、食べると eat 戻る。おなか 0 だと体力が starve 減る（死なない）。おなかが regenAt 以上なら体力が regen 戻る。体力が restBelow 以下なら次の日は休んで restHeal 戻る。1 時間ごとの増え方・減り方と行動力は hours にある",
     "max": 20,
     "hungerBase": 4,
     "hungerWork": 5,
@@ -1796,5 +1784,106 @@
     "restBelow": 8,
     "restHeal": 8,
     "restHunger": 2
+  },
+  "hours": {
+    "sleepAt": 100,
+    "awake": 4,
+    "awakeHeavy": 1.5,
+    "lateAfter": 12,
+    "lateBoost": 40,
+    "bedtime": {
+      "朝型": [
+        20,
+        23
+      ],
+      "夜型": [
+        1,
+        5
+      ]
+    },
+    "sleepDrop": {
+      "bed": 18,
+      "tree": 14,
+      "ground": 14
+    },
+    "sleepStamina": {
+      "bed": 5,
+      "tree": 3,
+      "ground": 3
+    },
+    "sleepHp": {
+      "bed": 1,
+      "tree": 0.4,
+      "ground": 0.4
+    },
+    "staminaMax": 20,
+    "staminaWork": 2,
+    "staminaLight": 1,
+    "restBelow": 4,
+    "restStamina": 5,
+    "restHp": 0.6,
+    "hungerAwake": 0.3,
+    "hungerWork": 0.2,
+    "hungerSleep": 0.1,
+    "eatBelow": 12,
+    "mealFood": 1,
+    "maxMeals": 3,
+    "hpRegen": 0.1,
+    "starveHp": 0.2,
+    "power": {
+      "hand": 6,
+      "wood": 12,
+      "stone": 18,
+      "iron": 24,
+      "gold": 30,
+      "diamond": 36
+    },
+    "treeWork": 12,
+    "bigTree": 1.1,
+    "stumpWork": 12,
+    "blockWork": 8,
+    "levelHours": 12,
+    "joinChance": 0.35,
+    "fishCasts": 2,
+    "toolWearPerHour": 1,
+    "night": [
+      20,
+      5
+    ],
+    "nightSlow": 0.6,
+    "torchItem": "torch",
+    "nightFishP": 0.5,
+    "nightFish": [
+      [
+        "fish_hotaru",
+        30
+      ],
+      [
+        "fish_tsuki",
+        12
+      ]
+    ],
+    "outsideHurtP": 0.35,
+    "nightShare": 0.3,
+    "wakeEarliest": 5,
+    "carryNear": 12,
+    "maxTrips": 2,
+    "workHours": 7,
+    "logScale": 0.6,
+    "bushShare": 0.3,
+    "bedKeep": {
+      "wool": 1
+    },
+    "free": {
+      "walk": 3,
+      "chat": 3,
+      "view": 2,
+      "water": 1.5,
+      "pet": 1.5,
+      "help": 1
+    },
+    "freeStamina": 1,
+    "freeDiaryP": 0.6,
+    "note": "1 日は 24 時間。村人は 1 時間に 1 つ行動する。決める順：眠気が sleepAt → 寝る／おなかが eatBelow 以下 → チェストの食べ物を食べる（1 回 mealFood、1 日 maxMeals 回まで）／行動力（stamina）が restBelow 以下 → 休む／持ち物がいっぱい → チェストへ運ぶ（チェストが carryNear 以内なら、ついでに置いて仕事を続ける。遠くて 1 時間かけて運ぶのは maxTrips 回まで。それをこえたら今日の仕事はおしまい）／その日 workHours 時間働いたら、あとは軽いこと（free の重みで、散歩・仲のいい人とおしゃべり・池のそばで海をながめる・畑に水・柵の動物をなでる・荷物運びの手伝いから 1〜2 時間ずつ選ぶ。とれる物はなく、行動力が freeStamina 戻る。日記には freeDiaryP の日だけ 1 つ書く）。夜なら見張り。ただ休むのは行動力が少ない時だけ／道具がない・こわれた・良い物が作れる → 作る／ベッドの材料がある → ベッドを作る／それ以外は道具の仕事（できなければ別の仕事）。眠気は起きている 1 時間に awake（重い仕事は awakeHeavy 足す）増え、起きて lateAfter 時間たって寝る時刻（bedtime、朝型・夜型ごとの幅から人ごとに決まる。プロフィールで決めていない人の nightShare が夜型。朝型は wakeEarliest 時まではまどろんで起きない）を過ぎると lateBoost 増える。寝ると寝る場所ごとに sleepDrop 減って 0 で起きる。ベッドは眠気・行動力（sleepStamina）・体力（sleepHp）の戻りが早い。木・切り株・岩のかたまり（1 つ blockWork）は仕事の量（treeWork × 木の大きさ・stumpWork）を、道具の 1 時間の力（power）でけずる。何人かで同じ木・岩をたたくと力を足す（joinChance でだれかの木を手伝う）。整地は levelHours 人・時間。夜（night の時刻）は悪くない：採掘はそのまま、釣りは nightFishP で夜だけの魚（nightFish）、外の木切り・畑はたいまつ（torchItem、まだ無いアイテム）がなければ nightSlow 倍。夜に起きている人は見張りになって敵を減らし、家のない人が外で寝ると outsideHurtP で敵にケガをさせられることがある（死なない）。道具は働いた 1 時間に toolWearPerHour へる。原木は木の logs × logScale。草むらの実は 1 日に村ぜんたいで草むらの bushShare の割合までとれる。workHours・logScale・blockWork・bushShare は、前の 1 日 1 回のしくみと集まる量がだいたい同じになるように合わせた。ベッドは村で 1 日 1 つまで、チェストに bedKeep（羊毛など）を残せる時だけ作る"
   }
 }

@@ -10,3 +10,13 @@ video/audio.wav
 # 動画は大きいので上げない
 video/*.mp4
 demo/
+
+# 投稿ツール：ログインした Chrome のプロフィール（中身はログイン情報）・画面の写真・DM の記録
+.poster-profile/
+tools/poster/shots/
+tools/poster/dm_log.json
+data/inbox_comments.json
+# 投稿アプリの窓の Chrome プロフィール・番号のメモ・一時ファイル
+.poster-app-profile/
+tools/poster/app/.port
+tools/poster/app/tmp/

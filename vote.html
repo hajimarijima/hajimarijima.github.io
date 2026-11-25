@@ -18,14 +18,12 @@
   <div class="card">
     <div class="muted">今のフォロワー</div>
     <div class="big" id="followers"></div>
-    <div id="nextline" class="muted" style="margin:6px 0"></div>
-    <div class="progress"><i id="bar"></i></div>
   </div>
   <div id="current"></div>
   <h2>これまでの投票</h2>
   <div id="past"></div>
-  <h2>フォロワーの節目で増える候補</h2>
-  <ul class="list card mslist" id="future"></ul>
+  <h2>建ててほしい物</h2>
+  <p class="muted">「図書館たててほしい」「温泉ほしい」のようにコメントしてください。数えておいて、次の A・B・C の候補を選ぶ時の参考にします（投票の結果は変わりません）。</p>
 </main>
 <script type="module">
 import { loadAll, nav, esc, fmtDate, showError } from './js/common.js';
@@ -63,13 +61,7 @@ function chart(timeline) {
 }
 
 loadAll().then(({ state, config }) => {
-  const nextMs = config.milestones.find((m) => !state.reached.includes(m.at));
-  const prevAt = state.reached.length ? state.reached[state.reached.length - 1] : 0;
   document.getElementById('followers').textContent = state.followers.toLocaleString() + ' 人';
-  if (nextMs) {
-    document.getElementById('nextline').textContent = `次の節目は ${nextMs.at} 人（あと ${Math.max(0, nextMs.at - state.followers)} 人）`;
-    document.getElementById('bar').style.width = Math.min(100, ((state.followers - prevAt) / (nextMs.at - prevAt)) * 100) + '%';
-  } else { document.getElementById('nextline').textContent = 'すべての節目に届きました'; document.getElementById('bar').style.width = '100%'; }
 
   const cur = document.getElementById('current');
   const votes = state.votes || (state.vote ? [state.vote] : []);
@@ -91,12 +83,6 @@ loadAll().then(({ state, config }) => {
       <p class="muted">${d.voters} 人が投票</p>
       <details><summary>時間ごとの票の伸び</summary>${chart(d.timeline)}</details>
     </div>`).join('') : '<p class="muted">まだありません。</p>';
-
-  const B = config.buildings;
-  document.getElementById('future').innerHTML = config.milestones.map((m) => {
-    const got = state.reached.includes(m.at);
-    return `<li class="msrow"><b class="msn">${m.at.toLocaleString()} 人</b><span class="msb">${esc(m.adds.map((k) => B[k].name).join('・'))}<span class="muted">${got ? '（候補に入った）' : 'が候補に入る'}</span></span></li>`;
-  }).join('');
 }).catch(showError);
 </script>
 </body>

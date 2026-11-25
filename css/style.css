@@ -310,3 +310,17 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 /* 村人の一覧のページ送り */
 .pager{display:flex;gap:12px;align-items:center;justify-content:center;margin:16px 0}
 .pager:empty{display:none}
+
+/* 村人さがし（スマホ優先。ボタンの高さは --ctl-h でほかと同じ） */
+.vsearch{margin:0 0 16px}
+.vsearch label{display:block;font-weight:bold;margin:0 0 6px}
+.vsrow{display:flex;gap:8px}
+.vsrow input{flex:1;min-width:0;height:var(--ctl-h);box-sizing:border-box;padding:0 12px;border:1px solid var(--line);border-radius:var(--radius-pill);background:#fff;font-size:16px;color:var(--ink)}
+.vsrow .btn{flex:none;min-width:88px}
+.vres{margin:10px 0}
+.vhead{display:flex;gap:12px;align-items:center;margin:0 0 10px}
+.vhead h2{margin:0;font-size:18px;overflow-wrap:anywhere}
+.vface canvas{width:48px;height:48px;border-radius:6px;display:block}
+.vinfo{font-size:14px}
+.vlinks{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}
+.vlinks .btn{min-width:140px}

@@ -5,7 +5,14 @@ const path = require('path');
 const crypto = require('crypto');
 const { skinFor, hashStr } = require('./rand');
 
-const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
+// 名前やインスタの ID から作る印は、秘密の塩（env TOWN_SALT、GitHub Secrets）入りの HMAC-SHA256 にする。
+// 塩なしの sha256 だと、ユーザー名を知っている人が同じ計算をして、名前をかくした人まで見つけられてしまうため。
+// TOWN_SALT がない時（手元・テスト）は決まった開発用の塩を使い、警告を 1 回だけ出す（開発用の塩はだれでも読めるので本番では使わない）
+const DEV_SALT = 'town-dev-salt-NOT-SECRET';
+const SALT = process.env.TOWN_SALT || DEV_SALT;
+const saltIsDev = !process.env.TOWN_SALT;
+if (saltIsDev && !process.env.TOWN_SALT_QUIET) process.stderr.write('[警告] TOWN_SALT がないので開発用の塩で印を作ります（本番の公開データには使わないでください）\n');
+const sha = (s) => crypto.createHmac('sha256', SALT).update(s).digest('hex');
 const norm = (s) => String(s || '').normalize('NFKC').trim();
 // インスタの ID もそのままは公開しない（印にして持つ）
 const igHash = (id) => sha('ig:' + String(id)).slice(0, 16);
@@ -18,16 +25,22 @@ const ADJ = ['のんびりな', 'げんきな', 'しずかな', 'はたらきも
 const ANIMAL = ['タヌキ', 'リス', 'フクロウ', 'カワウソ', 'ハリネズミ', 'キツネ', 'ウサギ', 'アライグマ', 'ペンギン', 'ヒツジ', 'カメ', 'モモンガ'];
 function nickname(key) { const h = hashStr('nick:' + key); return ADJ[h % ADJ.length] + ANIMAL[(h >>> 8) % ANIMAL.length]; }
 
-// hidden.json: ["名前", "sha256:<userHash>"] のどちらでも書ける
+// hidden.json: ["hmac:<userHash>"]（tools/hide.js が書く。塩入りなので公開しても名前はわからない）。
+// 名前そのものも読めるが、それは公開しないこと（警告を出す）。名前は Secrets の TOWN_HIDDEN に入れてもよい
 function loadHidden(dataDir) {
   const f = path.join(dataDir, 'hidden.json');
-  if (!fs.existsSync(f)) return new Set();
-  const list = JSON.parse(fs.readFileSync(f, 'utf8'));
+  const list = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : [];
   const set = new Set();
+  let raw = 0;
   for (const e of (Array.isArray(list) ? list : list.names || [])) {
     const s = String(e);
-    set.add(s.startsWith('sha256:') ? s.slice(7) : userHash(s));
+    if (s.startsWith('hmac:')) set.add(s.slice(5));
+    else if (s.startsWith('sha256:')) set.add(s.slice(7)); // 古い形（塩なし）。今の印とは合わないので tools/hide.js で入れ直す
+    else { set.add(userHash(s)); raw++; }
   }
+  // 名前そのものを公開ファイルに書かなくてよいように、Secrets の TOWN_HIDDEN（カンマ・改行区切りの名前）も読む
+  for (const n of String(process.env.TOWN_HIDDEN || '').split(/[,\n]/).map((x) => x.trim()).filter(Boolean)) set.add(userHash(n));
+  if (raw && !process.env.TOWN_SALT_QUIET) process.stderr.write('[警告] hidden.json に名前がそのまま入っています。公開する前に tools/hide.js で印に直してください\n');
   return set;
 }
 
@@ -164,4 +177,7 @@ function readFollowerExport(json) {
   return out;
 }
 
-module.exports = { norm, igHash, userHash, keyFor, nickname, loadHidden, applyPrivacy, findVillager, upsertVillager, registrationsFrom, isJoin, JOIN_WORDS, parseStartTool, startToolByLabel, startToolById, parseChoice, tallyVote, readFollowerExport, commentUser };
+// hidden.json に書く印（hmac:...）
+const hiddenEntry = (username) => 'hmac:' + userHash(username);
+
+module.exports = { saltIsDev, hiddenEntry, norm, igHash, userHash, keyFor, nickname, loadHidden, applyPrivacy, findVillager, upsertVillager, registrationsFrom, isJoin, JOIN_WORDS, parseStartTool, startToolByLabel, startToolById, parseChoice, tallyVote, readFollowerExport, commentUser };

@@ -102,15 +102,21 @@ export class SpatialHash {
     const found = [];
     let ring = 0;
     const b = this.b, span = Math.max(ox - b[0], b[1] - ox, oz - b[2], b[3] - oz);
+    const visit = (cx, cz) => {
+      const s = this.cells.get(this._k(cx, cz)); if (!s) return;
+      for (const id of s) { const o = this.obj.get(id); if (!filter || filter(o)) found.push([(o.x - x) ** 2 + (o.z - z) ** 2, o]); }
+    };
     for (;;) {
-      for (let cz = oz - ring; cz <= oz + ring; cz++) for (let cx = ox - ring; cx <= ox + ring; cx++) {
-        if (Math.max(Math.abs(cx - ox), Math.abs(cz - oz)) !== ring) continue;
-        const s = this.cells.get(this._k(cx, cz)); if (!s) continue;
-        for (const id of s) { const o = this.obj.get(id); if (!filter || filter(o)) found.push([(o.x - x) ** 2 + (o.z - z) ** 2, o]); }
+      // 輪のふちのマスだけを見る（内側は前の輪で見た）
+      if (ring === 0) visit(ox, oz);
+      else {
+        for (let cx = ox - ring; cx <= ox + ring; cx++) { visit(cx, oz - ring); visit(cx, oz + ring); }
+        for (let cz = oz - ring + 1; cz <= oz + ring - 1; cz++) { visit(ox - ring, cz); visit(ox + ring, cz); }
       }
       // この輪までで、ring * cell より近い物は全部見つかっている
-      const sure = ring * this.cell;
-      const okN = found.filter(([d]) => d <= sure * sure).length;
+      const sure = ring * this.cell, s2 = sure * sure;
+      let okN = 0;
+      if (found.length >= k) for (const f of found) if (f[0] <= s2 && ++okN >= k) break;
       if (okN >= k || sure > maxR || ring > span) break;
       ring++;
     }

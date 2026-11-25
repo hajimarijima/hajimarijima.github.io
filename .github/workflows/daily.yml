@@ -3,6 +3,8 @@
 # Secrets（Settings > Secrets and variables > Actions）に入れるもの：
 #   IG_TOKEN / IG_USER_ID / IG_JOIN_MEDIA / IG_VOTE_MEDIA   （README 参照）
 #   FIREBASE_SERVICE_ACCOUNT（Google ログインを使う時だけ。サービスアカウントの鍵の JSON をそのまま入れる）
+#   TOWN_SALT（必須。名前・インスタ ID から作る印の秘密の塩。長いランダムな文字列。変えると村人の番号が全部変わる）
+#   TOWN_HIDDEN（任意。あだ名で出す人のユーザー名をカンマ区切りで。hidden.json に書かずに済む）
 name: daily
 
 on:
@@ -37,12 +39,17 @@ jobs:
         run: node tools/firestore_sync.js
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          TOWN_SALT: ${{ secrets.TOWN_SALT }}
       - name: 町を 1 日進める
         run: node tools/sim.js
+        env:
+          TOWN_SALT: ${{ secrets.TOWN_SALT }}
+          TOWN_HIDDEN: ${{ secrets.TOWN_HIDDEN }}
       - name: 結果をコミット
+        # data/inbox/（生のコメント・名前が入る）は .gitignore で除外。ここで足すのは公開してよいファイルだけ
         run: |
           git config user.name "town-bot"
           git config user.email "town-bot@users.noreply.github.com"
-          git add data/villagers.json data/world.json data/state.json data/life.json data/history.json data/social.json data/diary
+          git add data/villagers.json data/world.json data/state.json data/life.json data/history.json data/social.json data/diary data/requests.json data/requests_seen.json
           git diff --cached --quiet || git commit -m "町が $(node -p "require('./data/state.json').day") 日目になった"
           git push
