@@ -10,15 +10,21 @@ name: daily
 #
 # 町を始める（0 日目 → 1 日目）：
 #   ・data/config.json の "startAt" に始める日時を書く（例 "2026-11-28 06:00"、日本時間）。その時刻を過ぎた最初の朝の実行で 1 日目になる
-#   ・または Actions → daily →「Run workflow」で start を true にして押す（その場で 1 日目になる）
+#   ・または Actions → daily →「Run workflow」で start を選んで押す
+#       「今すぐ」… その場で 1 日目になる
+#       「次の朝6時」… startAt に次の朝 6 時を書くだけ。次の朝の実行で 1 日目になる
 #   0 日目のあいだは、毎朝動いても日は進めない（「住みたい」の受付とその場の入居だけ）
 on:
   workflow_dispatch:
     inputs:
       start:
-        description: "町を始める（0 日目のとき、この実行で 1 日目にする）"
-        type: boolean
-        default: false
+        description: "町を始める（0 日目のとき）"
+        type: choice
+        options:
+          - "始めない"
+          - "次の朝6時"
+          - "今すぐ"
+        default: "始めない"
   schedule:
     - cron: "0 21 * * *"   # 毎朝 6 時（日本時間）
 
@@ -55,17 +61,28 @@ jobs:
         env:
           TOWN_SALT: ${{ secrets.TOWN_SALT }}
           TOWN_HIDDEN: ${{ secrets.TOWN_HIDDEN }}
+      - name: 「次の朝6時」を選んだ時は、始める日時を書くだけ
+        if: github.event_name == 'workflow_dispatch' && inputs.start == '次の朝6時'
+        run: |
+          node -e "
+          const fs=require('fs'),p='data/config.json',c=JSON.parse(fs.readFileSync(p,'utf8'));
+          const j=new Date(Date.now()+9*3600e3);              // 日本時間
+          if(j.getUTCHours()>=6) j.setUTCDate(j.getUTCDate()+1); // 6 時を過ぎていたら次の日
+          c.startAt=j.toISOString().slice(0,10)+' 06:00';
+          fs.writeFileSync(p,JSON.stringify(c,null,2)+'\n');
+          console.log('始める日時: '+c.startAt);"
       - name: 町を 1 日進める（0 日目のあいだは、始める時だけ）
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.start == '次の朝6時') }}
         run: node tools/sim.js --gate
         env:
           TOWN_SALT: ${{ secrets.TOWN_SALT }}
           TOWN_HIDDEN: ${{ secrets.TOWN_HIDDEN }}
-          TOWN_START: ${{ github.event_name == 'workflow_dispatch' && inputs.start && 'true' || 'false' }}
+          TOWN_START: ${{ github.event_name == 'workflow_dispatch' && inputs.start == '今すぐ' && 'true' || 'false' }}
       - name: 結果をコミット
         # data/inbox/（生のコメント・名前が入る）は .gitignore で除外。ここで足すのは公開してよいファイルだけ
         run: |
           git config user.name "town-bot"
           git config user.email "town-bot@users.noreply.github.com"
-          git add data/villagers.json data/world.json data/state.json data/life.json data/history.json data/social.json data/diary data/requests.json data/requests_seen.json
+          git add data/config.json data/villagers.json data/world.json data/state.json data/life.json data/history.json data/social.json data/diary data/requests.json data/requests_seen.json
           git diff --cached --quiet || git commit -m "町は $(node -p "require('./data/state.json').day") 日目"
           git push
