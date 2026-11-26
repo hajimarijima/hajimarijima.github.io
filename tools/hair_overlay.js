@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 'use strict';
-// ふだんの村人のスキン（skins/skin_NNN.png）の「頭の重ね層」（64x64 の x32〜63・y0〜15）に、髪の厚みを足す。
-// 下の層（顔・体・服）は変えない。何度やっても同じ結果になる（2 回目以降は何も変わらない）。
+// ふだんの村人のスキン（skins/skin_NNN.png）の髪を、今の js/skingen.js の髪にそろえる（頭の重ね層の髪の厚み・背中へ垂れる髪・三つ編みなど）。
+// 腕・脚は変えない。何度やっても同じ結果になる（2 回目以降は何も変わらない）。skins/index.json の髪型の名前もそろえる。
 // 使い方: node tools/hair_overlay.js [--backup <フォルダ>] [--dry]
 //   --backup：書きかえる前の元の画像を置く所（サイトの外。省くと一時フォルダの town-skins-backup）。すでにある控えは上書きしない
 //   --dry：書かずに、変わる枚数だけ数える
 // やり方：
-//   1) スキンが js/skingen.js の makeSkin(番号, 'none') で作った物と（頭の重ね層のほか）同じなら、
-//      今の makeSkin の頭の重ね層（帽子・めがね・髪の重ね層）をそのまま写す
-//   2) 違う（手で直した・外から来た）スキンは、頭のてっぺんの色を髪の色とみて、横・うしろ・前髪の髪の色の所に
-//      空いている重ね層だけ、明・中・暗の髪を足す
+//   1) スキンの腕・脚が js/skingen.js の makeSkin(番号, 'none') と同じなら、作り方どおりのスキンとみて、
+//      今の makeSkin の頭と胴（下の層・重ね層）をそのまま写す
+//   2) 違う（手で直した・外から来た）スキンは、下の層は変えず、頭のてっぺんの色を髪の色とみて、横・うしろ・前髪の髪の色の所に
+//      空いている頭の重ね層だけ、明・中・暗の髪を足す
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -22,7 +22,8 @@ const args = process.argv.slice(2);
 const dry = args.includes('--dry');
 const bi = args.indexOf('--backup');
 const BACKUP = bi >= 0 ? path.resolve(args[bi + 1]) : path.join(os.tmpdir(), 'town-skins-backup');
-const inHat = (x, y) => x >= 32 && y < 16;
+// 髪が描かれる所：頭（下の層・重ね層）と胴（下の層・重ね層＝背中に垂れる髪）。ここ以外（腕・脚）が作り方どおりなら、作り方の物とみる
+const inHat = (x, y) => y < 16 || (x >= 16 && x < 40 && y >= 16 && y < 48);
 
 // 2) の作り方：見本の色に近い所だけに髪を重ねる
 function sampleOverlay(px) {
@@ -71,7 +72,7 @@ function sampleOverlay(px) {
     let out;
     if (match) {
       out = Uint8Array.from(img.px);
-      for (let y = 0; y < 16; y++) for (let x = 32; x < W; x++) for (let k = 0; k < 4; k++) out[(y * W + x) * 4 + k] = gen[(y * W + x) * 4 + k];
+      for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) if (inHat(x, y)) for (let k = 0; k < 4; k++) out[(y * W + x) * 4 + k] = gen[(y * W + x) * 4 + k];
     } else out = sampleOverlay(img.px);
     if (out.every((v, i) => v === img.px[i])) { same++; continue; }
     if (match) fromGen++; else sampled++;
@@ -79,6 +80,22 @@ function sampleOverlay(px) {
     const bk = path.join(BACKUP, f);
     if (!fs.existsSync(bk)) fs.copyFileSync(file, bk);
     writePNG(file, W, W, out);
+  }
+  // index.json の特徴（髪型の名前）を今の作り方にそろえる
+  const IDX = path.join(SKINS, 'index.json');
+  if (fs.existsSync(IDX)) {
+    const idx = JSON.parse(fs.readFileSync(IDX, 'utf8'));
+    let changed = 0;
+    for (const e of idx) {
+      const t = G.makeSkin(e.id, 'none').traits;
+      if (JSON.stringify(t) !== JSON.stringify(e.traits)) { e.traits = t; changed++; }
+    }
+    if (changed && !dry) {
+      const bk = path.join(BACKUP, 'index.json');
+      if (!fs.existsSync(bk)) fs.copyFileSync(IDX, bk);
+      fs.writeFileSync(IDX, JSON.stringify(idx, null, 1) + '\n');
+    }
+    if (changed) console.log(`index.json の特徴：${changed} 件${dry ? 'が変わる' : 'を直した'}`);
   }
   console.log(`${dry ? '（ためし）' : ''}髪の重ね層：作り方どおり ${fromGen} 枚・色から足した ${sampled} 枚・変わらない ${same} 枚` + (dry ? '' : `。元の画像の控え: ${BACKUP}`));
 })();

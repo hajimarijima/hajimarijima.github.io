@@ -378,6 +378,14 @@ export function setArmor(ch, look) {
     // 胴（8×12×4、上着の層は +0.5）を 0.75 ふくらませた層。高さは -4.5〜4.5（首のスカーフと腰の帯は見える）
     const A = armorPart(look.body);
     add(P.torso, A, 9.5, 9, 5.5, 0, 0, 0);
+    // 胴の重ね層（js/skingen.js では髪だけ：背中へ垂れる長い髪・三つ編み・ツインテール・肩にかかる髪）を、防具の外側にもう 1 枚。
+    //   防具の下に隠れて「首の下で髪が切れた」ように見えないようにする。防具（9.5×9×5.5）より少し大きく、ちらつかない
+    const jacket = P.torso.children[1];
+    if (jacket && jacket.isMesh) {
+      const hair = new THREE.Mesh(jacket.geometry, jacket.material); hair.castShadow = true;
+      hair.scale.set(9.8 / 8.5, 1, 5.9 / 4.5); hair.position.copy(jacket.position);
+      P.torso.add(hair); P.armor.push(hair);
+    }
     // 両腕の上側（肩から 5px）を 0.75 ふくらませた層。細い腕（3px）は細く
     for (const arm of [P.rarm, P.larm]) {
       const g0 = arm.children[0] && arm.children[0].geometry;
