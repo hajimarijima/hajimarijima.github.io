@@ -15,6 +15,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1e2a4f">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="はじまり島">
 <script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js"));</script>
@@ -28,46 +29,50 @@
         <b id="islandname">はじまり島</b>
         <span class="tc-tag" id="tagline"></span>
       </div>
-      <span class="popbadge" id="popbadge">住民 <b>0</b> 人</span>
+      <div class="tc-side">
+        <span class="popbadge" id="popbadge">住民 <b>0</b> 人</span>
+        <span class="tc-links">
+          <button class="joinbtn" id="joinbtn" type="button" data-icon="house" data-icon-size="15" aria-haspopup="dialog">住むには</button>
+          <button class="photobtn" id="photobtn" type="button" data-icon="camera" data-icon-size="16" aria-label="写真をとる" title="写真をとる"><span>写真</span></button>
+        </span>
+      </div>
     </div>
     <form class="findbar" id="findform" role="search" autocomplete="off">
-      <label class="findbox"><span class="at" aria-hidden="true">@</span><input id="findq" type="search" enterkeyhint="search" placeholder="ユーザー名を入れる" aria-label="ユーザー名か名前"></label>
-      <button class="findbtn" type="submit">さがす</button>
+      <label class="findbox"><span class="at" aria-hidden="true">@</span><input id="findq" type="search" enterkeyhint="search" placeholder="ユーザー名" aria-label="ユーザー名か名前"></label>
+      <button class="findbtn" type="submit" data-icon="search" data-icon-size="18">さがす</button>
+      <button class="randbtn" id="randbtn" type="button" data-icon="dices" data-icon-size="24" aria-label="ランダムな人の家へ" title="ランダムな人の家へ"></button>
     </form>
-    <div class="tc-foot">
-      <button class="randbtn" id="randbtn" type="button">🎲 ランダムな人の家へ</button>
-      <p class="findmsg" id="findmsg" role="status" aria-live="polite"></p>
-    </div>
+    <p class="findmsg" id="findmsg" role="status" aria-live="polite"></p>
   </section>
   <section class="map" id="map">
     <div id="stage"></div>
     <div class="hud" id="hud"></div>
     <div class="vcard" id="card" hidden></div>
     <div class="hint">ドラッグで回す・つまんで寄る</div>
-    <a class="scroll-more" href="#info">島のこと</a>
+    <a class="scroll-more" href="#info" data-icon="chevron-down" data-icon-size="16">島のこと</a>
   </section>
-  <!-- 下のパネル：せつめい・物語・年表・島のいま -->
+  <!-- 下のパネル：せつめい・年表（前の物語と歴史をまとめた）・島のいま -->
   <section class="sheet" id="info">
     <div class="tabs" role="tablist" aria-label="島のこと">
-      <button role="tab" id="tb-howto" aria-controls="tab-howto" data-tab="howto" aria-selected="true">せつめい</button>
-      <button role="tab" id="tb-story" aria-controls="tab-story" data-tab="story" aria-selected="false">物語</button>
-      <button role="tab" id="tb-timeline" aria-controls="tab-timeline" data-tab="timeline" aria-selected="false">年表</button>
-      <button role="tab" id="tb-now" aria-controls="tab-now" data-tab="now" aria-selected="false">島のいま</button>
+      <button role="tab" id="tb-howto" aria-controls="tab-howto" data-tab="howto" aria-selected="true" data-icon="book-open" data-icon-size="18"><span>せつめい</span></button>
+      <button role="tab" id="tb-timeline" aria-controls="tab-timeline" data-tab="timeline" aria-selected="false" data-icon="calendar-days" data-icon-size="18"><span>年表</span></button>
+      <button role="tab" id="tb-now" aria-controls="tab-now" data-tab="now" aria-selected="false" data-icon="sun" data-icon-size="18"><span>島のいま</span></button>
     </div>
     <div class="tabpane" role="tabpanel" id="tab-howto" aria-labelledby="tb-howto">
       <h2 class="sh">遊び方</h2>
       <ul class="howlist">
-        <li><span class="hi">👆</span>町はドラッグで回す・ホイールやつまむ指で寄る。</li>
-        <li><span class="hi">🏷</span>村人の頭の上の名札を押すと、その人のカードが出ます。</li>
-        <li><span class="hi">🔍</span>上の欄に @ユーザー名 か名前を入れて「さがす」と、その人の家へ飛びます。</li>
-        <li><span class="hi">🎲</span>「ランダムな人の家へ」で、だれかの所へ遊びに行けます。</li>
+        <li><span class="hi" data-icon="pointer" data-icon-size="18"></span>町はドラッグで回す・ホイールやつまむ指で寄る。</li>
+        <li><span class="hi" data-icon="tag" data-icon-size="18"></span>村人の頭の上の名札を押すと、その人のカードが出ます。</li>
+        <li><span class="hi" data-icon="search" data-icon-size="18"></span>上の欄に @ユーザー名 か名前を入れて「さがす」と、その人の家へ飛びます。</li>
+        <li><span class="hi" data-icon="dices" data-icon-size="18"></span>さがすボタンの横のサイコロで、だれかの家へ遊びに行けます。</li>
       </ul>
+      <h2 class="sh">島の決まり</h2>
+      <ul class="howlist" id="islandrules"><li><span class="hi">🐖</span><span>動物は攻撃すると逃げます。肉を取るには、柵で囲ってから。</span></li><li><span class="hi">🦈</span><span>海にはサメがいて、村人は海に入れません（釣りは浜から）。</span></li><li><span class="hi"></span><span>夜になると、海の向こうの大きな島に魔物が出ます。海とサメがいるので、村には来ません。</span></li></ul>
       <h2 class="sh">村人になるには</h2>
       <p id="join"></p>
       <h2 class="sh">コメントの書き方</h2>
       <ul class="howlist" id="howcomment"></ul>
     </div>
-    <div class="tabpane" role="tabpanel" id="tab-story" aria-labelledby="tb-story" hidden></div>
     <div class="tabpane" role="tabpanel" id="tab-timeline" aria-labelledby="tb-timeline" hidden></div>
     <div class="tabpane" role="tabpanel" id="tab-now" aria-labelledby="tb-now" hidden>
       <h2 class="sh" id="dayline"></h2>
@@ -75,15 +80,15 @@
       <div id="nowband"></div>
       <div class="grid2">
         <div class="card">
-          <h2 style="margin-top:0">今日のできごと</h2>
+          <h2 style="margin-top:0">最近のできごと</h2>
           <ul class="list" id="today"></ul>
-          <h2>島の建物</h2>
-          <p id="bldlist"></p>
+          <h2>島の建物（建った順）</h2>
+          <div id="bldlist"></div>
         </div>
         <div class="card">
           <h2 style="margin-top:0">次に建つもの</h2>
           <p id="next"></p>
-          <h2>投票</h2>
+          <h2 id="votehead">投票</h2>
           <p id="votebox"></p>
           <h2 id="chestcard">町のチェスト</h2>
           <div id="chest"></div>
@@ -94,5 +99,7 @@
   </section>
 </main>
 <script type="module" src="js/town.js"></script>
+<script type="module" src="js/joinsheet.js"></script>
+<script type="module" src="js/photomode.js"></script>
 </body>
 </html>

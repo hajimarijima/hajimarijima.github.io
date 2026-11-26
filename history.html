@@ -3,42 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>町の歴史 | はじまり島</title>
+<title>年表 | はじまり島</title>
 <link rel="stylesheet" href="css/style.css">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1e2a4f">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="はじまり島">
 <script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js"));</script>
 </head>
 <body>
+<!-- 年表（町の画面の「年表」のタブと同じ中身を、全画面で見るページ。前の「歴史」のページ。今までのリンクはここのまま） -->
 <main class="wrap">
-  <h1>町の歴史</h1>
-  <div class="filter" id="filter"></div>
-  <h2>建った順</h2>
-  <p id="builds"></p>
-  <h2>できごと</h2>
-  <ul class="timeline" id="tl"></ul>
+  <h1>年表</h1>
+  <p class="muted">話ごとのまとまりです。押すと、その日のできごとが開きます。上のチップで種類をしぼれます。</p>
+  <div id="chron"></div>
+  <h2>島の建物（建った順）</h2>
+  <div id="builds"></div>
 </main>
 <script type="module">
-import { loadAll, nav, esc, fmtDate, buildingLabel, showError } from './js/common.js';
+import { loadAll, nav, showError } from './js/common.js';
+import { timelineHtml, setupChronicle, buildOrderHtml } from './js/islandpanel.js';
 nav('history.html');
 loadAll().then((D) => {
-  // 拠点の投票は、投票の投稿の URL を貼るまで始まっていない（baseVote.needPost）。それまで「投票が始まった」の行は出さない
-  const cfg = D.config || {};
-  if ((cfg.baseVote || {}).needPost && !/instagram\.com\//.test(String(cfg.votePostUrl || ''))) D.history = D.history.filter((h) => !(h.kind === 'base' && h.type === 'vote_open'));
-  const types = [['all', 'すべて'], ['build', '建物'], ['vote', '投票'], ['join', '村人'], ['social', '関係・誕生日'], ['night', '夜'], ['event', 'そのほか']];
-  let cur = 'all';
-  const f = document.getElementById('filter');
-  const draw = () => {
-    f.innerHTML = types.map(([k, t]) => `<button data-k="${k}" class="${k === cur ? 'on' : ''}">${t}</button>`).join('');
-    const list = D.history.filter((h) => cur === 'all' || (cur === 'vote' ? h.type.startsWith('vote') : cur === 'social' ? ['social', 'birthday'].includes(h.type) : cur === 'event' ? ['event', 'start', 'fish'].includes(h.type) : h.type === cur));
-    document.getElementById('tl').innerHTML = list.slice().reverse().map((h) => `<li class="${h.type}"><div class="when">${h.day}日目・${fmtDate(h.date)}${/^\d{2}:\d{2}$/.test(h.time || '') ? ' ' + h.time : ''}</div>${esc(h.text)}</li>`).join('');
-  };
-  f.addEventListener('click', (e) => { const k = e.target.dataset && e.target.dataset.k; if (k) { cur = k; draw(); } });
-  draw();
-  document.getElementById('builds').innerHTML = D.world.buildings.map((b) => `<span class="tag">${b.day}日目 ${esc(buildingLabel(b, D.world, D.config))}</span>`).join(' ') || 'まだありません。';
+  const box = document.getElementById('chron');
+  box.innerHTML = timelineHtml(D.config, D.history, D.villagers);
+  setupChronicle(box);
+  // 名前のチップを押すと、町の画面でその人の家へ
+  box.addEventListener('click', (e) => { const b = e.target.closest('.vchip[data-key]'); if (b) { e.preventDefault(); location.href = './?v=' + encodeURIComponent(b.dataset.key); } });
+  document.getElementById('builds').innerHTML = buildOrderHtml(D.world, D.config);
 }).catch(showError);
 </script>
 </body>

@@ -10,17 +10,21 @@ const setTool = (ch, k) => { if (ch.userData.parts) setTool0(ch, k); };
 const setCarry = (ch, k) => { if (ch.userData.parts) setCarry0(ch, k); };
 const setShield = (ch, on) => { if (ch.userData.parts) setShield0(ch, on); };
 import { mat, box, hash, rnd, makeTree, makeRock, makeBush, makeBuilding, makeHouse, obstaclesFor, routeAround as routeAround0, declutter, makeRoads, setTownCenter } from './world3d.js';
-import { makeField, makePond, animatePond, makeBobber, makeAnimal, animateAnimal, animalPos } from './farm3d.js';
+import { makeField, makePond, animatePond, makeBobber, makeAnimal, animateAnimal, animalPos, makeShark, animateShark } from './farm3d.js';
+import { bodyQuad, bodyOf, insidePen, clearOfPen, penSlot, outsidePen, penFencePoints, fleeHeading, fwd, faceOf, angDiff, toLocal, toWorld, quadsOverlap, quadDepth, sharkPos } from './animalmove.js'; // 動物が逃げる・柵の中・海のサメ
 import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote, startNote, joinText, titleBadges, bestFishText, mbtiText } from './common.js';
 import { makeSky, jstHour, parseTime, phaseName } from './daynight.js';
 import { hourOf, hourText, isNight } from './hours.js';
 import { tagName, igUrl, searchVillagers, findExact } from './search.js';
-import { taglineOf, timelineHtml, storyHtml, howCommentHtml, buildingsText, setupTabs } from './islandpanel.js'; // 上のカードと下のパネル
+import { taglineOf, timelineHtml, howCommentHtml, islandRulesHtml, buildOrderHtml, latestLinesHtml, setupTabs } from './islandpanel.js'; // 上のカードと下のパネル
 import { goalHtml, chestHtml, projectList, projectCardHtml } from './chestview.js';
+import { icon } from './icons.js'; // 閉じるボタンなどの線のアイコン（Lucide の形）
 import { bandHtml as versusBand } from './versus.js'; // 一週間の対決投票の赤と青の割合バー
 // 動画の書き出し（?video=1）で開いた時
 let IS_VIDEO = false;
-import { makeTerrain, BLOCK } from './terrain_gen.js';
+import { makeTerrain, BLOCK, CHUNK } from './terrain_gen.js';
+import { foeIsland, foeArea, foeObstacles, makeFoeFits, spawnFoes, foeGoal, foesTouch, foeKinds, MOB_KINDS } from './foemove.js'; // 3 つ目の島の夜の魔物
+import { makeFoe, animateFoe, makeFoeSmoke, smokeAt, FOE_SCALE } from './nightfoes.js';
 import { makeTerrainView } from './terrain.js';
 import { SpatialHash, TILE } from './tilemap.js';
 import { BED, bedParts, sleeperOnBed, bedInHouse } from './beds.js';
@@ -37,7 +41,7 @@ import { makeChunkObjects, makeFx, setRock, rockScale, setTreeState, setTreeFall
 // ?hour=7 は、その時刻の空と、村人のその時間の行動（L.hours）を出す（動画用）
 const QS = new URLSearchParams(location.search);
 const FIXED_H = parseTime(QS.get('hour') ?? QS.get('time'));
-const hourNow = () => (FIXED_H ?? jstHour());
+const hourNow = () => (window.TOWN_HOUR ?? FIXED_H ?? jstHour()); // window.TOWN_HOUR は確かめ用（時刻を途中で変えて、朝に魔物が消える所などを見る）
 
 nav('index.html');
 
@@ -147,7 +151,8 @@ async function main() {
   }
   controls.screenSpacePanning = false;
   controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
-  window.TOWN = { camera, controls, lite: LITE }; // 確かめ用（カメラを動かして撮る）
+  // 確かめ用（カメラを動かして撮る）。写真モード（js/photomode.js）も、ここから描く道具と時刻の切りかえを使う
+  window.TOWN = { camera, controls, lite: LITE, renderer, scene, labels, stage, config, setHour: (h) => { window.TOWN_HOUR = h == null ? undefined : h; } };
   // カメラをなめらかに：
   //  ・開いた時は、高い所から島へゆっくり寄る（触ったらすぐやめる。?intro=0 でなし）
   //  ・ホイールやピンチのズームは、その場で飛ばずに、目標の距離へ少しずつ寄せる（指を離しても少し続いて止まる）
@@ -187,6 +192,13 @@ async function main() {
     cam.last = cam.want = camera.position.distanceTo(controls.target);
     if (k >= 1) cam.fly = null;
   }
+  // 確かめ用：(x, z) を dist の距離・向き az から見る（ゆっくり寄せずに、すぐそこへ）
+  window.TOWN.lookAt = (x, z, dist = 18, az = 0.7, pol = 0.85, y = 0) => {
+    cam.intro = -1; cam.fly = null;
+    controls.target.set(x, y, z);
+    camera.position.set(x + Math.sin(az) * Math.sin(pol) * dist, y + Math.cos(pol) * dist, z + Math.cos(az) * Math.sin(pol) * dist);
+    controls.update(); cam.last = cam.want = dist;
+  };
   function camStep(dt) {
     if (cam.fly) return flyStep(dt);
     if (cam.intro >= 0) {
@@ -291,6 +303,106 @@ async function main() {
   let pondObj = null;
   if (world.pond) { pondObj = makePond(world.pond); scene.add(pondObj); }
   const animals = (world.animals || []).filter((a) => (ISLANDS ? !!islandAt(world, a.x, a.z) : Math.hypot(a.x, a.z) < 70)).map((a) => { const o = makeAnimal(a.kind); scene.add(o); return { a, o }; });
+  // 柵の中の動物は、柵ごとに重ならない置き場（animalmove.js の penSlot）から歩き始める（見るだけ。data は変えない）
+  const penOf = (a) => a.pen && world.buildings.find((b) => b.id === a.pen && b.type === 'pen');
+  {
+    const n = {};
+    for (const A of animals.slice().sort((x, y) => (x.a.id < y.a.id ? -1 : 1))) {
+      const pen = penOf(A.a); if (!pen) continue;
+      const s = penSlot(n[pen.id] = (n[pen.id] ?? -1) + 1), w = toWorld(pen, s.x, s.z);
+      A.pen = pen; A.o.userData.cur = { x: w.x, z: w.z, face: s.face + (pen.rot || 0) };
+    }
+  }
+  // 海のサメ（島の町だけ）：沖を背びれが進む。ときどき水面に出る（animalmove.js の sharkPos。陸・橋・桟橋のそばでは沈む）
+  const SEA = config.sea || {};
+  const sharks = ISLANDS && SEA.sharks !== 0 ? Array.from({ length: SEA.sharks ?? 3 }, (_, k) => { const o = makeShark(); o.visible = false; scene.add(o); return { k, o }; }) : [];
+  function updateSharks(time) {
+    for (const S of sharks) {
+      const q = sharkPos(world, S.k, time, SEA);
+      S.o.visible = !!q && q.rise > 0.03;
+      if (!S.o.visible) continue;
+      S.o.position.set(q.x, -0.3 - (1 - q.rise) * 1.5, q.z); S.o.rotation.y = q.face; animateShark(S.o, time, q.rise);
+    }
+  }
+  window.TOWN.animals = animals; window.TOWN.sharks = sharks; window.TOWN.sharkPos = (k, t) => sharkPos(world, k, t, SEA); // 確かめ用
+  // 夜の魔物（config.nightFoes）：3 つ目の大きな島（海の向こうの大陸）の、村に向いた岸の近くに、夜だけ土から出てうろつく。
+  //   海とサメがいるので村には来ない。朝は土にもぐって煙になる。歩けるかは foemove.js（海・段・木・岩をよける）
+  const NF = config.nightFoes || {};
+  const foes = [];
+  {
+    const isl = ISLANDS && NF.enabled !== false ? foeIsland(world, NF.island || 'far') : null;
+    if (isl) {
+      const area = foeArea(world, isl, NF);
+      const obstacles = foeObstacles(terrainGen.chunkObjects, area, BLOCK, CHUNK);
+      const fits = makeFoeFits({ isl, heightAt: terrainGen.heightAt, obstacles, margin: NF.shore ?? 4, area });
+      const list = spawnFoes({ list: foeKinds(NF), area, fits, heightAt: terrainGen.heightAt, seed: 'foes:' + state.day, level: NF.level ?? 0 });
+      for (const s of list) {
+        // 前からいる敵（ゾンビ・ガイコツ・クモ）は mobs.js の模型。模型の前は +z なので、+x 向きの入れ物に 90 度回して入れる
+        let o;
+        if (MOB_KINDS.includes(s.kind)) { o = new THREE.Group(); const m = makeMob(s.kind); m.rotation.y = Math.PI / 2; o.add(m); o.userData.mob = m; }
+        else o = makeFoe(s.kind);
+        o.visible = false; scene.add(o);
+        const smoke = makeFoeSmoke(); scene.add(smoke);
+        foes.push({ ...s, id: 'f' + s.i, o, smoke, c: { x: s.x, z: s.z }, st: 'gone', t: 0, slot: -1, bump: 0, goal: null, rest: 0 });
+      }
+      Object.assign(foes, { area, fits, isl, obstacles });
+    }
+  }
+  const FOE_SPEED = { mud: 0.9, wolf: 1.7, shroom: 0.75, zombie: 0.8, skeleton: 1.0, spider: 1.6 };
+  // 歩く動き：新しい 3 種は animateFoe、前からいる敵は animateMob（止まっている時は時間を止めて、足ぶみしない）
+  const animF = (F, time, move) => {
+    const m = F.o.userData.mob;
+    if (!m) return animateFoe(F.o, time, move);
+    if (move > 0.5) F.tf = time;
+    animateMob(m, 'walk', move > 0.5 ? time : (F.tf ?? 0));
+  };
+  function updateFoes(time, dt, n) {
+    if (!foes.length) return;
+    const nightNow = window.TOWN.foeNight ?? (n > 0.55);
+    for (const F of foes) {
+      const { o, c } = F, mob = !!o.userData.mob, S = mob ? 1 : FOE_SCALE, sink = mob ? 4 : 2.7 * S;
+      if (nightNow && (F.st === 'gone' || F.st === 'sink')) { F.st = 'rise'; F.t = -F.i * 0.45; } // 夜になった：少しずつずれて土から出る
+      if (!nightNow && (F.st === 'rise' || F.st === 'walk')) { F.st = 'sink'; F.t = -F.i * 0.3; F.face = o.rotation.y; } // 朝になった：土にもぐって煙になる
+      F.t += dt;
+      if (F.st === 'gone') { o.visible = false; F.smoke.visible = false; continue; }
+      if (F.st === 'rise') {
+        const k = Math.max(0, Math.min(1, F.t / 1.6));
+        o.visible = F.t > 0; o.position.set(c.x, F.h0 - (1 - k) * sink, c.z); o.rotation.y = F.face; o.scale.setScalar(S * (0.45 + 0.55 * k));
+        F.smoke.position.set(c.x, F.h0, c.z); smokeAt(F.smoke, F.t > 0 ? Math.min(0.999, F.t / 2.2) : 0);
+        animF(F, time, 0);
+        if (F.t > 2.2) { F.st = 'walk'; F.t = 0; F.smoke.visible = false; }
+        continue;
+      }
+      if (F.st === 'sink') {
+        const k = Math.max(0, Math.min(1, F.t / 1.4));
+        // もぐりながら小さくなる（shroom の大きなかさが地面の上に平たく残らないように）
+        o.position.set(c.x, F.h0 - k * sink * 0.6, c.z); o.visible = k < 1; o.scale.setScalar(S * Math.max(0.02, 1 - k));
+        F.smoke.position.set(c.x, F.h0, c.z); smokeAt(F.smoke, F.t > 0 ? Math.min(0.999, F.t / 2.0) : 0);
+        animF(F, time, 0);
+        if (F.t > 2.0) { F.st = 'gone'; F.smoke.visible = false; o.visible = false; }
+        continue;
+      }
+      // うろつく：行き先へ向きを変えてから前へ歩く（横歩き・後ろ歩きをしない）。ふさがれたら行き先を変える
+      // ほかの魔物の体にふれる所へは行かない（もうふれている時は、はなれる動きだけ）
+      const fitsF = (x, z, f) => foes.fits(F.kind, x, z, f, F.h0) && !foes.some((G) => G !== F && G.st !== 'gone' && foesTouch(F.kind, x, z, f, G.kind, G.c.x, G.c.z, G.o.rotation.y) && !(Math.hypot(G.c.x - x, G.c.z - z) > Math.hypot(G.c.x - c.x, G.c.z - c.z)));
+      const slot = Math.floor((time + F.i * 3.7) / 11) + F.bump * 1000;
+      if (slot !== F.slot) { F.slot = slot; F.goal = foeGoal(foes.area, F.id, slot); F.rest = 0; }
+      let move = 0;
+      const dx = F.goal.x - c.x, dz = F.goal.z - c.z;
+      if (F.rest > 0) { F.rest -= dt; if (F.rest <= 0) F.bump++; } // 立ち止まってあたりを見る。終わったら別の所へ
+      else if (Math.hypot(dx, dz) > 0.6) {
+        const want = faceOf(dx, dz), d = angDiff(want, o.rotation.y), st = Math.max(-1.6 * dt, Math.min(1.6 * dt, d));
+        if (fitsF(c.x, c.z, o.rotation.y + st)) o.rotation.y += st; else F.rest = 0.4; // 回れない（木などのそば）
+        if (Math.abs(angDiff(want, o.rotation.y)) < 0.35) {
+          const v = fwd(o.rotation.y), s = (FOE_SPEED[F.kind] || 1) * dt, nx = c.x + v.x * s, nz = c.z + v.z * s;
+          if (fitsF(nx, nz, o.rotation.y)) { c.x = nx; c.z = nz; move = 1; } else F.rest = 0.5; // 前がふさがっている
+        } else move = 0.35;
+      } else F.rest = 1.8; // 着いた
+      o.visible = true; o.position.set(c.x, F.h0, c.z); o.scale.setScalar(S);
+      animF(F, time, move);
+    }
+  }
+  window.TOWN.foes = foes; // 確かめ用（window.TOWN.foeNight = true / false で、夜・朝を試せる）
   const emitters = [];
   const btags = [];
   const lightAnchors = [];
@@ -465,6 +577,7 @@ async function main() {
     tag.innerHTML = `<b>${esc(o.key)}</b> ${esc(o.name)}<span class="bt-n">${(baseVote.votes || {})[o.key] || 0}票</span>`;
     const lo = new CSS2DObject(tag); lo.position.set(o.x, 5.2, o.z); scene.add(lo); btags.push(lo);
   }
+  window.TOWN.markers = markers; // 写真モード（js/photomode.js）で旗を隠す
   // 昼と夜
   const sky = makeSky(scene, { hemi, sun, sunDist: 60, lightAnchors, maxLights: LITE ? 2 : 8, dome: true, camera, radius: 320 });
   // 雲：薄く平たい箱を重ねた落ち着いた雲（js/clouds.js、戦いの確かめページと同じ）。ゆっくり流れる
@@ -658,6 +771,8 @@ async function main() {
   for (const f of world.fields || []) solids.push({ x: f.x, z: f.z, r: 1.9 });
   // 鍛冶屋の金床（world3d.js の anvil）：だれも通りぬけない。鍛冶職人は anvilOf の stand に立って打つ
   for (const b of world.buildings) { const an = anvilOf(b); if (an) solids.push({ x: an.x, z: an.z, r: 0.8, anvil: b.id }); }
+  // 動物の柵：柱と閉じた戸の線。人は柵をすりぬけない（中へも入らない。世話・なでる人は柵の外に立つ）
+  for (const b of world.buildings) if (b.type === 'pen') for (const q of penFencePoints(b)) solids.push({ x: q.x, z: q.z, r: 0.3, fence: b.id });
   // 歩く道は、体の分だけ広げた円をよける
   const walls = solids.map((o) => ({ x: o.x, z: o.z, r: o.r + 0.8 }));
   if (world.pond) walls.push({ x: world.pond.x, z: world.pond.z, r: world.pond.r + 0.6 }); // 池の中は歩かない（ふちに立つ人の所は外）
@@ -828,6 +943,7 @@ async function main() {
     if (a.action === 'stump') { a.action = 'chop'; a.stump = true; }
     if (a.action === 'fish') a.target = a.target === 'sea' && seaSpots().length ? 'sea' : 'pond'; // 海べ（f:sea）か池
     if (a.action === 'ranch') a.target = penB ? penB.id : null;
+    if (a.action === 'hunt' && !animals.some((A) => A.a.id === a.target)) { const A = penB && animals.find((x) => x.pen === penB); a.target = A ? A.a.id : null; } // しとめた動物は data にいないので、柵の中のほかの動物を追う
     // 遠くの木・岩まで歩く 1 時間：その仕事場へ向かって歩く（着いたらそのまま仕事の形）。寝る前に村へ帰る 1 時間：家・テントへ
     if (a.action === 'walkout') { const o = objById[a.target]; a.action = o && o.hp !== undefined ? 'dig' : 'chop'; a.walking = true; }
     if (a.action === 'walkhome') a.action = 'rest';
@@ -1023,7 +1139,7 @@ async function main() {
     }
     const tg = act === 'water' ? objById[a.target] : act === 'pet' ? penB : null;
     // 畑は作物の外（ふちの外側）に立つ
-    if (tg) { const off = act === 'pet' ? 3.4 : 2.7; return { x: tg.x + Math.cos(ang) * off, z: tg.z + Math.sin(ang) * off, fx: tg.x, fz: tg.z }; }
+    if (tg) { const off = act === 'pet' ? 5.4 : 2.7; return { x: tg.x + Math.cos(ang) * off, z: tg.z + Math.sin(ang) * off, fx: tg.x, fz: tg.z }; }
     if (act === 'help') return p.work || { x: p.home.x, z: p.home.z, fx: null };
     return { ...wanderPt(p, 0), fx: null };
   }
@@ -1051,8 +1167,16 @@ async function main() {
     const tg = a.target === 'square' ? world.square : a.target === 'site' ? state.plan && state.plan.site : a.target === 'pond' ? world.pond : a.target && objById[a.target];
     const ang = (hash(p.v.key) % 360) * Math.PI / 180;
     let work;
-    p.wander = false;
-    if (FREE_ACT.has(act)) {
+    p.wander = false; p.hunt = null;
+    const huntA = act === 'hunt' ? animals.find((A) => A.a.id === a.target) : null;
+    if (huntA) {
+      // 動物を追う：近づいて打つ → 動物は反対へ走って逃げる → 少し見てから、また近づく（updatePerson の huntStep）
+      const c0 = huntA.o.userData.cur || huntA.a;
+      p.stay = true; p.hunt = { A: huntA, st: 'go', t: 0, route: null, rt: 0 };
+      work = huntA.pen ? { ...outsidePen(huntA.pen, toLocal(huntA.pen, c0.x, c0.z).x, toLocal(huntA.pen, c0.x, c0.z).z, 1.0), fx: c0.x, fz: c0.z } : { x: c0.x + Math.cos(ang) * 6, z: c0.z + Math.sin(ang) * 6, fx: c0.x, fz: c0.z };
+    } else if (act === 'hunt') {
+      p.stay = true; work = { ...wanderPt(p, 0), fx: null }; // 追う動物が見えない時は、野原を見回るだけ
+    } else if (FREE_ACT.has(act)) {
       // 仕事のあとの時間：散歩（村のまわりを歩きまわる）・おしゃべり（2 人で向かい合う）・海をながめる（池のそばに座る）・
       // 畑に水・動物をなでる（その前でしゃがむ）・荷物運びの手伝い（運ぶ人と同じ動き）
       p.stay = act !== 'help';
@@ -1069,20 +1193,25 @@ async function main() {
       work = act === 'rest' ? { ...p.home, fx: null } : act === 'guard' ? { x: Math.cos(ang) * 22, z: Math.sin(ang) * 20 - 1, fx: null } : { x: p.drop.x, z: p.drop.z, fx: drop.x, fz: drop.z };
     } else {
       // 木を切る人は葉の外に立つ（頭が葉に入らないように）、掘る人は岩の外に立つ
-      const off = act === 'fish' ? (world.pond ? world.pond.r + 0.9 : 1.2) : act === 'ranch' ? 3.4 : act === 'level' ? 2 + (hash(p.v.key + 'lv') % 40) / 10 : act && act.startsWith('dig') ? 2.6 : act === 'apple' ? 1.25 * ((tg && tg.size) || 1) + 0.6 : act === 'chop' ? (a.stump ? 1.6 : 1.25 * ((tg && tg.size) || 1) + 0.6) : 1.2;
+      const off = act === 'fish' ? (world.pond ? world.pond.r + 0.9 : 1.2) : act === 'ranch' ? 5.4 : act === 'level' ? 2 + (hash(p.v.key + 'lv') % 40) / 10 : act && act.startsWith('dig') ? 2.6 : act === 'apple' ? 1.25 * ((tg && tg.size) || 1) + 0.6 : act === 'chop' ? (a.stump ? 1.6 : 1.25 * ((tg && tg.size) || 1) + 0.6) : 1.2;
       work = tg ? { x: tg.x + Math.cos(ang) * off, z: tg.z + Math.sin(ang) * off, fx: tg.x, fz: tg.z } : { x: -12 + (hash(p.v.key) % 9), z: 12 + (hash(p.v.key) % 5), fx: null };
       if (act === 'carry' && p.work && !init) work = p.work; // 運んだら、さっきの仕事場へもどる
     }
     // 立つ所は、物にも寝ている人にもかからない所（かかる時は近くの空いたマスへ）
     if (a.action !== 'chat' && a.action !== 'smith') work = freePt(work, BODY_S, p.v.key); // 鍛冶は金床の前から動かさない
     p.work = work;
-    p.pose = { level: 'dig', chop: 'chop', dig: 'dig', dig_last: 'dig', berry: 'gather', apple: 'gather', harvest: 'gather', tend: 'gather', till: 'dig', forage: 'gather', fish: 'fish', ranch: 'gather', craft: 'gather', smith: 'smith', walk: 'walk', chat: 'talk', view: 'sit', water: 'water', pet: 'gather' }[act] || (p.stay ? 'idle' : 'gather');
+    p.pose = { level: 'dig', chop: 'chop', dig: 'dig', dig_last: 'dig', berry: 'gather', apple: 'gather', harvest: 'gather', tend: 'gather', till: 'dig', forage: 'gather', fish: 'fish', ranch: 'gather', craft: 'gather', smith: 'smith', walk: 'walk', chat: 'talk', view: 'sit', water: 'water', pet: 'gather', hunt: 'idle' }[act] || (p.stay ? 'idle' : 'gather');
     let tool = { level: 'hoe', chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', berry: 'basket', apple: 'basket', harvest: 'basket', tend: 'hoe', forage: 'basket', fish: 'rod', ranch: 'basket', guard: 'torch', water: 'basket', smith: 'hammer' }[act] || null;
     if (act === 'walk') { p.wander = true; p.wi = 0; p.routes.w = null; }
     // 持っている道具の素材（木・石・鉄・金・ダイヤ）で色と形を変える。素手で切る・掘る人は何も持たない
     const tier = L.toolTier || 'hand';
     if ((tool === 'axe' || tool === 'pick') && tier === 'hand') tool = null;
     p.tool = tool; p.toolKey = tool && ['axe', 'pick', 'hoe', 'rod'].includes(tool) ? tool + ':' + (tier === 'hand' ? 'wood' : tier) : tool;
+    if (act === 'hunt') { // 動物を追う時は、剣を持っていれば剣（なければ素手）
+      const TR = ['wood', 'stone', 'iron', 'gold', 'diamond'];
+      const sw = (L.inv || []).filter(Boolean).map((s) => /^(\w+)_sword$/.exec(s.item)).filter(Boolean).map((m) => m[1]).filter((t) => TR.includes(t)).sort((x, y) => TR.indexOf(y) - TR.indexOf(x))[0];
+      p.tool = sw ? 'sword' : null; p.toolKey = sw ? 'sword:' + sw : null;
+    }
     // 建物・木・岩をよける道（折れ線）。人が多いと重いので、初めて歩く時に作る
     p.routes = lazyRoutes({ 0: [init ? p.home : { ...p.pos }, work], 2: [act === 'carry' && !init ? { ...p.pos } : work, p.drop], 4: [p.drop, work] });
     if (init) { if (p.stay) { p.pos = { x: work.x, z: work.z }; p.phase = 1; } }
@@ -1630,7 +1759,7 @@ async function main() {
     for (const [p, s, other] of [[tk.A, spotA, tk.B], [tk.B, spotB, tk.A]]) { p.w0 = null; p.phase = 5; p.ri = 0; p.routes.talk = routeAround(p.pos, s, walls); p.talk = tk; p.other = other; }
     tk.on = true; tk.t0 = null;
   }
-  const free = (p) => p.mode === 'day' && !p.chat && (p.phase === 1 || p.phase === 3 || p.phase === 4);
+  const free = (p) => p.mode === 'day' && !p.chat && !p.hunt && (p.phase === 1 || p.phase === 3 || p.phase === 4);
   // 会話の中身：あいさつ（はじめて会った時）＋ sim.js の言葉＋ js/chat.js の続き（A と B が交互に）。同じ組・同じ時間なら同じ
   function fillConvo(c, base, greet) {
     const a = c.A.v.key, b = c.B.v.key, close = closeOf(D.social.pairs, a, b, base && base.kind);
@@ -1775,6 +1904,12 @@ async function main() {
   }
   function updatePerson(p, dt, time) {
     p.t += dt;
+    if (p.photo && p.mode !== 'sleep') { // 写真モード（js/photomode.js）で選んだ人：その場で止まり、カメラの方を向いて手をふる（寝ている人は寝たまま）
+      p.ch.visible = true; p.ch.userData.lieY = 0; setCarry(p.ch, null);
+      turnTo(p.ch, p.photo.yaw, dt); p.ch.position.set(p.pos.x, 0, p.pos.z);
+      if (p.lod === 'full') animate(p.ch, 'wave', time, 0.5);
+      return;
+    }
     let pose = 'idle';
     if (p.mode === 'gohome' || p.mode === 'sleep') {
       setTool(p.ch, null); setCarry(p.ch, null);
@@ -1829,6 +1964,9 @@ async function main() {
       setTool(p.ch, p.toolKey); setCarry(p.ch, null);
       pose = 'walk';
       if (walkTo(p, p.routes[p.phase], dt)) { p.phase = 1; p.t = 0; }
+    } else if (p.phase === 1 && p.hunt) {
+      setTool(p.ch, p.toolKey); setCarry(p.ch, null);
+      pose = huntStep(p, dt, time);
     } else if (p.phase === 1 && p.wander) {
       // 散歩：村のまわりの点を順に歩く（前を向いて歩く。着いたら次の点）
       setTool(p.ch, null); setCarry(p.ch, null); pose = 'walk';
@@ -1862,7 +2000,46 @@ async function main() {
     p.ch.position.set(p.pos.x, 0, p.pos.z);
     p.ch.userData.nod = pose === 'walk' && p.lod === 'full' ? passNod(p, time) : 0;
     p.lastPose = pose;
-    if (p.lod === 'full') animate(p.ch,pose, time + (hash(p.v.key) % 100) / 10, GREET_POSE.has(pose) ? p.greetU : null);
+    if (p.lod === 'full') animate(p.ch,pose, time + (hash(p.v.key) % 100) / 10, GREET_POSE.has(pose) ? p.greetU : pose === 'strike' && p.hunt ? p.hunt.u : null);
+  }
+  // 動物を追う 1 時間：近づく（go）→ 打つ（strike。当たる所で動物が逃げ出す）→ 逃げた方を見る（watch）→ また近づく
+  //   柵の中の動物は、柵の外のいちばん近い所から柵ごしに打つ（人は柵に入らない）。動物は柵から出られない
+  function huntStep(p, dt, time) {
+    const H = p.hunt, A = H.A, c = A.o.userData.cur || A.a, B = bodyOf(A.a.kind);
+    H.t += dt;
+    const faceA = () => turnTo(p.ch, Math.atan2(c.x - p.pos.x, c.z - p.pos.z), dt);
+    if (H.st === 'go') {
+      let stand, near;
+      // 柵の中の動物には、おしりの側の柵の外から近づく（打たれた動物は前へ走って逃げられる。柵ぎわでぐるりと向き直らなくてよい）
+      if (A.pen) { const v = fwd(A.o.rotation.y), l = toLocal(A.pen, c.x, c.z), l2 = toLocal(A.pen, c.x - v.x * 4, c.z - v.z * 4); stand = outsidePen(A.pen, l2.x, l2.z, 0.95); void l; near = Math.hypot(stand.x - p.pos.x, stand.z - p.pos.z) < 0.6; }
+      else { const dx = p.pos.x - c.x, dz = p.pos.z - c.z, d = Math.hypot(dx, dz) || 1, r = B.f + 1.0; stand = { x: c.x + (dx / d) * r, z: c.z + (dz / d) * r }; near = d < B.f + 1.3; }
+      if (near || H.t > 20) { H.st = near ? 'strike' : 'watch'; H.t = 0; H.hit = false; H.route = null; return 'idle'; }
+      if (!H.route || time > H.rt) {
+        H.route = safeRoute({ ...p.pos }, freePt(stand, BODY_S, p.v.key)); H.rt = time + 1.2; p.ri = 0;
+        // 道が見つからない（岩や木でふさがれている）時は、柵のほかの辺から打ちに行く
+        if (!H.route && A.pen) for (const [lx, lz] of [[0, -3], [3, 0], [-3, 0], [0, 3]]) {
+          const s2 = outsidePen(A.pen, lx, lz, 0.95), r2 = safeRoute({ ...p.pos }, freePt(s2, BODY_S, p.v.key));
+          if (r2) { H.route = r2; break; }
+        }
+        if (!H.route) { H.st = 'watch'; H.t = 0; return 'idle'; } // どこからも行けない：あきらめて見ているだけ
+      }
+      if (walkTo(p, H.route, dt)) { H.route = null; if (A.pen) { H.st = 'strike'; H.t = 0; H.hit = false; return 'idle'; } }
+      return 'walk';
+    }
+    if (H.st === 'strike') {
+      faceA();
+      H.u = Math.min(1, H.t / 0.8);
+      if (H.u >= 0.72 && !H.hit) {
+        H.hit = true; A.o.userData.flee = { x: p.pos.x, z: p.pos.z, t0: time };
+        // 柵の中では、まわりの動物もおどろいて散る（打たれた動物が囲まれて動けなくならないように）
+        if (A.pen) for (const B of animals) if (B !== A && B.pen === A.pen && Math.hypot(B.o.position.x - A.o.position.x, B.o.position.z - A.o.position.z) < 3.2) B.o.userData.flee = { x: p.pos.x, z: p.pos.z, t0: time };
+      }
+      if (H.t >= 0.8) { H.st = 'watch'; H.t = 0; }
+      return 'strike';
+    }
+    faceA(); // 逃げた方を見る
+    if (H.t > 2.6) { H.st = 'go'; H.t = 0; H.route = null; }
+    return 'idle';
   }
   // 立ち話の形：あいさつの間はお辞儀・手をふる・会釈、話している間は身ぶり
   const GREET_POSE = new Set(['bow', 'wave', 'nod']);
@@ -1938,7 +2115,7 @@ async function main() {
   const moveAnimalsOut = () => {
     animalsOut = true;
     for (const A of animals) for (const t of tents) {
-      if (!inTent(t, A.a.x, A.a.z, 4)) continue;
+      if (A.pen || !inTent(t, A.a.x, A.a.z, 4)) continue;
       const s = Math.sin(t.yaw), c = Math.cos(t.yaw), dx = A.a.x - t.x, dz = A.a.z - t.z;
       let u = dx * s + dz * c, v = dx * c - dz * s;
       const mu = t.depth / 2 + 4 - Math.abs(u), mv = t.len / 2 + 4 - Math.abs(v);
@@ -1946,14 +2123,128 @@ async function main() {
       const p = tentPoint(t, u, v); A.a = { ...A.a, x: p.x, z: p.z }; A.o.userData.cur = null;
     }
   };
+  // 体の四角が入ってよい所か：外の動物は、陸の上（頭の先も）で、木・岩・池・テントにも柵にもかからない
+  const pens = world.buildings.filter((b) => b.type === 'pen');
+  const wildFits = (kind, x, z, face) => {
+    if (!animalOk(x, z)) return false;
+    const B = bodyOf(kind), v = fwd(face);
+    if (ISLANDS && (!onLand(world, x + v.x * B.f, z + v.z * B.f, 0.6) || !onLand(world, x - v.x * B.b, z - v.z * B.b, 0.6))) return false;
+    if (!pens.length) return true;
+    const q = bodyQuad(kind, x, z, face);
+    return pens.every((pen) => clearOfPen(pen, q));
+  };
+  // 柵の中の動物：柵・水おけ・干し草・ほかの動物の体にかからない
+  const PEN_GAP = 0.06; // 柵の中の動物どうしは、少しすき間をあけて見えるように
+  const penFits = (A, x, z, face) => insidePen(A.pen, bodyQuad(A.a.kind, x, z, face)) && !animals.some((B) => B !== A && B.pen === A.pen && B.quad && quadsOverlap(bodyQuad(A.a.kind, x, z, face, PEN_GAP), B.quad));
+  // 向きを want へ回してから、前へ進む（横歩き・後ろ歩きをしない）。fits(x, z, face) が false の所へは回らない・進まない
+  const stepHead = (c, o, want, speed, rate, dt, fits, B = null) => {
+    let face = o.rotation.y;
+    const d = angDiff(want, face);
+    // 大きく向きを変える途中は、回る向きを変えない（右と左を行ったり来たりしない）
+    if (Math.abs(d) < 0.3) { o.userData.turnSign = 0; o.userData.piv = null; }
+    const sg = Math.abs(d) > 1.2 && o.userData.turnSign ? o.userData.turnSign : Math.sign(d);
+    const st = sg * Math.min(rate * dt, sg === Math.sign(d) ? Math.abs(d) : rate * dt);
+    let turned = !st;
+    if (st && fits(c.x, c.z, face + st)) { face += st; turned = true; }
+    else if (st && Math.abs(d) > 1.2 && fits(c.x, c.z, face - st)) { face -= st; turned = true; o.userData.turnSign = -Math.sign(st); } // 回る側がふさがっていたら、反対まわりで向きを変える
+    else if (st && B) { // 柵ぎわなど、その場では回れない：頭の先か、おしりを軸にして回る（本物の動物も前足・後ろ足を軸に向きを変える）
+      const v0 = fwd(face);
+      for (const s2 of Math.abs(d) > 1.2 ? [st, -st] : [st]) {
+        const v1 = fwd(face + s2);
+        const cands = [
+          { x: c.x + v0.x * B.f - v1.x * B.f, z: c.z + v0.z * B.f - v1.z * B.f }, // 頭の先を軸に（おしりが回る）
+          { x: c.x - v0.x * B.b + v1.x * B.b, z: c.z - v0.z * B.b + v1.z * B.b }, // おしりを軸に（頭が回る）
+        ];
+        // 軸は一度決めたら変えない（頭とおしりの軸をこまぎれに入れかえると、横へずれて見える）
+        const order = o.userData.piv === 1 ? [1, 0] : o.userData.piv === 0 ? [0, 1] : [0, 1];
+        const k = order.find((j) => fits(cands[j].x, cands[j].z, face + s2) && (o.userData.piv == null || o.userData.piv === j));
+        if (k != null) { c.x = cands[k].x; c.z = cands[k].z; face += s2; turned = true; o.userData.piv = k; break; }
+      }
+    }
+    o.rotation.y = face;
+    if (Math.abs(angDiff(want, face)) > 0.3) {
+      if (!turned) { // どちらにも回れない：今向いている前へ少し進んで、回れる場所を作る（前へ歩くので横歩きにはならない）
+        const v = fwd(face), s = speed * 0.4 * dt, nx = c.x + v.x * s, nz = c.z + v.z * s;
+        if (fits(nx, nz, face)) { c.x = nx; c.z = nz; return 0.5; }
+      }
+      return 0.4; // その場で向きを変えている（脚だけ少し動く）
+    }
+    const v = fwd(face), s = speed * dt, nx = c.x + v.x * s, nz = c.z + v.z * s;
+    if (!fits(nx, nz, face)) return -1;
+    c.x = nx; c.z = nz;
+    return 1;
+  };
+  const FLEE_T = 2.4; // おそわれてから走って逃げる秒数
   function updateAnimals(time, dt) {
     if (!animalsOut) moveAnimalsOut();
     const taken = new Map();
-    for (const { a, o } of animals) {
-      const q = animalPos(a, time, !!a.pen);
+    for (const A of animals) {
+      const { a, o } = A;
+      if (o.userData.face0 === undefined) { o.userData.face0 = 1; if (o.userData.cur && o.userData.cur.face !== undefined) o.rotation.y = o.userData.cur.face; }
+      const F = o.userData.flee, fleeing = F && time - F.t0 < FLEE_T;
+      if (F && !fleeing) o.userData.flee = null;
+      if (A.pen) { // 柵の中：柵の中の行き先へ歩いて、着いたら草を食べる。おそわれたら反対へ走るが、柵からは出られない
+        const c = o.userData.cur;
+        // 今もうほかの動物にふれている時は、柵の中なら動いてよい（はなれる向きへ出られるように。その場で固まらない）
+        const stuckP = !penFits(A, c.x, c.z, o.rotation.y);
+        //   ただし、新しくふれる相手をふやさず、今ふれている相手とは食いこみが浅くなる動き（向きを変えるのも含む）だけ
+        const mates = stuckP ? animals.filter((B) => B !== A && B.pen === A.pen && B.quad) : null;
+        const q0 = bodyQuad(a.kind, c.x, c.z, o.rotation.y, PEN_GAP);
+        const depth0 = stuckP ? new Map(mates.map((B) => [B, quadDepth(q0, B.quad)])) : null;
+        const fits = !stuckP ? (x, z, f) => penFits(A, x, z, f) : (x, z, f) => {
+          if (!insidePen(A.pen, bodyQuad(a.kind, x, z, f))) return false;
+          const q = bodyQuad(a.kind, x, z, f, PEN_GAP);
+          return mates.every((B) => { const d = quadDepth(q, B.quad); return d <= 0 || d < depth0.get(B) - 1e-4; });
+        };
+        let move = 0, graze = 0, run = false;
+        if (fleeing) {
+          // 逃げる時は、すき間（PEN_GAP）の分だけはとなりへ寄ってよい（体どうしは重ならない。せまい柵の中で回れずに固まらない）
+          const ff = stuckP ? fits : (x, z, f) => { const q = bodyQuad(a.kind, x, z, f); return insidePen(A.pen, q) && !animals.some((B) => B !== A && B.pen === A.pen && B.quad && quadsOverlap(q, B.quad)); };
+          // 逃げる向きは、一度決めたら行けなくなるまで変えない（右・左と迷って、その場で回り続けない）
+          const okH = (h) => { const v = fwd(h); return [0.08, 0.2, 0.35].every((s) => ff(c.x + v.x * s, c.z + v.z * s, h)); };
+          //   柵の中はせまいので、人から遠ざかる向きのうち、今の向きから少ない回りで行ける向きを選ぶ（となりの動物に回るのをじゃまされて固まらない）
+          const away = faceOf(c.x - F.x, c.z - F.z);
+          let want = null, best = Infinity;
+          for (let k = 0; k < 18; k++) {
+            const h = away + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.35;
+            const da = Math.abs(angDiff(h, away));
+            if (da > 2.6) continue;
+            const cost = Math.abs(angDiff(h, o.rotation.y)) + 0.6 * da + (da > 1.6 ? 3 : 0); // 横より後ろ寄りは、ほかに行けない時だけ
+            if (cost < best && okH(h)) { best = cost; want = h; }
+          }
+          // 前がどこもふさがっている（柵ぎわで人の方を向いている）時も、人と反対へ向き直る（頭かおしりを軸に回る）
+          const want2 = want ?? faceOf(c.x - F.x, c.z - F.z);
+          { const r = stepHead(c, o, want2, a.kind === 'chicken' ? 3.6 : 3.2, 8, dt, ff, bodyOf(a.kind)); move = r > 0 ? 1 : r === 0.4 ? 0.5 : 0; run = r > 0; }
+        } else {
+          const slot = Math.floor((time + (hash(a.id) % 90) / 10) / 9) + (o.userData.bump || 0) * 1000;
+          if (o.userData.slot !== slot) { o.userData.slot = slot; const h = hash(a.id + ':' + slot); o.userData.goal = toWorld(A.pen, ((h % 1000) / 1000 * 2 - 1) * 2.3, (((h >> 10) % 1000) / 1000 * 2 - 1) * 2.3); }
+          const g = o.userData.goal, dx = g.x - c.x, dz = g.z - c.z;
+          if (Math.hypot(dx, dz) > 0.5) {
+            const r = stepHead(c, o, faceOf(dx, dz), a.kind === 'chicken' ? 1.2 : 0.8, 2.5, dt, fits);
+            if (r < 0) { o.userData.bump = (o.userData.bump || 0) + 1; graze = 1; } else move = r;
+          } else graze = 1;
+        }
+        A.quad = bodyQuad(a.kind, c.x, c.z, o.rotation.y);
+        o.position.set(c.x, 0, c.z); animateAnimal(o, time, move, graze, run);
+        agrid.set(a, c.x, c.z, { x: c.x, z: c.z, a });
+        continue;
+      }
+      const q = animalPos(a, time, false);
       const c = o.userData.cur || (o.userData.cur = { x: q.x, z: q.z });
+      if (fleeing) { // 外の動物：おそった人と反対の向きへ走って逃げる（木・岩・池・柵・海はよける）
+        // 今の所がもう木などにかかっている時は、陸の上ならどこへでも走って出てよい（その場で固まらない）
+        const stuckF = !wildFits(a.kind, c.x, c.z, o.rotation.y);
+        const fits = stuckF ? (x, z, f) => { const v = fwd(f), B = bodyOf(a.kind); return !ISLANDS || onLand(world, x + v.x * B.f, z + v.z * B.f, 0.6); } : (x, z, f) => wildFits(a.kind, x, z, f);
+        const okH = (h) => { const v = fwd(h); return [0.12, 0.45, 0.9].every((s) => fits(c.x + v.x * s, c.z + v.z * s, h)); };
+        const want = F.h != null && okH(F.h) ? F.h : (F.h = fleeHeading(F, c, o.rotation.y, okH));
+        let move = 0, run = false;
+        if (want !== null) { const r = stepHead(c, o, want, a.kind === 'chicken' ? 5.4 : 5.0, 9, dt, fits, bodyOf(a.kind)); move = r > 0 ? 1 : r === 0.4 ? 0.5 : 0; run = r > 0; }
+        o.position.set(c.x, 0, c.z); animateAnimal(o, time, move, 0, run);
+        agrid.set(a, c.x, c.z, { x: c.x, z: c.z, a });
+        continue;
+      }
       let tgt = null;
-      if (!a.pen && !wasNight) {
+      if (!wasNight) {
         let best = null, bd = LURE_R;
         for (const p of pgrid.near(a.x, a.z, LURE_R, (o) => o.lure)) { // 周りのマスの、種を持っている人だけ
           if (!p.ch.visible || p.mode !== 'day' || (taken.get(p) || 0) >= 2) continue;
@@ -1968,15 +2259,17 @@ async function main() {
       }
       const goal = tgt || q;
       const dx = goal.x - c.x, dz = goal.z - c.z, d = Math.hypot(dx, dz);
-      let face = q.face, move = q.move, graze = q.graze;
-      if (tgt ? d > 0.3 : d > 0.4) {
-        const s = Math.min(d, 3.2 * dt), nx = c.x + (dx / d) * s, nz = c.z + (dz / d) * s;
-        if (animalOk(nx, nz) || !animalOk(c.x, c.z)) { c.x = nx; c.z = nz; face = Math.atan2(-dz, dx); move = 1; graze = 0; } // 動物の頭は +x 向き
-        else { move = 0; graze = tgt ? 0 : 1; face = o.rotation.y; } // 木・岩・池の前では止まって草を食べる
-      } else if (tgt) { move = 0; graze = 0; face = o.rotation.y; }
-      else if (animalOk(q.x, q.z)) { c.x = q.x; c.z = q.z; }
-      else { move = 0; graze = 1; face = o.rotation.y; }
-      o.position.set(c.x, 0, c.z); o.rotation.y = face; animateAnimal(o, time, move, graze);
+      // 今の所が入れない所（はじめから木などにかかっている）なら、どこへでも出てよい
+      const stuck0 = !wildFits(a.kind, c.x, c.z, o.rotation.y), fitsW = (x, z, f) => stuck0 || wildFits(a.kind, x, z, f);
+      let move = q.move, graze = q.graze;
+      if (tgt ? d > 0.3 : d > 0.4) { // 道からはなれた（逃げたあと・ついて行く）：道の方へ向いてから歩いてもどる。動物の頭は +x 向き
+        const r = stepHead(c, o, faceOf(dx, dz), Math.min(3.2, d / Math.max(dt, 1e-3)), 5, dt, fitsW);
+        if (r < 0) { move = 0; graze = tgt ? 0 : 1; } else { move = r; graze = 0; } // 木・岩・池・柵の前では止まって草を食べる
+      } else if (tgt) { move = 0; graze = 0; }
+      else if (Math.abs(angDiff(q.face, o.rotation.y)) > 0.3) { stepHead(c, o, q.face, 0, 5, dt, fitsW); move = 0.4; graze = 0; } // 道の向きへ回ってから歩き出す
+      else if (fitsW(q.x, q.z, q.face)) { c.x = q.x; c.z = q.z; o.rotation.y = q.face; }
+      else { move = 0; graze = 1; }
+      o.position.set(c.x, 0, c.z); animateAnimal(o, time, move, graze);
       agrid.set(a, c.x, c.z, { x: c.x, z: c.z, a }); // 動物の位置もマスの一覧に
     }
   }
@@ -2070,6 +2363,8 @@ async function main() {
     if (anim.flame) { anim.flame.scale.y = 0.8 + Math.sin(time * 12) * 0.2; }
     if (pondObj) animatePond(pondObj, time);
     updateAnimals(time, dt);
+    updateSharks(time);
+    updateFoes(time, dt, sky.n);
     for (const c of anim.canals) for (const m of c.userData.flow) { const u = (time * 0.25 + m.userData.ph) % 1; m.position.z = -c.userData.len / 2 + u * c.userData.len; }
     updateFishing(time);
     puffT += dt;
@@ -2158,7 +2453,7 @@ async function main() {
   // ---------- 村人さがし・ランダムな人の家へ ----------
   // 家（建物）がある人はその家へ、ない人はその時いる所へ（歩いていればついて行く）
   const findMsg = document.getElementById('findmsg');
-  const findSay = (t, warn) => { if (!findMsg) return; findMsg.textContent = t; findMsg.classList.toggle('warn', !!warn); };
+  const findSay = (t, warn) => { if (!findMsg) return; findMsg.textContent = t; findMsg.classList.toggle('warn', !!warn); findMsg.classList.remove('pop'); void findMsg.offsetWidth; findMsg.classList.add('pop'); }; // pop：スマホでは町の上に浮かべて少しして消す（css）
   function goVillager(v, how) {
     const p = people.find((q) => q.v.key === v.key);
     if (!p) return false;
@@ -2206,7 +2501,7 @@ async function main() {
   async function openCard(v) {
     const L = life[v.key] || {};
     card.hidden = false; card.classList.remove('pjcard');
-    card.innerHTML = '';
+    card.innerHTML = ''; card.dataset.key = v.key; // 写真モードの「この人と写真」ボタンが使う
     const face = await faceCanvas(v, 48);
     face.className = 'face pixel';
     const who = document.createElement('div');
@@ -2217,14 +2512,14 @@ async function main() {
     const a = document.createElement('a');
     a.className = 'btn'; a.href = villagerUrl(v); a.textContent = 'くわしく';
     const x = document.createElement('button');
-    x.className = 'close'; x.setAttribute('aria-label', '閉じる'); x.textContent = '×';
+    x.className = 'close'; x.setAttribute('aria-label', '閉じる'); x.title = '閉じる'; x.innerHTML = icon('x', { size: 20 });
     x.onclick = closeCard;
     const btns = document.createElement('div'); btns.className = 'cardbtns'; btns.append(a);
     const ig = igUrl(v);
-    if (ig) { const b = document.createElement('a'); b.className = 'btn ig'; b.href = ig; b.target = '_blank'; b.rel = 'noopener'; b.textContent = 'インスタ'; btns.append(b); }
+    if (ig) { const b = document.createElement('a'); b.className = 'btn ig'; b.href = ig; b.target = '_blank'; b.rel = 'noopener'; b.innerHTML = icon('instagram', { size: 16 }) + '<span>インスタ</span>'; btns.append(b); }
     card.append(face, who, btns, x);
   }
-  function closeCard() { card.hidden = true; card.classList.remove('pjcard'); }
+  function closeCard() { card.hidden = true; card.classList.remove('pjcard'); delete card.dataset.key; }
   // 建てている物・橋の札：名前・進み・あと何個（あつまった数 / いる数）・作っている人
   function openProject(id) {
     const p = projectList(state, world, config, hourNow()).find((x) => x.id === id);
@@ -2233,7 +2528,7 @@ async function main() {
     card.hidden = false; card.classList.add('pjcard');
     card.innerHTML = `<div class="pj">${projectCardHtml(p, nameOf)}</div>`;
     const x = document.createElement('button');
-    x.className = 'close'; x.setAttribute('aria-label', '閉じる'); x.textContent = '×';
+    x.className = 'close'; x.setAttribute('aria-label', '閉じる'); x.title = '閉じる'; x.innerHTML = icon('x', { size: 20 });
     x.onclick = closeCard;
     card.append(x);
   }
@@ -2286,20 +2581,27 @@ function renderPanel(D) {
   hud.innerHTML = `<span class="chip day">${state.day}日目</span><span class="chip" id="clockchip"></span><span class="chip">${esc(state.weather)}</span>` +
     `<span class="chip">村人 <b>${active.length}</b></span>`;
   const sn = startNote(state, config); // 0 日目（町が始まる前）の案内
-  document.getElementById('dayline').textContent = sn || `${fmtDate(state.date)}（${state.day}日目）`;
+  document.getElementById('dayline').textContent = sn || fmtDate(state.date); // 日目は下のチップに出すので、見出しは日付だけ
   const t = state.today || { jobs: {}, built: [] };
   const builtNames = (t.built || []).map((id) => { const b = world.buildings.find((x) => x.id === id); return b ? config.buildings[b.type].name : ''; }).filter(Boolean);
+  // 最近のできごと：0 日目の案内は上の見出し（dayline）に出しているので重ねない。年表のいちばん新しい話の行を 3 つまでと、年表へのリンク
+  const latest = latestLinesHtml(config, history, D.villagers, 3);
   document.getElementById('today').innerHTML =
-    (sn ? `<li>${esc(sn)}</li>` : `<li>木を切った人 ${(t.jobs || {}).wood || 0} 人・岩を掘った人 ${(t.jobs || {}).stone || 0} 人・食べ物を集めた人 ${(t.jobs || {}).food || 0} 人</li>`) +
-    (builtNames.length ? `<li>${esc(builtNames.join('、'))}ができた</li>` : '') +
-    history.slice(-5).reverse().map((h) => `<li><span class="muted">${h.day}日目</span> ${esc(h.text)}</li>`).join('');
+    (sn ? '' : `<li>木を切った人 ${(t.jobs || {}).wood || 0} 人・岩を掘った人 ${(t.jobs || {}).stone || 0} 人・食べ物を集めた人 ${(t.jobs || {}).food || 0} 人</li>`) +
+    (builtNames.length ? `<li>${esc(builtNames.join('、'))}ができた</li>` : '') + latest +
+    (latest ? '<li class="more"><a href="?tab=timeline" data-goto="timeline">年表で続きを見る</a></li>' : '<li class="muted">まだできごとはありません。</li>');
   const plan = state.plan;
   const nextEl = document.getElementById('next');
   if (plan) {
     nextEl.innerHTML = `<b>${esc(config.buildings[plan.build].name)}</b>` + (plan.site ? `（${esc(plan.site.label)}）` : '（場所は投票中）') + ' <a href="#chestcard">あつまり具合を見る</a>';
   } else nextEl.textContent = (state.votes || []).some((v) => v.kind === 'base') ? 'まず拠点（チェストとたき火を置く所）の場所を投票で決めます。建物は、そのまわりに建てます。' : active.length ? '投票で決めます。' : '村人が来たら、投票で決めます。';
   const hm = (iso) => { const d = new Date(iso); return `${(d.getUTCHours() + 9) % 24}時`; };
-  const votes = state.votes || [];
+  // 拠点の投票は、needPost の間は投票の投稿の URL を貼るまで始まっていない（地図の帯と同じ決まり）ので出さない
+  const baseOn = !(config.baseVote || {}).needPost || /instagram\.com\//.test(String(config.votePostUrl || ''));
+  const votes = (state.votes || []).filter((v) => v.kind !== 'base' || baseOn);
+  const baseWait = !votes.length && (state.votes || []).some((v) => v.kind === 'base');
+  const vh = document.getElementById('votehead'); if (vh) vh.hidden = baseWait;
+  document.getElementById('votebox').hidden = baseWait;
   document.getElementById('votebox').innerHTML = votes.length
     ? votes.map((v) => `<b>${esc(v.question)}</b>（${v.kind === 'base' ? (v.closesAt ? `${((d) => `${d.getUTCMonth() + 1}月${d.getUTCDate()}日 ${d.getUTCHours()}時`)(new Date(Date.parse(v.closesAt) + 9 * 3600e3))}まで` : '町が始まる時まで') : `${hm(v.opensAt)}〜${hm(v.closesAt)}`}）<br>` + v.options.map((o) => `${esc(o.key + ' ' + o.name)} <span class="muted">${v.votes[o.key]}票</span>`).join(' / ')).join('<br>') + ' <a href="vote.html">票を見る</a>'
     : active.length ? '次の投票は、今の建物ができたあとに開きます。<a href="vote.html">くわしく</a>' : '村人が来たら「何を建てる？」の投票が始まります。';
@@ -2320,14 +2622,14 @@ function renderPanel(D) {
   // 下のパネル
   const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
   set('howcomment', howCommentHtml(config));
-  set('tab-story', storyHtml(history, D.villagers));
+  set('islandrules', islandRulesHtml(config));
   set('tab-timeline', timelineHtml(config, history, D.villagers));
   set('nowchips', `<span class="chip day">${state.day}日目</span><span class="chip" id="clocknow"></span><span class="chip">${esc(state.weather)}</span><span class="chip">住民 <b>${active.length}</b></span>` +
     (state.followers != null ? `<span class="chip">フォロワー <b>${esc(state.followers)}</b></span>` : ''));
   const bv = (state.votes || []).find((v) => v.kind === 'base');
   const bvOn = bv && (!(config.baseVote || {}).needPost || /instagram\.com\//.test(String(config.votePostUrl || ''))); // 地図の帯と同じ決まり
   set('nowband', versusBand(state, config) + (bvOn ? baseBanner(bv, config) : ''));
-  set('bldlist', esc(buildingsText(world, config)));
+  set('bldlist', buildOrderHtml(world, config)); // 島の建物（建った順。前の歴史のページの「建った順」）
   const info = document.getElementById('info'); if (info) setupTabs(info);
 }
 

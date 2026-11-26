@@ -137,10 +137,45 @@ export function makePen() {
     box(W, 0.1, 0.08, 0xa47a4a, 0, y, -W / 2, g); box(0.08, 0.1, W, 0xa47a4a, s * W / 2, y, 0, g);
     box(W / 2 - 0.6, 0.1, 0.08, 0xa47a4a, s * (W / 4 + 0.3), y, W / 2, g);
   }
-  // 水おけ・干し草・えさ箱
-  box(1.4, 0.4, 0.5, 0x6b4628, 2.4, 0.2, -2.6, g); box(1.2, 0.06, 0.34, 0x5d9cc4, 2.4, 0.38, -2.6, g);
-  box(0.9, 0.6, 0.9, 0xd8b85a, -2.5, 0.3, -2.5, g); box(0.92, 0.08, 0.92, 0xb8963c, -2.5, 0.42, -2.5, g); box(0.7, 0.2, 0.7, 0xe6c86a, -2.5, 0.7, -2.5, g);
+  // 門は閉じた戸（中の動物が出られない）：横板 2 枚・すじかい・かんぬき。柱は戸の両わきに太めのもの
+  for (const s of [1, -1]) { box(0.24, 1.15, 0.24, 0x5e3d20, s * W / n, 0.575, W / 2, g); box(0.28, 0.06, 0.28, 0x7a5230, s * W / n, 1.17, W / 2, g); }
+  for (const y of [0.42, 0.84]) { box(1.6, 0.14, 0.1, 0x9b6b3d, 0, y, W / 2, g); box(1.6, 0.04, 0.11, 0xb88a58, 0, y + 0.07, W / 2, g); }
+  const brace = box(0.1, 0.62, 0.08, 0x8a5e36, 0, 0.63, W / 2 + 0.01, g); brace.rotation.z = 1.0;
+  box(0.34, 0.08, 0.16, 0x3a3a3e, 0.5, 0.63, W / 2 + 0.06, g); // かんぬき（鉄）
+  // 水おけ・干し草（柵の奥の角。animalmove.js の PEN.props と同じ所）
+  box(1.4, 0.4, 0.5, 0x6b4628, 2.4, 0.2, -3.12, g); box(1.2, 0.06, 0.34, 0x5d9cc4, 2.4, 0.38, -3.12, g); box(1.44, 0.06, 0.08, 0x8a5e36, 2.4, 0.42, -2.87, g);
+  box(0.9, 0.6, 0.9, 0xd8b85a, -2.98, 0.3, -2.98, g); box(0.92, 0.08, 0.92, 0xb8963c, -2.98, 0.42, -2.98, g); box(0.7, 0.2, 0.7, 0xe6c86a, -2.98, 0.7, -2.98, g);
   return g;
+}
+
+// ---------- サメ（海の沖。水面から出た背びれ・背中の少し・しっぽの先。頭は +x 向き） ----------
+//   group の y = 0 が水面。背びれは上ほど細く、うしろへ反った段々（前のふちは明るく、うしろは暗く）
+export function makeShark() {
+  const g = new THREE.Group();
+  const fin = new THREE.Group(); g.add(fin);
+  const steps = [[0.92, 0.0], [0.76, -0.08], [0.6, -0.16], [0.46, -0.24], [0.33, -0.31], [0.21, -0.37]];
+  steps.forEach(([w, dx], i) => {
+    const y = 0.085 + i * 0.17, d = 0.17 - i * 0.014;
+    box(w, 0.17, d, i % 2 ? 0x56636f : 0x4d5a66, dx, y, 0, fin);
+    box(0.08, 0.17, d + 0.01, 0x7f8c98, dx + w / 2 - 0.04, y, 0, fin); // 前のふち（光が当たる）
+    box(0.07, 0.17, d + 0.01, 0x3a4550, dx - w / 2 + 0.035, y, 0, fin); // うしろのふち（かげ）
+  });
+  box(0.14, 0.08, 0.08, 0x8a97a3, -0.42, 1.06, 0, fin); // とがった先
+  // 背中は水の中（水面ごしだと明るい板に見えて、いかだのようになるので作らない）
+  const tail = new THREE.Group(); tail.position.set(-1.55, 0, 0); g.add(tail);
+  // 尾びれは水の中（背びれからはなれた小さな箱に見えるので、水面には出さない）。うしろへ引く波の線でしっぽの動きを見せる
+  // 白い波：背びれの前で割れる波と、うしろへ引く 2 本の線
+  const wake = [];
+  const wv = (w, d, x, z, ry) => { const m = box(w, 0.04, d, 0xeef6fb, x, 0.02, z, g); m.rotation.y = ry; m.castShadow = false; wake.push(m); return m; };
+  wv(0.55, 0.1, 0.42, 0.14, 0.55); wv(0.55, 0.1, 0.42, -0.14, -0.55); wv(0.9, 0.08, -0.35, 0.34, 0.2); wv(0.9, 0.08, -0.35, -0.34, -0.2); wv(0.6, 0.07, -1.25, 0.52, 0.3); wv(0.6, 0.07, -1.25, -0.52, -0.3);
+  g.userData.shark = { fin, tail, wake };
+  return g;
+}
+// rise 0..1（水面に出ている度合い）。しっぽの先を左右にふり、波は水面に出ている時だけ
+export function animateShark(g, t, rise) {
+  const S = g.userData.shark; if (!S) return;
+  S.tail.rotation.y = Math.sin(t * 3.1) * 0.35;
+  S.wake.forEach((m, i) => { m.visible = rise > 0.75; m.scale.x = 0.85 + 0.25 * Math.sin(t * 4 + i * 1.3); if (i >= 4) m.position.z = (i % 2 ? -0.52 : 0.52) + Math.sin(t * 3.1) * 0.18; }); // うしろの波はしっぽのふりに合わせてゆれる
 }
 
 // ---------- 動物（ウシ・ヒツジ・ニワトリ・ブタ） ----------
@@ -197,11 +232,12 @@ export function makeAnimal(kind) {
   return g;
 }
 // move 0..1（歩いている強さ）、graze 0..1（草を食べる）
-export function animateAnimal(g, t, move, graze) {
+// run：走って逃げている時（脚を速く大きく動かし、体がはねる）
+export function animateAnimal(g, t, move, graze, run = false) {
   const A = g.userData.animal; if (!A) return;
-  const sp = A.kind === 'chicken' ? 14 : 7;
-  A.legs.forEach((l, i) => { l.rotation.z = Math.sin(t * sp + (i % 2 ? Math.PI : 0) + (i > 1 ? Math.PI : 0)) * 0.5 * move; });
-  A.body.position.y = Math.abs(Math.sin(t * sp)) * 0.03 * move;
+  const sp = (A.kind === 'chicken' ? 14 : 7) * (run ? 2 : 1);
+  A.legs.forEach((l, i) => { l.rotation.z = Math.sin(t * sp + (i % 2 ? Math.PI : 0) + (i > 1 ? Math.PI : 0)) * (run ? 0.8 : 0.5) * move; });
+  A.body.position.y = Math.abs(Math.sin(t * sp)) * (run ? 0.09 : 0.03) * move;
   A.head.rotation.z = -graze * (A.kind === 'chicken' ? 1.0 : 0.7) + Math.sin(t * 2) * 0.04;
   A.head.position.y = A.headY - graze * (A.kind === 'chicken' ? 0.15 : 0.3);
 }

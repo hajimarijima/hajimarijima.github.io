@@ -724,7 +724,7 @@ t('釣り・畑・動物：同じ種なら同じ結果・動物は減らない�
       execFileSync(process.execPath, [path.join(ROOT, 'tools/sim.js'), '--demo', '--days', '5'], { env });
       counts.push(rd('world.json').animals.length);
     }
-    const out = { n0, counts, world: rd('world.json'), history: rd('history.json'), store: rd('state.json').store };
+    const out = { n0, counts, world: rd('world.json'), history: rd('history.json'), store: rd('state.json').store, state: rd('state.json') };
     fs.rmSync(dir, { recursive: true, force: true });
     return out;
   };
@@ -732,7 +732,10 @@ t('釣り・畑・動物：同じ種なら同じ結果・動物は減らない�
   assert.deepStrictEqual(a.world.animals, b.world.animals, '動物の動きが同じ');
   assert.deepStrictEqual(a.world.fields, b.world.fields, '畑が同じ');
   assert.deepStrictEqual(a.store, b.store, 'チェストの中身が同じ');
-  assert.ok(a.n0 >= 8 && a.counts.every((n) => n === a.n0), '動物は 1 匹も減らない（村人は動物を殺さない）');
+  // 動物は攻撃すると逃げる：減るのは柵の中でしとめた時だけ。ふえるのは柵の中で子が生まれた時だけ
+  const births = a.history.filter((h) => /の子が生まれた/.test(h.text)).length;
+  assert.ok(a.n0 >= 8 && a.world.animals.length === a.n0 + births - (a.state.hunted || 0), `動物の数 = はじめ + 生まれた - しとめた ${a.n0} ${births} ${a.state.hunted} ${a.world.animals.length}`);
+  if (!a.state.hunted) assert.ok(a.counts.every((n) => n >= a.n0), '柵でしとめるまで動物は減らない');
   const firsts = a.history.filter((h) => h.type === 'first').map((h) => h.text).join('\n');
   assert.ok(/はじめて魚を釣った/.test(firsts), '初めての魚 ' + firsts);
   // 柵を建てるかは投票しだいなので、柵ができた時だけ確かめる
@@ -829,7 +832,7 @@ t('切り株はその場所に生えず別の場所に木が出る・建物の�
     }
     for (const r of w.rocks) if (r.hp > 0) for (const b of w.buildings) assert.ok(Math.hypot(b.x - r.x, b.z - r.z) >= clearR - 1e-6, `建物 ${b.id} のそばに岩 ${r.id}`);
     seen.wild = w.fields.filter((f) => f.wild).length;
-    for (const a of w.animals) if (a.pen && a.tamedDay === st.day) assert.ok(a.ledBy && life[a.ledBy] && life[a.ledBy].lure, '柵に入った動物は、種や作物を持った人が連れてきた');
+    for (const a of w.animals) if (a.pen && a.tamedDay === st.day && !a.born) assert.ok(a.ledBy && life[a.ledBy] && life[a.ledBy].lure, '柵に入った動物は、種や作物を持った人が連れてきた');
     for (const [k, L] of Object.entries(life)) {
       assert.ok(L.hp >= 1 && L.hp <= 20 && L.hunger >= 0 && L.hunger <= 20, `体力とおなかは 0〜20 ${k} ${L.hp}/${L.hunger}`);
     }
@@ -2277,7 +2280,7 @@ t('鍛冶：pickJob は見張り（剣）を先に、材料が足りない物は
   assert.ok(!none.job, '羊毛は keep を残すので作れない・ほかの材料もない');
   const lea = SMT.pickJob({ store: { leather: 9 }, people: [{ key: 'x', L: { inv: [], slots: 3, gear: { head: 'iron_cap', body: 'iron_mail', feet: 'iron_boots' } } }], config: cfg, built: [], CR });
   assert.ok(!lea.job, '鉄の防具より弱い革は作らない');
-  assert.ok(!cfg.items.leather.value.wood && /まだ手に入らない/.test(cfg.items.leather.note), '革はまだ手に入らない');
+  assert.ok(!cfg.items.leather.value.wood && /柵の中/.test(cfg.items.leather.note) && cfg.hunting.leather.cow, '革は柵の中の動物をしとめた時だけ手に入る');
   assert.strictEqual(SMT.smithyUnlocked(cfg.smithing, ['workbench'], 99), false);
   assert.strictEqual(SMT.smithyUnlocked(cfg.smithing, ['workbench', 'storehouse'], cfg.smithing.unlock.minDay), true);
 });
@@ -3146,6 +3149,147 @@ at('DM で入居：受け口（worker.mjs）が messages の Webhook を積む�
   } finally { globalThis.fetch = realFetch; W._resetDmConfig(); }
   const src = fs.readFileSync(path.join(ROOT, 'tools', 'webhook', 'worker.mjs'), 'utf8') + fs.readFileSync(path.join(ROOT, 'tools', 'dm.js'), 'utf8');
   assert.ok(!/ghp_|github_pat_|IGQ|EAA[A-Za-z0-9]{10}/.test(src), '鍵をコードに書かない');
+});
+
+// ---------- 島の決まり：動物は攻撃すると逃げる（肉は柵で囲ってから）・海にはサメがいて入れない ----------
+t('動物の体と柵：柵の中の置き場は重ならず柵に入る・外の動物は柵にかからない・逃げる向きは反対', () => {
+  const AM = require('../js/animalmove.js');
+  for (const rot of [0, 0.7, Math.PI / 2]) {
+    const pen = { x: 10, z: -4, rot };
+    for (const kind of Object.keys(AM.BODY)) {
+      const qs = [];
+      for (let i = 0; i < 9; i++) {
+        const s = AM.penSlot(i), w = AM.toWorld(pen, s.x, s.z), q = AM.bodyQuad(kind, w.x, w.z, s.face + rot);
+        assert.ok(AM.insidePen(pen, q), `${kind} の置き場 ${i} が柵からはみ出す（rot ${rot}）`);
+        for (const o of qs) assert.ok(!AM.quadsOverlap(q, o), `${kind} の置き場が重なる ${i}`);
+        qs.push(q);
+      }
+      // 柵ぎわ・外の点
+      assert.ok(!AM.insidePen(pen, AM.bodyQuad(kind, pen.x, pen.z, rot + 0).map((v) => ({ x: v.x + 30, z: v.z }))), '柵の外は中ではない');
+      const edge = AM.toWorld(pen, AM.PEN.half, 0);
+      assert.ok(!AM.clearOfPen(pen, AM.bodyQuad(kind, edge.x, edge.z, 0)), '柵の線にかかる体はだめ');
+      const far = AM.toWorld(pen, 9, 0);
+      assert.ok(AM.clearOfPen(pen, AM.bodyQuad(kind, far.x, far.z, 1.2)), '遠くの体は柵にかからない');
+    }
+    // 柵の点の線はぐるり（門もふさがっている）
+    const pts = AM.penFencePoints(pen, 0.9);
+    for (const p of pts) { const l = AM.toLocal(pen, p.x, p.z); assert.ok(Math.abs(Math.max(Math.abs(l.x), Math.abs(l.z)) - AM.PEN.half) < 1e-6, '柵の点は柱の線の上'); }
+    const gate = AM.toWorld(pen, 0, AM.PEN.half);
+    assert.ok(pts.some((p) => Math.hypot(p.x - gate.x, p.z - gate.z) < 0.5), '門の所にも柵の点（人も動物も通れない）');
+    const out = AM.outsidePen(pen, 3.0, 0.5, 0.95), lo = AM.toLocal(pen, out.x, out.z);
+    assert.ok(Math.max(Math.abs(lo.x), Math.abs(lo.z)) > AM.PEN.half + 0.9, '人は柵の外に立つ');
+  }
+  // 逃げる向き：おそった人と反対。前は (cos, -sin)
+  const h = AM.fleeHeading({ x: 0, z: 0 }, { x: 3, z: 0 }, null, () => true), f = AM.fwd(h);
+  assert.ok(f.x > 0.99, '人と反対へ逃げる ' + h);
+  const h2 = AM.fleeHeading({ x: 0, z: 0 }, { x: 3, z: 0 }, 0, (a) => Math.abs(AM.angDiff(a, 0)) > 0.6);
+  assert.ok(h2 !== null && AM.fwd(h2).x > 0, 'まっすぐ行けなければ少しずらして、やはり離れる向き');
+  assert.strictEqual(AM.fleeHeading({ x: 0, z: 0 }, { x: 3, z: 0 }, 0, () => false), null, '追いつめられたら止まる');
+  // 動物の向きと進む向き：faceOf → fwd でもどる（横歩き・後ろ歩きをしない向きの決まり）
+  for (const [dx, dz] of [[1, 0], [0, 1], [-1, 0.3], [0.2, -1]]) { const v = AM.fwd(AM.faceOf(dx, dz)), L = Math.hypot(dx, dz); assert.ok(Math.abs(v.x - dx / L) < 1e-9 && Math.abs(v.z - dz / L) < 1e-9); }
+});
+t('海のサメ：背びれは沖だけ（陸・浜・橋・桟橋に近づくと沈む）・進む向きを向く・ときどき見える', () => {
+  const AM = require('../js/animalmove.js');
+  const cfg = liveCfg(), S = cfg.sea;
+  assert.ok(S && S.sharks >= 1 && S.margin >= 5, 'config.sea');
+  const w = STORE.readWorld(path.join(ROOT, 'data')); // 読むだけ
+  const world = { ...w, buildings: [...w.buildings, { id: 'dk', type: 'dock', x: 0, z: 49 }] }; // 桟橋があっても近づかない
+  let shown = 0;
+  for (let k = 0; k < S.sharks; k++) for (let tt = 0; tt < 3000; tt += 0.5) {
+    const p = AM.sharkPos(world, k, tt, S);
+    if (p.rise <= 0.03) continue;
+    shown++;
+    assert.ok(AM.seaClear(world, p.x, p.z) > S.margin - 1e-6, `サメが陸・橋・桟橋に近い ${k} ${tt} ${p.x},${p.z}`);
+    assert.ok(!AM.nearLand(world, p.x, p.z, S.margin), '浜に上がらない');
+    const q = AM.sharkPos(world, k, tt + 0.5, S), v = AM.fwd(p.face), dx = q.x - p.x, dz = q.z - p.z, L = Math.hypot(dx, dz);
+    assert.ok(L > 0.3 && (v.x * dx + v.z * dz) / L > 0.95, '進む向きを向く');
+  }
+  assert.ok(shown > 500, 'ときどき水面に出る ' + shown);
+  assert.strictEqual(AM.sharkPos({ buildings: [] }, 0, 1, S), null, '島の町でなければ出ない');
+});
+t('動物を追う：柵がないと逃げられる（日記・歴史）→ 柵が候補の前へ → 柵の中ならしとめて肉・子も生まれる', () => {
+  const HR = require('../js/hours.js');
+  assert.strictEqual(HR.parseCode('ht:a3').action, 'hunt'); assert.strictEqual(HR.hourText(HR.parseCode('ht:a3')), '動物を追いかけている');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-hunt-'));
+  const config = liveCfg();
+  config.hunting = { ...config.hunting, tryP: 1, penTryP: 1, perDay: 1, penAfterFails: 1, breed: { every: 0, p: 1, perDay: 1 } };
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(config));
+  const env = { ...process.env, TOWN_DATA: dir };
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+  const rd = (f) => (f === 'world.json' ? STORE.readWorld(dir) : f === 'life.json' ? STORE.readLife(dir) : JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
+  node('tools/init.js', '--demo');
+  node('tools/sim.js', '--demo', '--days', '4'); // 食べ物の仕事の人が出る 3 日目から追いかける。逃げられた次の日に柵が候補の前へ
+  let w = rd('world.json'), st = rd('state.json'), hist = rd('history.json'), life = rd('life.json');
+  const n0 = w.animals.length;
+  assert.ok((st.huntFails || 0) >= 1, '逃げられた回数');
+  assert.ok(hist.some((h) => /追いかけたが、逃げられた/.test(h.text)), '歴史に「逃げられた」');
+  assert.ok(Object.values(life).some((L) => L.diary.some((d) => /走って逃げてしまった/.test(d.text))), '日記に「逃げてしまった」');
+  assert.ok(Object.values(life).some((L) => /ht:/.test(L.hours || '')), '1 時間の行動に「動物を追う」');
+  assert.ok(hist.some((h) => /柵で囲ってから捕まえよう/.test(h.text)) && st.penAsked, '柵が候補の前に出る');
+  assert.strictEqual(w.animals.length, n0);
+  assert.ok(!Object.values(st.store).length || !st.store.meat, '野の動物から肉は取れない');
+  // 柵を建てた形にして、ブタを 4 頭入れる
+  const c = w.campfire || { x: 0, z: 0 };
+  const pen = { id: 'bpen', type: 'pen', x: c.x + 14, z: c.z + 6, rot: 0, built: st.day };
+  w.buildings.push(pen);
+  w.animals.slice(0, 4).forEach((a, i) => Object.assign(a, { kind: 'pig', pen: pen.id, tamedDay: st.day - 1, x: pen.x + i - 1.5, z: pen.z }));
+  STORE.writeWorld(dir, w);
+  node('tools/sim.js', '--demo');
+  w = rd('world.json'); st = rd('state.json'); hist = rd('history.json');
+  const items = Object.values(rd('life.json')).reduce((m, L) => { for (const [k, n] of Object.entries(L.items || {})) m[k] = (m[k] || 0) + n; return m; }, {});
+  assert.strictEqual(st.hunted, 1, '柵の中の 1 頭をしとめた');
+  assert.ok(items.meat >= config.hunting.meat.pig[0], '生肉が手に入る ' + items.meat);
+  assert.ok(hist.some((h) => /はじめて肉が手に入った/.test(h.text)), '歴史に残る');
+  const pigs = w.animals.filter((a) => a.pen === pen.id && a.kind === 'pig');
+  assert.ok(pigs.length >= config.hunting.keepPerKind, 'ふやすための頭数は残す');
+  assert.ok(w.animals.some((a) => a.born === st.day) && hist.some((h) => /子が生まれた/.test(h.text)), '柵の中で子が生まれる');
+  assert.strictEqual(w.animals.length, n0 - 1 + w.animals.filter((a) => a.born).length, '数が合う');
+  assert.ok(new Set(w.animals.map((a) => a.id)).size === w.animals.length, '動物の id は重ならない');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+t('夜の魔物：3 つ目の大きな島の上だけ（海・段・木・岩に入らない）・重ならない・村の島からは海をはさんで遠い', () => {
+  const FM = require('../js/foemove.js'), AM = require('../js/animalmove.js'), IS = require('../js/island.js'), TG = require('../js/terrain_gen.js');
+  const cfg = liveCfg(), NF = cfg.nightFoes;
+  const kinds = FM.foeKinds(NF);
+  assert.ok(NF && NF.enabled && kinds.length >= 5 && kinds.every((k) => FM.FOE_BODY[k]), 'config.nightFoes');
+  for (const k of ['zombie', 'skeleton', 'mud', 'wolf', 'shroom']) assert.ok(kinds.includes(k), '前からいる敵と新しい 3 種がいっしょに出る ' + k);
+  assert.deepStrictEqual(FM.foeKinds({ counts: { zombie: 2, mud: 1, nope: 3 } }), ['zombie', 'zombie', 'mud'], '種類ごとの数');
+  assert.ok(cfg.enemies && cfg.enemies.enabled === false && /村には来ない/.test(cfg.enemies.note), '村に攻めてくる敵（剣・見張り）はまだ出ない');
+  const world = STORE.readWorld(path.join(ROOT, 'data')); // 読むだけ
+  const isl = FM.foeIsland(world, NF.island), main = world.islands.find((i) => i.id === 'main');
+  assert.ok(isl && isl.id !== 'main' && isl.id !== 'north' && isl.r > main.r, '3 つ目の大きな島');
+  const area = FM.foeArea(world, isl, NF);
+  assert.ok(IS.shoreDist(isl, area.x, area.z) > area.r, 'うろつく所は島の中');
+  assert.ok(-IS.shoreDist(main, area.x, area.z) > 40, 'はじまり島から海をはさんで遠い');
+  const T = TG.makeTerrain({ seed: (cfg.terrain || {}).seed || 'town', seaZ: world.seaZ, islands: world.islands });
+  const obstacles = FM.foeObstacles(T.chunkObjects, area, TG.BLOCK, TG.CHUNK);
+  const fits = FM.makeFoeFits({ isl, heightAt: T.heightAt, obstacles, margin: NF.shore, area });
+  const foes = FM.spawnFoes({ list: kinds, area, fits, heightAt: T.heightAt, seed: 'foes:3', level: NF.level ?? 0 });
+  assert.strictEqual(foes.length, kinds.length, '全員置ける');
+  for (const f of foes) {
+    assert.ok(fits(f.kind, f.x, f.z, f.face, f.h0), '置いた所は歩ける所');
+    for (const g of foes) if (g !== f) assert.ok(!FM.foesTouch(f.kind, f.x, f.z, f.face, g.kind, g.x, g.z, g.face), '魔物どうし重ならない');
+    for (const o of obstacles) assert.ok(Math.hypot(o.x - f.x, o.z - f.z) > o.r, '木・岩にめり込まない');
+  }
+  // 歩ける所の決まり：海・はじまり島・木の上はだめ。頭の先が海に出る向きもだめ
+  const sea = IS.shorePoint(isl, area.ang, -6), f0 = foes[0];
+  assert.ok(!fits('mud', sea.x, sea.z, 0, 0), '海には入らない');
+  assert.ok(!fits('mud', 0, 0, 0, 0), 'はじまり島には来ない');
+  const edge = IS.shorePoint(isl, area.ang, NF.shore + 0.4), outFace = AM.faceOf(Math.cos(area.ang), Math.sin(area.ang));
+  assert.ok(!fits('wolf', edge.x, edge.z, outFace, T.heightAt(edge.x, edge.z)), '頭の先が海に出る向きもだめ');
+  if (obstacles.length) { const o = obstacles[0]; assert.ok(!fits('mud', o.x, o.z, 0, T.heightAt(o.x, o.z)), '木・岩の所はだめ'); }
+  assert.ok(!fits(f0.kind, f0.x, f0.z, f0.face, f0.h0 + TG.BLOCK), '段の高さがちがう所へは行かない');
+  // 行き先はうろつく所の中
+  for (let s = 0; s < 50; s++) { const g = FM.foeGoal(area, 'f1', s); assert.ok(Math.hypot(g.x - area.x, g.z - area.z) <= area.r + 1e-9); }
+  const src = fs.readFileSync(path.join(ROOT, 'js', 'islandpanel.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  assert.ok(/海の向こうの大きな島に魔物/.test(src), 'せつめいの島の決まりに 1 行');
+  const art = fs.readFileSync(path.join(ROOT, 'js', 'nightfoes.js'), 'utf8') + Object.values(FM.FOE_JA).join('');
+  assert.ok(!/マイクラ|マインクラフト|ゾンビ|スケルトン|クリーパー/.test(art), '新しい 3 種は既存の作品の名前を使わない');
+});
+t('せつめいに島の決まり（動物は柵で囲ってから・海にはサメ）', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'js', 'islandpanel.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  assert.ok(/柵で囲ってから/.test(src) && /サメ/.test(src) && /islandrules/.test(src));
+  assert.ok(!/マイクラ|マインクラフト/.test(src + fs.readFileSync(path.join(ROOT, 'js', 'animalmove.js'), 'utf8')));
 });
 
 (async () => {

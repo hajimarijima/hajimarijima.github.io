@@ -515,6 +515,23 @@ const ICONS = {
     puffy(px, g, { b: { c: hex('#a8aeb6'), shine: 0.4 }, d: { c: hex('#7c828a'), flat: true }, r: { c: hex('#cfd4da'), shine: 0.3, flat: true }, m: { c: hex('#fbfbf6'), shine: 0.5, flat: true }, h: { c: hex('#5c6168'), flat: true } }, 'milk');
     put(px, 6, 7, [255, 255, 255]); put(px, 7, 7, [255, 255, 255]);
   },
+  meat(px) {
+    // 生肉：骨つきの赤い肉のかたまり（白い脂のすじ・右上に骨の先）
+    const g = shapeGrid();
+    ellipse(g, 7, 9.2, 5.4, 4.6, 'm');
+    line(g, 9.4, 6.8, 13.0, 3.2, 2.6, 'b');
+    disc(g, 13.6, 3.4, 1.5, 'b'); disc(g, 12.6, 2.2, 1.5, 'b');
+    poly(g, [[3.2, 8.6], [9.6, 6.6], [10.4, 7.6], [3.6, 9.8]], 'f');
+    poly(g, [[4.2, 11.6], [10.6, 9.6], [11.0, 10.6], [4.8, 12.6]], 'f');
+    puffy(px, g, { m: { c: hex('#c8463e'), shine: 0.25, grain: 0.08 }, f: { c: hex('#f2d2c4'), shine: 0.3, flat: true }, b: { c: hex('#efe8d6'), shine: 0.45 } }, 'meat');
+  },
+  leather(px) {
+    // 革：なめした茶色の皮（四すみが少しのびた形・ふちのぬい目）
+    const g = shapeGrid();
+    poly(g, [[2, 3], [6, 4.2], [10, 4.2], [14, 3], [12.8, 8], [14, 13], [10, 11.8], [6, 11.8], [2, 13], [3.2, 8]], 'l');
+    puffy(px, g, { l: { c: hex('#9a6436'), shine: 0.15, grain: 0.1 } }, 'leather');
+    for (const [x, y] of [[5, 6], [8, 5], [11, 6], [11, 10], [8, 10], [5, 10]]) put(px, x, y, hex('#d8b07a'));
+  },
   wool(px) {
     const g = shapeGrid();
     for (const [x, y, r] of [[5.5, 9, 3.4], [10.5, 9, 3.4], [8, 6, 3.6], [8, 11, 3.4]]) disc(g, x, y, r, 'w');

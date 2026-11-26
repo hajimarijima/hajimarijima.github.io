@@ -3,10 +3,12 @@ import { makeSkin } from './skingen.js';
 import { decodeWorld } from './tilemap.js';
 import { diaryPath } from './datafiles.js';
 import { versusTitles } from './versus.js';
+import { icon } from './icons.js'; // 上のメニューのアイコン（Lucide の形）
+import { setupMenu } from './menu.js'; // スマホの右上のメニュー
 export const JOB = { wood: '木を切る', stone: '岩を掘る', food: '食べ物を集める', smith: '鍛冶（道具や防具を作る）' };
 export const RES = { wood: '木材', stone: '石', food: '食べ物' };
 export const RES_COLOR = { wood: '#b07a45', stone: '#8d939b', food: '#6aa84f' };
-export const ACTION = { level: '村のまん中を整地している', chop: '木を切っている', dig: '岩を掘っている', dig_last: '岩を掘り終えた', berry: '木の実を集めている', apple: 'りんごをもいでいる', till: '畑を耕している', tend: '畑の世話をしている', harvest: '畑で収穫している', forage: '草や実を集めている', fish: '池で釣りをしている', ranch: '柵の動物の世話をしている', rest: 'ケガで休んでいる', smith: '鍛冶屋で金づちをふるっている' };
+export const ACTION = { level: '村のまん中を整地している', chop: '木を切っている', dig: '岩を掘っている', dig_last: '岩を掘り終えた', berry: '木の実を集めている', apple: 'りんごをもいでいる', till: '畑を耕している', tend: '畑の世話をしている', harvest: '畑で収穫している', forage: '草や実を集めている', fish: '池で釣りをしている', ranch: '柵の動物の世話をしている', hunt: '動物を追いかけている', rest: 'ケガで休んでいる', smith: '鍛冶屋で金づちをふるっている' };
 
 // 関係の名前と色（tools/social.js の KIND と同じ）
 export const KIND = { family: '家族', best: '親友', friend: '友だち', rival: 'ライバル', crush: '片思い', known: '知り合い' };
@@ -43,14 +45,17 @@ export async function loadDiary(key, L) {
 }
 
 export function nav(current) {
-  const items = [['index.html', '町'], ['history.html', '歴史'], ['vote.html', '投票'], ['people.html', '村人'], ['relations.html', '関係'], ['fish.html', '釣り'], ['badges.html', 'バッジ']];
+  // [ページ, 名前]。NAV_ICON はそのアイコン（js/icons.js）。PC は上の帯、スマホの幅は右上のメニューボタン（js/menu.js・css/style.css）
+  const items = [['index.html', '町'], ['history.html', '年表'], ['vote.html', '投票'], ['people.html', '村人'], ['relations.html', '関係'], ['fish.html', '釣り'], ['badges.html', 'バッジ']];
+  const NAV_ICON = { 'index.html': 'house', 'history.html': 'calendar-days', 'vote.html': 'vote', 'people.html': 'users', 'relations.html': 'share-2', 'fish.html': 'fish', 'badges.html': 'award' };
   const el = document.createElement('header');
   el.className = 'site-head';
   // 町のページは「./」で開く（URL の末尾に index.html が付かないように）
   const link = (h) => (h === 'index.html' ? './' : h);
-  el.innerHTML = '<a class="brand" href="./">はじまり島</a><nav>' +
-    items.map(([h, t]) => `<a href="${link(h)}"${h === current ? ' class="on"' : ''}>${t}</a>`).join('') + '</nav>';
+  el.innerHTML = '<a class="brand" href="./">はじまり島</a><nav aria-label="ページ">' +
+    items.map(([h, t]) => `<a href="${link(h)}"${h === current ? ' class="on" aria-current="page"' : ''}>${icon(NAV_ICON[h], { size: 18 })}<span>${t}</span></a>`).join('') + '</nav>';
   document.body.prepend(el);
+  setupMenu(el, items.map(([h, t]) => ({ href: link(h), text: t, icon: NAV_ICON[h], on: h === current })));
 }
 
 // 村人が 0 人の時の案内（どの画面でも同じ言葉）

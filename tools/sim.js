@@ -100,6 +100,9 @@ function stepDay(S) {
   const baseDecided = BASE.decideBase(S, { day, now: S.now || new Date(), hist });
   // 釣り・畑・動物は別の乱数（ここが増えても、木・岩・投票の流れは変わらない）
   const R2 = makeRng(state.seed + ':farm:' + day);
+  // 動物を追う・しとめる・子が生まれるも別の乱数（ほかの流れは変えない）。島の決まり「動物は攻撃すると逃げる。肉は柵で囲ってから」
+  const RH = makeRng(state.seed + ':hunt:' + day);
+  const HU = config.hunting && config.hunting.enabled !== false ? config.hunting : null;
   // 釣った魚の大きさも別の乱数（大きさを足しても、ほかの流れは変わらない）。島の新記録は魚ごとに 1 日 1 行（同じ日にまた破られたら、その行を書きかえる）
   const RF = makeRng(state.seed + ':fishsize:' + day), recToday = {};
   const fishCatch = (v, L, c, it) => {
@@ -322,6 +325,13 @@ function stepDay(S) {
       hist('event', `${B(sb).name}が「何を建てる？」の候補に入った。建つと、村人のひとりが鍛冶職人になって、道具や防具を作る。`, { buildingType: sb });
     }
   }
+  // 動物に penAfterFails 回逃げられたら、「動物の柵」を「何を建てる？」の候補の前（次の 3 つの中）へ出す（1 回だけ）
+  if (HU && B('pen') && active.length && !state.penAsked && (state.huntFails || 0) >= (HU.penAfterFails ?? 2) && !builtTypes.includes('pen') && !(state.plan && state.plan.build === 'pen')) {
+    state.penAsked = day;
+    const i = state.pool.indexOf('pen'); if (i >= 0) state.pool.splice(i, 1);
+    state.pool.splice(Math.min(1, state.pool.length), 0, 'pen');
+    hist('event', `動物は追いかけると逃げてしまう。「柵で囲ってから捕まえよう」という話になり、${B('pen').name}（木材 ${(B('pen').cost || {}).wood || 0}）が「何を建てる？」の候補の前に出た。`, { buildingType: 'pen' });
+  }
   const choices = () => {
     const out = [];
     for (const b of state.pool) {
@@ -446,6 +456,21 @@ function stepDay(S) {
   const bushCap = Math.ceil(world.bushes.length * (H.bushShare ?? 1));
   let ranchTaken = null; // 動物の世話は 1 日 1 人（もらえる物はその人がまとめて受け取る）
   const center = world.campfire;
+  let huntN = 0; // 今日、動物を追った回数（村ぜんたい）
+  // 柵の中で、しとめてよい動物（同じ種類が keepPerKind 頭より多い種類の、いちばん新しく来た 1 頭）
+  const penPrey = () => {
+    const inPen = world.animals.filter((a) => a.pen && world.buildings.some((b) => b.id === a.pen));
+    const n = {}; for (const a of inPen) n[a.kind] = (n[a.kind] || 0) + 1;
+    const ok = inPen.filter((a) => n[a.kind] > (HU.keepPerKind ?? 2)).sort((a, b) => n[b.kind] - n[a.kind] || (b.tamedDay || 0) - (a.tamedDay || 0) || (a.id < b.id ? -1 : 1));
+    return ok[0] || null;
+  };
+  // 野の動物（行ける島の上で、村のまん中に近い 3 頭から、名前と日で 1 頭）
+  const wildPrey = (c) => {
+    const w = world.animals.filter((a) => !a.pen && (!ISL || IS.onLand(world, a.x, a.z, 0)));
+    const o = center || { x: 0, z: 0 };
+    w.sort((a, b) => Math.hypot(a.x - o.x, a.z - o.z) - Math.hypot(b.x - o.x, b.z - o.z) || (a.id < b.id ? -1 : 1));
+    return w.length ? w[hashStr(c.v.key + ':prey:' + day) % Math.min(3, w.length)] : null;
+  };
   const claimT = new Map(), claimR = new Map(); // 木・岩 → 今たたいている人の数（新しく選ぶ時は避ける。手伝う時は入る）
   const claim = (m, id, d) => { const n = (m.get(id) || 0) + d; if (n > 0) m.set(id, n); else m.delete(id); };
   const torchOK = (L) => !!(H.torchItem && L.inv.some((s) => s && s.item === H.torchItem));
@@ -623,7 +648,7 @@ function stepDay(S) {
     const people = active.map((v) => { const l = life[v.key]; return { key: v.key, L: l, guard: !!(l && l.inv && I.getTool(l.inv, 'sword')) }; });
     const r = SMT.pickJob({ store: state.store, people, config, built, CR });
     if (!r.job) {
-      if (r.want && !c.smithWant) { c.smithWant = 1; c.notes.push(`鍛冶屋で${ITEMS[r.want.key].name}を作りたかったが、チェストの材料が足りない。`); }
+      if (r.want && !c.smithWant) { c.smithWant = 1; c.notes.push(`鍛冶屋で${ITEMS[r.want.key].name}を作りたかったが、チェストに材料がそろっていなかった。`); }
       return null;
     }
     const j = r.job, T = life[j.to], to = active.find((v) => v.key === j.to), nm = ITEMS[j.key].name;
@@ -727,6 +752,11 @@ function stepDay(S) {
     let sub = R2.weighted(subs);
     const forced = { '漁業': 'fish', '牧場': 'ranch' }[c.want];
     if (forced && subs.some(([s]) => s === forced)) sub = forced;
+    // 動物を追う（村ぜんたいで 1 日 perDay 回まで）：柵の中にしとめてよい動物がいれば penTryP、いなければ tryP（野の動物は必ず逃げる）
+    if (HU && !forced && sub !== 'ranch' && huntN < (HU.perDay ?? 1)) {
+      const prey = penPrey(), wild = prey ? null : wildPrey(c);
+      if ((prey || wild) && RH.chance(prey ? HU.penTryP : HU.tryP)) { sub = 'hunt'; huntN++; c.prey = (prey || wild).id; }
+    }
     if (sub === 'ranch') ranchTaken = c.v.key;
     return (c.sub = sub);
   };
@@ -737,6 +767,7 @@ function stepDay(S) {
       return { action: 'fish', target: c.spot };
     }
     if (sub === 'ranch' && !c.ranched) return { action: 'ranch', target: (world.buildings.find((b) => b.type === 'pen') || {}).id || null };
+    if (sub === 'hunt' && !c.hunted && !night) return { action: 'hunt', target: c.prey };
     if (sub === 'farm' || sub === 'ranch') {
       const ripe = world.fields.filter((f) => f.stage >= (f.max || 3) && f.day !== day && !takenFields.has(f.id)); // 今日まいた・世話した畑は、明日から
       if (ripe.length) return { action: 'harvest', f: R2.pick(ripe) };
@@ -1004,6 +1035,7 @@ function stepDay(S) {
         else if (FC.treasure.items.some(([k2]) => k2 === it)) { first('treasure', `${v.display}が${pl}から${ITEMS[it].name}を釣り上げた。村ではじめての宝物。`, { who: [v.key], item: it }); c.notes.push(`${ITEMS[it].name}が釣れた。`); }
       }
       give(c, out); wear(); c.target = c.target || (sea ? 'sea' : 'pond');
+      if (sea && config.sea && config.sea.sharks !== 0) first('shark', `${v.display}が海べで釣りをしていたら、沖にサメの背びれが見えた。海にはサメがいるので、村人は海に入らない（浜から釣るだけ）。`, { who: [v.key] });
       return finish(sea ? 'f:sea' : 'f', 'light');
     }
     if (a.action === 'ranch') { // 柵の中の動物の世話。もらえる物は 1 日 1 回
@@ -1017,6 +1049,27 @@ function stepDay(S) {
       }
       give(c, Object.entries(out)); c.ranchGot = Object.keys(out).length > 0; c.target = c.target || a.target;
       return finish('n', 'light');
+    }
+    if (a.action === 'hunt') { // 動物を追う 1 時間。動物は攻撃すると逃げる：柵の中の動物だけ、しとめられる
+      c.hunted = true;
+      const AN = config.animals, an = world.animals.find((x) => x.id === a.target), nm = an ? AN.kinds[an.kind].name : '動物';
+      const penB = an && an.pen && world.buildings.find((b) => b.id === an.pen);
+      if (!an || !penB) {
+        state.huntFails = (state.huntFails || 0) + 1;
+        c.ev.push({ h, text: `${tm(h)}、野原の${nm}を追いかけてたたこうとしたが、${nm}は走って逃げてしまった。柵で囲わないと捕まえられない。` });
+        first('hunt_fail', `${v.display}が野原の${nm}を追いかけたが、逃げられた。動物はおそうと逃げるので、肉を取るには柵で囲ってからでないといけない。`, { who: [v.key], animal: an ? an.id : null });
+        return finish('ht:' + (an ? an.id : ''), 'heavy');
+      }
+      const rng = (m) => (m ? RH.int(m[0], m[1]) : 0);
+      const meat = rng((HU.meat || {})[an.kind]), leather = rng((HU.leather || {})[an.kind]);
+      world.animals.splice(world.animals.indexOf(an), 1);
+      state.hunted = (state.hunted || 0) + 1;
+      give(c, [['meat', meat], ['leather', leather]]);
+      c.ev.push({ h, text: `${tm(h)}、柵の中の${nm}を追いつめてしとめた。逃げ場がないので、つかまえられた。${haulText({ meat, leather }) || ''}。` });
+      first('hunt', `${v.display}が柵の中の${nm}をしとめて、村ではじめて肉が手に入った。動物は逃げるので、柵で囲ってから捕まえる。`, { who: [v.key], animal: an.id, item: 'meat' });
+      if (leather) first('leather', `はじめて${nm}の革が手に入った。革の防具の材料になる。`, { who: [v.key], item: 'leather' });
+      c.target = c.target || penB.id; c.pos = penB;
+      return finish('ht:' + an.id, 'heavy');
     }
     if (a.action === 'harvest') {
       if (slow) { wear(); return finish('h:' + a.f.id, 'heavy'); }
@@ -1228,6 +1281,7 @@ function stepDay(S) {
       fish: c.target === 'sea' ? (Object.keys(c.got).length ? [`${t0}海べで釣りをした。波の上のうきが沈むのを待って、${haul}を釣り上げた。`, `${t0}釣りざおを持って海べへ行った。${haul}。`] : [`${t0}海べで釣りをしたが、何もかからなかった。`])
         : Object.keys(c.got).length ? [`${t0}池で釣りをした。うきが沈むのを待って、${haul}を釣り上げた。`, `${t0}釣りざおを持って池へ行った。${haul}。`] : [`${t0}池で釣りをしたが、何もかからなかった。`],
       smith: [`${t0}鍛冶屋の金床で、金づちをふるった。`, `${t0}鍛冶屋で火をおこして、金づちをふるった。`],
+      hunt: [`${t0}動物を追いかけた。${haul}。`],
       ranch: c.ranchGot ? [`${t0}柵の中の動物に、えさと水をやった。${haul}をもらった。`, `${t0}動物の世話をした。${haul}をもらった。`] : [`${t0}柵の中の動物に、えさと水をやった。`],
     };
     // 日記は 1 日の時刻の順に書く（できごとごとに時刻 h を付けて並べる）。夜おそく寝た文は、いちばん最後（c.tail）
@@ -1405,6 +1459,27 @@ function stepDay(S) {
         a.x = +(pen.x + ((i % 4) - 1.5) * 1.6 + R2.range(-0.3, 0.3)).toFixed(2); a.z = +(pen.z + (Math.floor(i / 4) - 0.5) * 1.8 + R2.range(-0.3, 0.3)).toFixed(2);
         inPen.push(a);
         first('tame', `野の${AN.kinds[a.kind].name}を、はじめて柵の中に入れて飼い始めた。`, { animal: a.id });
+      }
+    }
+    // 柵の中で子が生まれる（config.hunting.breed）：同じ種類が 2 頭以上・柵に空きがある・前に来た（生まれた）日から every 日たった
+    const BR = HU && HU.breed;
+    if (BR) {
+      let born = 0;
+      for (const pen of world.buildings.filter((b) => b.type === 'pen')) {
+        const inPen = world.animals.filter((a) => a.pen === pen.id);
+        for (const kind of Object.keys(AN.kinds)) {
+          if (born >= (BR.perDay ?? 1) || inPen.length >= AN.penCap) break;
+          const same = inPen.filter((a) => a.kind === kind);
+          if (same.length < 2) continue;
+          const last = Math.max(...same.map((a) => a.born || a.tamedDay || 0));
+          if (day - last < (BR.every ?? 3) || !RH.chance(BR.p ?? 0.4)) continue;
+          state.animalSeq = Math.max(state.animalSeq || 0, ...world.animals.map((a) => parseInt(String(a.id).slice(1), 10) || 0)) + 1;
+          const a = { id: 'a' + state.animalSeq, kind, x: +(pen.x + RH.range(-1.5, 1.5)).toFixed(2), z: +(pen.z + RH.range(-1.5, 1.5)).toFixed(2), pen: pen.id, tamedDay: day, born: day };
+          a.wildX = a.x; a.wildZ = a.z;
+          world.animals.push(a); inPen.push(a); born++;
+          const nm = AN.kinds[kind].name;
+          if (!first('born_' + kind, `柵の中で、はじめて${nm}の子が生まれた。`, { animal: a.id })) hist('event', `柵の中で${nm}の子が生まれた（柵の動物 ${inPen.length} 頭）。`, { animal: a.id });
+        }
       }
     }
   }
@@ -1647,6 +1722,12 @@ function stepDay(S) {
   };
   state.night = config.enemies && config.enemies.enabled ? N.stepNight({ day, seed: state.seed, active, life, world, state, config, hist, gear: nightGear, guards: ctxs.filter((c) => c.awakeNight && !c.off).map((c) => c.v.key), outside: ctxs.filter((c) => c.outNight && R4.chance(H.outsideHurtP)).map((c) => c.v.key) }) : null;
   syncRes();
+  // 夜の魔物（config.nightFoes。町の画面で見るだけ）：3 つ目の大きな島に夜だけ出る。海とサメで渡れないので村には来ない（村の夜の戦いは enemies）。
+  //   夜に起きていた人がいれば、はじめての時だけ歴史に書く
+  if (config.nightFoes && config.nightFoes.enabled !== false && ISL && world.islands.some((i) => i.id === (config.nightFoes.island || 'far'))) {
+    const saw = ctxs.find((c) => c.awakeNight && !c.off);
+    if (saw) first('night_foes', `${day}日目の夜、${saw.v.display}が海の向こうの大きな島を見ると、魔物の目がいくつも光っていた。海とサメがいるので、魔物は村には来られない。`, { who: [saw.v.key] });
+  }
   if (state.night) {
     const NT = state.night, XP = IC.xp, BG = config.badges;
     const nameOf = (k) => (active.find((v) => v.key === k) || { display: k }).display;
