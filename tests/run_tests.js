@@ -1427,4 +1427,135 @@ t('作り直し（--keep-villagers）：住んでいる人は印のまま残り�
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+// ---------- 拠点の場所の投票（0 日目に A/B/C、1 日目に決まる） ----------
+const BASE = require('../tools/base');
+t('拠点の投票：0 日目は候補 A/B/C が陸の上に出て、チェスト・たき火・整地の草はまだない', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-base0-'));
+  fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+  const env = { ...process.env, TOWN_DATA: dir };
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js')], { env });
+  const st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')), w = STORE.readWorld(dir);
+  const bv = st.votes.find((v) => v.kind === 'base');
+  assert.ok(bv && bv.options.length === 3 && bv.question === '拠点はどこにする？', '拠点の投票が開いている');
+  assert.deepStrictEqual(bv.options.map((o) => o.key), ['A', 'B', 'C']);
+  assert.ok(!w.chest.day && !w.buildings.length && !(w.debris || []).length, 'チェスト・建物・整地の草はまだない');
+  const m = w.islands[0];
+  for (const o of bv.options) {
+    assert.ok(ISX.shoreDist(m, o.x, o.z) >= 20, `${o.key} ${o.name} は岸から 20 以上（${ISX.shoreDist(m, o.x, o.z).toFixed(1)}）`);
+    assert.ok(!w.trees.some((t) => Math.hypot(t.x - o.x, t.z - o.z) < 5) && !w.rocks.some((r) => Math.hypot(r.x - o.x, r.z - o.z) < 5), `${o.key} の旗のまわりは空いている`);
+    assert.ok(Math.hypot(o.x - w.pond.x, o.z - w.pond.z) > w.pond.r + 10.5, `${o.key} の広場が池にかからない`);
+    // そこに決まったら、家や建物の区画が十分ある
+    const w2 = JSON.parse(JSON.stringify(w));
+    BASE.applyBase(w2, o, { seed: 'x', key: o.key, name: o.name });
+    const mp = w2.plots.filter((p) => !p.island);
+    assert.ok(mp.length >= 16, `${o.key} のまわりの区画 ${mp.length}`);
+    for (const p of mp) assert.ok(ISX.onLand(w2, p.x, p.z, 8, { open: false }) && Math.hypot(p.x - o.x, p.z - o.z) < 28, '区画は拠点のまわりの陸の上');
+  }
+  for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) assert.ok(Math.hypot(bv.options[i].x - bv.options[j].x, bv.options[i].z - bv.options[j].z) >= 20, '候補どうしは離れている');
+  assert.ok(JSON.parse(fs.readFileSync(path.join(dir, 'history.json'), 'utf8')).some((h) => h.kind === 'base' && /拠点の場所の投票が始まった/.test(h.text)), '歴史に残る');
+  // 見本（--demo）は今までどおり島のまん中に拠点
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js'), '--demo'], { env });
+  assert.ok(!JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')).votes.length && STORE.readWorld(dir).debris.length, '見本は拠点の投票なし');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+t('拠点の投票：1 人 1 票（最後のコメント）・持ち主は数えない・「Ａ」「a」「浜辺」も読む・2 つ書いたら数えない', () => {
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  cfg.joinExclude = ['owner_b'];
+  const state = { votes: [] };
+  const v = BASE.openBaseVote(state, cfg, new Date('2026-11-27T10:00:00+09:00'));
+  const c = (id, u, text, h) => ({ from: { id, username: u }, text, timestamp: `2026-11-27T${String(h).padStart(2, '0')}:00:00+09:00` });
+  const inbox = { owner: 'owner_a', voteComments: [
+    c('1', 'aa', 'Ａ', 11), c('2', 'bb', 'a がいい', 11), c('3', 'cc', '浜辺の近くがいい！', 12), c('4', 'dd', '池', 12),
+    c('5', 'ee', 'B', 12), c('5', 'ee', 'C にする', 13), // 書き直した人は最後だけ
+    c('6', 'ff', 'BとCで迷う', 13), // 2 つは数えない
+    c('7', 'owner_a', 'C', 13), c('8', 'Owner_B', 'C', 13), // 持ち主（inbox.owner・joinExclude）は数えない
+    c('9', 'gg', '森の入口', 23), c('10', 'hh', 'A', 9), // 0 時より前は数えない（9 時は数える）
+  ] };
+  BASE.tallyBase(v, { inbox, config: cfg, now: new Date('2026-11-27T22:00:00+09:00') });
+  assert.deepStrictEqual(v.votes, { A: 4, B: 1, C: 1 }, '23 時のコメントは「今」より後なので、まだ数えない');
+  assert.strictEqual(v.voters, 6);
+  BASE.tallyBase(v, { inbox, config: cfg, now: new Date('2026-11-28T06:00:00+09:00') });
+  assert.deepStrictEqual(v.votes, { A: 4, B: 1, C: 2 });
+  assert.strictEqual(P.parseChoice('浜辺', BASE.wordsOf(v, cfg)), 'A');
+  assert.strictEqual(P.parseChoice('浜辺と池', BASE.wordsOf(v, cfg)), null);
+  // 同点・票なし：fallback（B）がその中にあれば B、なければ A→B→C の順
+  assert.deepStrictEqual(BASE.winnerOf({ votes: { A: 0, B: 0, C: 0 } }, cfg), { key: 'B', how: 'none' });
+  assert.deepStrictEqual(BASE.winnerOf({ votes: { A: 3, B: 3, C: 1 } }, cfg), { key: 'B', how: 'tie' });
+  assert.deepStrictEqual(BASE.winnerOf({ votes: { A: 3, B: 1, C: 3 } }, cfg), { key: 'A', how: 'tie' });
+  assert.deepStrictEqual(BASE.winnerOf({ votes: { A: 1, B: 2, C: 5 } }, cfg), { key: 'C', how: 'win' });
+});
+t('拠点の投票：1 日目にする朝に決まり、そこにチェスト・たき火・広場・区画・テントが移る（票なしは決めておいた場所）', () => {
+  const run = (voteComments) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-base1-'));
+    const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+    cfg.startAt = null; cfg.joinExclude = ['town_owner2'];
+    fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
+    const env = { ...process.env, TOWN_DATA: dir };
+    const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+    node('tools/init.js', '--seed', 'bt', '--start', '2026-11-01');
+    fs.mkdirSync(path.join(dir, 'inbox'));
+    const inbox = path.join(dir, 'inbox', 'instagram.json');
+    const now = new Date();
+    const ts = (min) => new Date(now.getTime() - min * 60e3).toISOString();
+    const cm = (id, u, text, min) => ({ from: { id, username: u }, text, timestamp: ts(min) });
+    fs.writeFileSync(inbox, JSON.stringify({ owner: 'town_owner', joinComments: [cm('91', 'kaito_a', '住みたい ピッケル', 30), cm('92', 'mio_b', '住みたい 釣り', 30)], voteComments }));
+    node('tools/join.js');
+    const read = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    const live = read('state.json').votes.find((v) => v.kind === 'base');
+    node('tools/sim.js', '--gate', '--start');
+    const out = { st: read('state.json'), w: STORE.readWorld(dir), life: STORE.readLife(dir), hist: read('history.json'), live, cfg };
+    // 何日か進めても、建物は拠点のまわりに建つ
+    node('tools/sim.js', '--days', '12');
+    out.w12 = STORE.readWorld(dir);
+    fs.rmSync(dir, { recursive: true, force: true });
+    return out;
+  };
+  const c = (id, u, text) => ({ from: { id, username: u }, text, timestamp: new Date(Date.now() - 20 * 60e3).toISOString() });
+  const r = run([c('1', 'a1', 'C'), c('2', 'a2', '森'), c('3', 'a3', 'ｃ'), c('4', 'a4', 'A'), c('5', 'town_owner', 'A'), c('6', 'town_owner2', 'A'), c('7', 'a7', 'A')]);
+  assert.ok(r.live && r.live.votes.C === 3 && r.live.votes.A === 2, '0 日目の受付（join.js）で票を数える（持ち主は数えない）');
+  const C = r.cfg.baseVote.candidates[2];
+  assert.strictEqual(r.st.day, 1);
+  assert.ok(!r.st.votes.some((v) => v.kind === 'base'), '拠点の投票は締まった');
+  assert.ok(r.st.base && r.st.base.key === 'C' && r.st.base.votes.C === 3, '票の多い C に決まった');
+  assert.ok(r.w.square.x === C.x && r.w.square.z === C.z && r.w.base.key === 'C', '広場は C の場所');
+  assert.ok(Math.hypot(r.w.chest.x - C.x, r.w.chest.z - C.z) < 7 && r.w.chest.day === 1, 'チェストは拠点に、1 日目に置く');
+  assert.ok(Math.hypot(r.w.campfire.x - C.x, r.w.campfire.z - C.z) < 6, 'たき火（テントのまわり）も拠点に');
+  assert.ok(!r.w.trees.some((t) => !t.gone && t.state === 'tree' && Math.hypot(t.x - C.x, t.z - C.z) < 10), '拠点のまわりの木はどけた');
+  assert.ok(r.hist.some((h) => h.type === 'base' && /拠点が「C 森の入口」に決まった（A 2票・B 0票・C 3票/.test(h.text)), '歴史：' + (r.hist.find((h) => h.type === 'base') || {}).text);
+  for (const L of Object.values(r.life)) assert.ok(L.diary.some((d) => d.day === 1 && /拠点が森の入口に決まった/.test(d.text)), 'みんなの日記に残る');
+  const where = r.st.votes.find((v) => v.kind === 'where');
+  assert.ok(where && r.st.votes.some((v) => v.kind === 'what'), '「何を」「どこに」の投票はそのあと開く');
+  for (const o of where.options) assert.ok(Math.hypot(o.x - C.x, o.z - C.z) < 30, '建てる場所の候補は拠点のまわり ' + o.name);
+  const mp = r.w.plots.filter((p) => !p.island);
+  assert.ok(mp.every((p) => Math.hypot(p.x - C.x, p.z - C.z) < 28), '区画は拠点のまわり');
+  assert.ok(Date.parse(r.st.votes.find((v) => v.kind === 'what').opensAt) >= Date.parse(r.st.base.closesAt) - 1000, '拠点の票は「何を」に数えない');
+  for (const b of r.w12.buildings) assert.ok(b.plot === 'ring' || b.island || Math.hypot(b.x - C.x, b.z - C.z) < 30 || /coast/.test(b.plot), '建物は拠点のまわり ' + b.id);
+  // 票がない時：決めておいた場所（config の fallback ＝ B）
+  const r0 = run(null);
+  const B = r0.cfg.baseVote.candidates[1];
+  assert.ok(r0.st.base.key === 'B' && r0.st.base.none && r0.w.square.x === B.x, '票なしは B');
+  assert.ok(r0.hist.some((h) => h.type === 'base' && /票が入らなかった/.test(h.text)), '歴史にそう書く');
+});
+t('拠点の投票：config の until を過ぎたら、0 日目のうちに受付（join.js）で決まる', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-base2-'));
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  cfg.baseVote.until = '2099-01-01 05:00';
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
+  const env = { ...process.env, TOWN_DATA: dir };
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+  node('tools/init.js');
+  fs.mkdirSync(path.join(dir, 'inbox'));
+  const inbox = path.join(dir, 'inbox', 'instagram.json');
+  fs.writeFileSync(inbox, JSON.stringify({ joinComments: [], voteComments: [{ from: { id: '1', username: 'x1' }, text: '浜辺', timestamp: new Date().toISOString() }, { from: { id: '2', username: 'x2' }, text: 'A', timestamp: '2099-01-01T06:00:00+09:00' }] }));
+  node('tools/join.js');
+  let st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
+  assert.ok(st.votes.some((v) => v.kind === 'base') && st.votes[0].votes.A === 1, 'まだ締め切り前');
+  node('tools/join.js', '--now', '2099-01-01T07:00:00+09:00');
+  st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
+  const w = STORE.readWorld(dir);
+  assert.ok(st.day === 0 && st.base && st.base.key === 'A' && st.base.votes.A === 1, '締め切りのあとのコメントは数えず、A に決まる');
+  assert.ok(w.square.x === cfg.baseVote.candidates[0].x && !w.chest.day, '拠点は決まり、チェストは 1 日目に置く');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 console.log(`\nぜんぶ通りました（${ok} 件）`);

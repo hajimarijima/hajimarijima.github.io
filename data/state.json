@@ -19,7 +19,51 @@
  "followerLog": [],
  "reached": [],
  "vote": null,
- "votes": [],
+ "votes": [
+  {
+   "kind": "base",
+   "question": "拠点はどこにする？",
+   "openedDay": 0,
+   "closesDay": 1,
+   "opensAt": "2026-11-26T00:00:00+09:00",
+   "closesAt": null,
+   "options": [
+    {
+     "key": "A",
+     "name": "浜辺の近く",
+     "x": 10,
+     "z": 22,
+     "desc": "南の砂浜まで歩いてすぐ。港や釣りに近い"
+    },
+    {
+     "key": "B",
+     "name": "池のそば",
+     "x": -10,
+     "z": 3,
+     "desc": "島のまん中に近く、池で釣りができる。広い"
+    },
+    {
+     "key": "C",
+     "name": "森の入口",
+     "x": 12,
+     "z": -18,
+     "desc": "北の森のそば。木がたくさん取れる。北の島への橋にも近い"
+    }
+   ],
+   "votes": {
+    "A": 0,
+    "B": 0,
+    "C": 0
+   },
+   "manual": {
+    "A": 0,
+    "B": 0,
+    "C": 0
+   },
+   "voters": 0,
+   "timeline": []
+  }
+ ],
  "decisions": [],
  "plan": null,
  "pool": null,

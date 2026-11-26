@@ -185,6 +185,7 @@ export function makeSpecial(kind, b) {
       if (gate(a)) continue;
       const x = Math.cos(a) * R0, z = Math.sin(a) * R0 * 0.92;
       if (z > 26) continue; // 海べはあける
+      if (LAND && b) { const ro = b.rot || 0; if (!LAND(b.x + x * Math.cos(ro) + z * Math.sin(ro), b.z - x * Math.sin(ro) + z * Math.cos(ro))) continue; } // 海の上には立てない
       if (kind === 'fence') {
         box(0.22, 1.3, 0.22, 0x7a5230, x, 0.65, z, g);
         const a2 = ((i + 0.5) / N) * Math.PI * 2, L = (Math.PI * 2 * R0) / N + 0.1;
@@ -320,9 +321,14 @@ export function declutter(tags, { step = 1, maxShift = 3 } = {}) {
 // 区画は楕円の輪（半径 12・19・26、z は 0.92 倍して -1 ずらす）に並ぶので、輪の内側に道を通す。
 const RINGS = [12, 19, 26];
 const ROAD_IN = 3.7; // 区画の中心から道までの距離
-const ell = (a, r) => ({ x: Math.cos(a) * r, z: Math.sin(a) * r * 0.92 - 1 });
-const angOf = (p) => Math.atan2((p.z + 1) / 0.92, p.x);
-const ringOf = (b) => { const r = Math.hypot(b.x, (b.z + 1) / 0.92); let best = -1, bd = 2.5; RINGS.forEach((R, i) => { if (Math.abs(r - R) < bd) { bd = Math.abs(r - R); best = i; } }); return best; };
+// 村のまん中（拠点）。前の町は (0, -1)。拠点を投票で決めた町は world.square の所（町の画面が setTownCenter で教える）。
+// LAND：陸かどうか（小さな島の町だけ）。道や柵が海の上に出ないように使う
+let CTR = { x: 0, z: -1 }, LAND = null;
+export function setTownCenter(c, land = null) { if (c) CTR = { x: c.x, z: c.z }; LAND = land; }
+const ell = (a, r) => ({ x: CTR.x + Math.cos(a) * r, z: CTR.z + Math.sin(a) * r * 0.92 });
+const angOf = (p) => Math.atan2((p.z - CTR.z) / 0.92, p.x - CTR.x);
+const ringOf = (b) => { const r = Math.hypot(b.x - CTR.x, (b.z - CTR.z) / 0.92); let best = -1, bd = 2.5; RINGS.forEach((R, i) => { if (Math.abs(r - R) < bd) { bd = Math.abs(r - R); best = i; } }); return best; };
+const seaAt = (x, z) => (LAND ? !LAND(x, z) : z > 27);
 const roadMat = new THREE.MeshLambertMaterial({ color: 0xcbb48a });
 const yardMat = new THREE.MeshLambertMaterial({ color: 0xb8a57c });
 const segGeo = new THREE.BoxGeometry(1, 0.05, 1);
@@ -339,7 +345,7 @@ export function makeRoads(buildings, plots, config) {
     const r = RINGS[i] - ROAD_IN, N = 72;
     for (let k = 0; k < N; k++) {
       const p = ell((k / N) * Math.PI * 2, r), q = ell(((k + 1) / N) * Math.PI * 2, r);
-      if (q.z > 27 || blocked((p.x + q.x) / 2, (p.z + q.z) / 2)) continue;
+      if (seaAt(q.x, q.z) || (LAND && seaAt(p.x, p.z)) || blocked((p.x + q.x) / 2, (p.z + q.z) / 2)) continue;
       segs.push([p.x, p.z, q.x, q.z, 1.5]);
     }
   }
@@ -356,7 +362,7 @@ export function makeRoads(buildings, plots, config) {
     const r1 = RINGS[outer] - ROAD_IN;
     for (let r = 2.5; r < r1; r += 1) {
       const p = ell(a, r), q = ell(a, Math.min(r1, r + 1));
-      if (q.z > 27 || blocked((p.x + q.x) / 2, (p.z + q.z) / 2)) continue;
+      if (seaAt(q.x, q.z) || (LAND && seaAt(p.x, p.z)) || blocked((p.x + q.x) / 2, (p.z + q.z) / 2)) continue;
       segs.push([p.x, p.z, q.x, q.z, 1.4]);
     }
   }

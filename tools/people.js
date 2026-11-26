@@ -127,20 +127,25 @@ function registrationsFrom(comments, word, startTools, opts) {
 }
 
 // 「A」「ａ」「Aがいい」「Ｂ案」などから 1 文字を読む。2 つ以上書いてあれば数えない
-function parseChoice(text) {
+// words（{ A: ['浜辺', …], B: [...] }）を渡すと、「浜辺がいい」のような場所の名前でも読む
+function parseChoice(text, words) {
   const t = norm(text).toUpperCase();
   const found = new Set();
   const re = /(^|[^A-Z])([ABC])(?=[^A-Z]|$)/g;
   let m;
   while ((m = re.exec(t))) { found.add(m[2]); re.lastIndex = m.index + m[0].length; }
+  if (words) for (const [k, list] of Object.entries(words)) if ((list || []).some((w) => w && t.includes(norm(w).toUpperCase()))) found.add(k);
   return found.size === 1 ? [...found][0] : null;
 }
 
 // 1 人 1 票（最後のコメントが有効）、締め切り後は数えない。時間ごとの伸びも返す
-function tallyVote(comments, { opensAt, closesAt, stepHours = 3 }) {
+//   exclude：数えない人の名前（町のアカウントの持ち主など。小文字）、words：場所の名前でも読む時の言葉（parseChoice）
+function tallyVote(comments, { opensAt, closesAt, stepHours = 3, exclude = null, words = null }) {
   const open = Date.parse(opensAt), close = Date.parse(closesAt);
+  const ex = new Set((exclude || []).map((s) => String(s).toLowerCase()));
   const list = comments
-    .map((c) => ({ c, t: Date.parse(c.timestamp), choice: parseChoice(c.text) }))
+    .filter((c) => !ex.size || !ex.has(norm(commentUser(c).username).toLowerCase()))
+    .map((c) => ({ c, t: Date.parse(c.timestamp), choice: parseChoice(c.text, words) }))
     .filter((x) => x.choice && x.t >= open && x.t <= close)
     .sort((a, b) => a.t - b.t);
   const current = new Map();

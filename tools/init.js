@@ -130,8 +130,14 @@ const oldWorld = {
   square: { ...SQUARE, leveled: 0 }, debris,
   chest: { x: 5.2, z: 0.6, day: 0 }, // 集めた物を入れるチェスト（最初の村人が来た日に置く）
 };
+// 拠点の場所の投票（config.json の baseVote）：本番の島の 0 日目は、拠点（チェスト・たき火・広場）を置かずに候補 A/B/C を出す。
+//   見本（--demo）・前の形（--legacy）・--fixed-base の時は、今までどおり島のまん中に拠点を置く
+let CFG0 = null; try { CFG0 = JSON.parse(fs.readFileSync(path.join(DATA, 'config.json'), 'utf8')); } catch (e) { /* なし */ }
+const BV = CFG0 && CFG0.baseVote;
+const baseVote = !!(BV && BV.enabled && Array.isArray(BV.candidates) && BV.candidates.length === 3) && !demo && !legacy && !args.includes('--fixed-base');
 // ふだんは小さな島（前の形は --legacy の時だけ）。島の乱数は別なので、下の村人の並びは前と同じ
-const world = legacy ? oldWorld : require('./island_layout').buildIslandWorld({ seed, ores: ORES, gather: GATHER, debris: oldWorld.debris });
+const world = legacy ? oldWorld : require('./island_layout').buildIslandWorld({ seed, ores: ORES, gather: GATHER, debris: oldWorld.debris, candidates: baseVote ? BV.candidates : null });
+if (baseVote) world.debris = []; // 整地する草と小石は、拠点が決まってからその場所に出る
 
 // ---------- 村人 ----------
 // 見本の名前は「村人1」の形（Instagram の ID には日本語が使えないので、実在の人と重ならない）
@@ -157,6 +163,7 @@ const state = {
   bonus: { wood: 0, stone: 0, food: 0 },
   weather: '晴れ', updated: null,
 };
+if (baseVote) require('./base').openBaseVote(state, CFG0, new Date());
 
 // --keep-villagers：もう住むと決まった村人（data/villagers.json）は残す。印（key・igId・userHash）・スキン・最初の道具は今のまま。
 //   町のアカウントの持ち主（config.json の joinExclude）は外す。残した人は 0 日目の新しい島ですぐ暮らし始める（welcome.js）
@@ -178,6 +185,10 @@ write('life.json', {});
 fs.rmSync(path.join(DATA, 'diary'), { recursive: true, force: true }); // 日記（人ごとのファイル）も空に
 write('social.json', { pairs: {}, talks: [] });
 const history0 = [{ day: 0, date: state.date, type: 'start', text: legacy ? '何もない平地に、木と岩だけがある。ここから町づくりが始まる。' : '海にかこまれた小さな島に、木と岩だけがある。北の海の向こうにも、もう 1 つ島が見える。ここから町づくりが始まる。' }];
+if (baseVote) {
+  const bv = state.votes.find((v) => v.kind === 'base');
+  history0.push({ day: 0, date: state.date, type: 'vote_open', kind: 'base', text: `拠点の場所の投票が始まった。「${bv.question}」（${bv.options.map((o) => o.key + ' ' + o.name).join(' / ')}）。決まった場所にチェストとたき火を置いて、まわりに家や建物を建てていく。` });
+}
 write('history.json', history0);
 if (keepVillagers && villagers.length && CFG) {
   const { readLife, writeLife } = require('./store');
@@ -188,7 +199,7 @@ if (keepVillagers && villagers.length && CFG) {
   write('history.json', S.history);
   write('social.json', S.social);
 }
-console.log('0 日目にしました（' + (legacy ? '前の広い平地・' : '小さな島・') + (demo ? '見本の村人 ' + villagers.length + ' 人' : keepVillagers ? '前からの村人 ' + villagers.length + ' 人を残した' : '村人なし') + '）');
+console.log('0 日目にしました（' + (legacy ? '前の広い平地・' : '小さな島・') + (baseVote ? '拠点の場所は投票中・' : '') + (demo ? '見本の村人 ' + villagers.length + ' 人' : keepVillagers ? '前からの村人 ' + villagers.length + ' 人を残した' : '村人なし') + '）');
 // 町を始める日時（config.json の startAt）が、もう過ぎた時刻のままだと、次の朝すぐ 1 日目になる
 try {
   const cfg = JSON.parse(fs.readFileSync(path.join(DATA, 'config.json'), 'utf8'));

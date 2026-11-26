@@ -57,7 +57,8 @@ function synth(duration, sfx) {
   const n = Math.ceil(duration * SR);
   const L = new Float32Array(n), R = new Float32Array(n);
   let seed = 12345; const noise = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x3fffffff - 1; };
-  const add = (i, v, pan = 0) => { if (i >= 0 && i < n) { L[i] += v * (1 - pan) ; R[i] += v * (1 + pan); } };
+  let mv = 0.5; // 曲の音量（効果音は 1）。曲を小さめにする
+  const add = (i, v, pan = 0) => { if (i >= 0 && i < n) { L[i] += mv * v * (1 - pan) ; R[i] += mv * v * (1 + pan); } };
   // BGM：南の島ふうの明るい曲（スチールドラムの旋律・ウクレレの裏打ち・はずむベース・シェイカー・クラーベ）
   const bpm = 116, beat = 60 / bpm, e8 = beat / 2;
   const midi = (m) => 440 * Math.pow(2, (m - 69) / 12);
@@ -103,6 +104,7 @@ function synth(duration, sfx) {
     for (let b = 0; b < 8; b++) if (mel[b]) steel(t0 + b * e8, midi(mel[b] - 12), 0.08, b % 2 ? 0.15 : -0.15); // 旋律は 1 オクターブ下げる
   }
   // 木を切る音（こもった「コン」）と、岩を掘る音（かたい「カン」）
+  mv = 1;
   for (const e of sfx) {
     const s0 = Math.floor(e.t * SR), pan = ((e.t * 7.3) % 1 - 0.5) * 0.4;
     if (e.type === 'pop') {
@@ -122,15 +124,24 @@ function synth(duration, sfx) {
       continue;
     }
     if (e.type === 'chop') {
+      // 木を切る「コッ」：太い木の胴が鳴る低い 2 つの響き＋木くずの短い音
       let lp = 0;
-      for (let k = 0; k < SR * 0.25; k++) {
-        const tt = k / SR; lp += (noise() - lp) * 0.08;
-        add(s0 + k, 0.30 * e.gain * (Math.sin(2 * Math.PI * 170 * tt * (1 - tt)) * Math.exp(-tt * 28) + lp * 2.2 * Math.exp(-tt * 40)), pan);
+      for (let k = 0; k < SR * 0.3; k++) {
+        const tt = k / SR; lp += (noise() - lp) * 0.12;
+        add(s0 + k, 0.32 * e.gain * (Math.sin(2 * Math.PI * 140 * tt) * Math.exp(-tt * 22) + 0.45 * Math.sin(2 * Math.PI * 310 * tt) * Math.exp(-tt * 35) + lp * 1.4 * Math.exp(-tt * 60)), pan);
+      }
+    } else if (e.type === 'build') {
+      // 作る・組み立てる「トン」：やわらかい低い音
+      for (let k = 0; k < SR * 0.22; k++) {
+        const tt = k / SR;
+        add(s0 + k, 0.26 * e.gain * (Math.sin(2 * Math.PI * (95 + 60 * Math.exp(-tt * 40)) * tt) * Math.exp(-tt * 20) + 0.25 * Math.sin(2 * Math.PI * 230 * tt) * Math.exp(-tt * 45)), pan);
       }
     } else {
-      for (let k = 0; k < SR * 0.35; k++) {
-        const tt = k / SR;
-        add(s0 + k, 0.17 * e.gain * ((Math.sin(2 * Math.PI * 520 * tt) + 0.5 * Math.sin(2 * Math.PI * 780 * tt)) * Math.exp(-tt * 18) + noise() * 0.3 * Math.exp(-tt * 70)), pan);
+      // 岩を掘る「ガッ」：中くらいの高さの石の響き＋低い「ゴッ」＋砕ける音（甲高くはしない）
+      let lp = 0, lp2 = 0;
+      for (let k = 0; k < SR * 0.3; k++) {
+        const tt = k / SR; lp += (noise() - lp) * 0.18; lp2 += (lp - lp2) * 0.5;
+        add(s0 + k, 0.28 * e.gain * (0.7 * (Math.sin(2 * Math.PI * 330 * tt) + 0.5 * Math.sin(2 * Math.PI * 495 * tt)) * Math.exp(-tt * 22) + 0.6 * Math.sin(2 * Math.PI * (120 + 50 * Math.exp(-tt * 50)) * tt) * Math.exp(-tt * 24) + lp2 * 1.6 * Math.exp(-tt * 25)), pan);
       }
     }
   }
@@ -140,7 +151,7 @@ function synth(duration, sfx) {
     L[i] *= g; R[i] *= g;
   }
   let peak = 0; for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]));
-  const gain = peak > 0 ? 0.89 / peak : 1;
+  const gain = peak > 0 ? 0.75 / peak : 1;
   const buf = Buffer.alloc(44 + n * 4);
   buf.write('RIFF', 0); buf.writeUInt32LE(36 + n * 4, 4); buf.write('WAVE', 8); buf.write('fmt ', 12);
   buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(2, 22); buf.writeUInt32LE(SR, 24);

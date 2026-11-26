@@ -15,7 +15,10 @@ const NORTH = { id: 'north', name: '北の島', x: 6, z: -104, r: 32, wob: [[0.0
 //   見えるだけで、今は行けない（wild：木と岩は見た目だけ。村人は使わない）。町の画面を開くと右上にかすんで見える
 const FARLAND = { id: 'far', x: 310, z: -190, r: 235, wob: [[0.05, 3, 0.4], [0.035, 5, 1.7], [0.02, 9, 2.9]], wild: true, open: 0 };
 
-function buildIslandWorld({ seed, ores, gather, debris }) {
+// candidates（拠点の投票の候補 [{ key, x, z }]）を渡すと、候補の場所のまわり（半径 6）を少し空けておく（旗と札が見えるように）。
+//   その時は、まん中のそばの「最初の日に掘る岩」は置かない（拠点が決まってから、そのまわりをならす）
+function buildIslandWorld({ seed, ores, gather, debris, candidates = null }) {
+  const nearCand = (x, z, d) => !!candidates && candidates.some((c) => Math.hypot(c.x - x, c.z - z) < d);
   const R = makeRng('island:' + seed);
   const GA = gather || { rockItems: [6, 10] };
   const main = { ...MAIN }, north = { ...NORTH };
@@ -55,7 +58,7 @@ function buildIslandWorld({ seed, ores, gather, debris }) {
       if (IS.shoreDist(isl, x, z) < 5.5) continue; // 砂浜と岸には置かない
       if (Math.hypot(x - SQUARE.x, z - SQUARE.z) < SQUARE.r + 2.5 || inMeadow(x, z) || nearBridge(x, z, 6)) continue;
       if (Math.hypot(x - POND.x, z - POND.z) < POND.r + 3) continue;
-      if (near(bushes, x, z, 2.6)) continue;
+      if (near(bushes, x, z, 2.6) || nearCand(x, z, 6)) continue;
       if (roll < pRock) { if (!near(rocks, x, z, 4)) addRock(x, z); }
       else if (roll < pTree) trees.push(TM.treeAt(x, z));
     }
@@ -63,7 +66,7 @@ function buildIslandWorld({ seed, ores, gather, debris }) {
   scatter(main, 5, 0.12, 0.64);
   scatter(north, 4.6, 0.2, 0.78); // 北の島は森が深く、岩も多い
   // 最初の日に掘る岩が近くにあるように、まん中のそばに 2 つ
-  for (const [x0, z0] of [[11.5, -9.5], [-10.5, 7.5]]) {
+  for (const [x0, z0] of candidates ? [] : [[11.5, -9.5], [-10.5, 7.5]]) {
     const { x, z } = TM.spotIn(TM.tileOf(x0), TM.tileOf(z0));
     if (near(rocks, x, z, 3)) continue;
     for (let i = trees.length - 1; i >= 0; i--) if (Math.hypot(trees[i].x - x, trees[i].z - z) < 3.2) trees.splice(i, 1);
@@ -131,4 +134,22 @@ function buildIslandWorld({ seed, ores, gather, debris }) {
 }
 function r2p(p) { return { x: +p.x.toFixed(2), z: +p.z.toFixed(2) }; }
 
-module.exports = { buildIslandWorld, MAIN, NORTH, FARLAND };
+// 拠点（村のまん中）が決まった時の、はじまり島の区画：拠点のまわりの輪（半径 12・19・26）。
+//   岸から 12 未満・池・海べの特別な場所・橋のたもと・草むらにかかる区画は使わない。北の島の区画は今のまま
+function basePlots(world, c) {
+  const main = world.islands[0];
+  const out = [];
+  const ring = (r, n, off) => { for (let i = 0; i < n; i++) { const a = off + (i / n) * Math.PI * 2; out.push({ x: +(c.x + Math.cos(a) * r).toFixed(2), z: +(c.z + Math.sin(a) * r * 0.92).toFixed(2) }); } };
+  ring(12, 8, 0.2); ring(19, 12, 0.05); ring(26, 16, 0.3);
+  const sp = world.special || {};
+  const coastPts = [sp.coast, sp.coast2, sp.coast3].filter(Boolean);
+  const pond = world.pond;
+  const ok = (p) => IS.shoreDist(main, p.x, p.z) >= 12
+    && !(pond && Math.hypot(p.x - pond.x, p.z - pond.z) < pond.r + 3.5)
+    && !coastPts.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < 9)
+    && !(world.bridges || []).some((b) => IS.bridgeDist(b, p.x, p.z) < 7)
+    && !(world.bushes || []).some((b) => Math.hypot(b.x - p.x, b.z - p.z) < 3.5);
+  return out.filter(ok).concat((world.plots || []).filter((p) => p.island));
+}
+
+module.exports = { buildIslandWorld, basePlots, MAIN, NORTH, FARLAND };

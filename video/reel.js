@@ -1124,7 +1124,7 @@ window.renderFrame = (t) => {
 const SFX = [];
 for (let k = 0; k < TR.hits; k++) SFX.push({ t: TR.t1 + (k + VC.phase) / VC.rate, type: 'chop', gain: 1 });
 for (let k = 0; k < RK.hits * RK.N; k++) SFX.push({ t: RK.t1 + (k + VD.phase) / VD.rate, type: 'dig', gain: 1 });
-for (let k = 0; T.build + 0.5 + k * 0.83 < T.chest; k++) SFX.push({ t: T.build + 0.5 + k * 0.83, type: 'chop', gain: 0.5 });
+for (let k = 0; T.build + 0.5 + k * 0.83 < T.chest; k++) SFX.push({ t: T.build + 0.5 + k * 0.83, type: 'build', gain: 0.7 });
 SFX.push({ t: T.tease + 0.3, type: 'chime', gain: 0.8 });   // 予告：きらん
 SFX.push({ t: T.danger, type: 'whoosh', gain: 1.0 });        // 予告の夜：森の風
 window.SFX = SFX.filter((s) => s.t < DURATION);

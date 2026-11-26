@@ -580,140 +580,7 @@
   "r": 8,
   "leveled": 0
  },
- "debris": [
-  {
-   "x": -2.05,
-   "z": -1.68,
-   "k": "grass",
-   "s": 1.25
-  },
-  {
-   "x": -2.27,
-   "z": 0.62,
-   "k": "grass",
-   "s": 0.85
-  },
-  {
-   "x": 6.19,
-   "z": -1.8,
-   "k": "grass",
-   "s": 1.02
-  },
-  {
-   "x": -6.37,
-   "z": 0.99,
-   "k": "grass",
-   "s": 1.12
-  },
-  {
-   "x": -5.81,
-   "z": -0.52,
-   "k": "grass",
-   "s": 1.08
-  },
-  {
-   "x": -2.52,
-   "z": 2.98,
-   "k": "grass",
-   "s": 0.92
-  },
-  {
-   "x": 6.82,
-   "z": 1.14,
-   "k": "stone",
-   "s": 1.07
-  },
-  {
-   "x": -1.53,
-   "z": -6.55,
-   "k": "grass",
-   "s": 1
-  },
-  {
-   "x": -5.16,
-   "z": -1.05,
-   "k": "stone",
-   "s": 0.94
-  },
-  {
-   "x": -5.22,
-   "z": 0.67,
-   "k": "stone",
-   "s": 1.04
-  },
-  {
-   "x": 3.41,
-   "z": -2.31,
-   "k": "stone",
-   "s": 1.2
-  },
-  {
-   "x": -0.04,
-   "z": -2.02,
-   "k": "grass",
-   "s": 1.11
-  },
-  {
-   "x": -1.57,
-   "z": -5.91,
-   "k": "grass",
-   "s": 0.83
-  },
-  {
-   "x": 2.87,
-   "z": -2.9,
-   "k": "grass",
-   "s": 0.87
-  },
-  {
-   "x": 3.21,
-   "z": -0.23,
-   "k": "grass",
-   "s": 1.27
-  },
-  {
-   "x": 0.57,
-   "z": -2.39,
-   "k": "grass",
-   "s": 1.25
-  },
-  {
-   "x": -5.83,
-   "z": 2.58,
-   "k": "grass",
-   "s": 1.08
-  },
-  {
-   "x": 2.94,
-   "z": -6.82,
-   "k": "grass",
-   "s": 0.99
-  },
-  {
-   "x": 3.9,
-   "z": 2.11,
-   "k": "grass",
-   "s": 1.27
-  },
-  {
-   "x": -1.09,
-   "z": -3.07,
-   "k": "grass",
-   "s": 0.93
-  },
-  {
-   "x": 2.66,
-   "z": 4.35,
-   "k": "grass",
-   "s": 1.22
-  },
-  {
-   "x": 1.73,
-   "z": 2.09,
-   "k": "stone",
-   "s": 1.1
-  }
- ],
+ "debris": [],
  "chest": {
   "x": 5.2,
   "z": 0.6,
@@ -725,9 +592,9 @@
   "fill": "g",
   "chunks": {
    "-1,-1": "3gt11g2t4gt27g2t9grt53gt37gt4gr21gt3gtgr4gq13g3q12g4qgt2gt7g4q12g4q",
-   "0,-1": "7gr2gr5gt2gr50gt25gt2gt9gt12gt13gt5gt13gr2gk4gt11gq5gr6gt2g3q2gt10g4q2gt7gtg4q5gt2gt3g4q12g",
-   "-1,0": "12g4qgt4gtgt3g4q13g3q3gr6gr4gq16gt19g3w7gr2gtg5wgt9g5w12g3w4gr68gt2gr2gt4gt20g",
-   "0,0": "4q12g4q6gt5g3q10gt2gq7gt12gt16gt9gt36gt3gr6grgt8gr17gt3gt3gt3gt22gt5gt17gt3gr19g",
+   "0,-1": "7gr2gr5gt2gr76gt12gt12gt19gt13gr2gk4gt11gq6gt5gt2g3q2gt10g4q2gt7gtg4q5gt2gt3g4q12g",
+   "-1,0": "12g4qgt4gt5g4q13g3q3gr11gq16gt19g3w7gr2gtg5wgt9g5w12g3w4gr68gt2gr2gt4gt20g",
+   "0,0": "4q12g4q6gt5g3q10gt2gq7gt12gt16gt9gt36gt3gr6grgt8gr17gt3gt7gt22gt23gt3gr19g",
    "1,-1": "64gt31gtgtgt29gk14gk4gt26gk14gk2gkgt32gtgt10gk12g",
    "1,0": "k49gk32gk12gkgk45gt50gr15gt13gt30g",
    "-1,-2": "153gt19gt22gt2gtgrt7gt10gt3gt20gr9g",
@@ -941,17 +808,6 @@
    "hp": 7,
    "max": 7,
    "blocks": "ssssccs"
-  },
-  "6,-5": {
-   "hp": 9,
-   "max": 9,
-   "blocks": "ssssssscs"
-  },
-  "-6,3": {
-   "kind": 0,
-   "hp": 8,
-   "max": 8,
-   "blocks": "sscssssc"
   }
  }
 }

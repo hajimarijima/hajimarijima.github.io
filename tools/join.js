@@ -52,6 +52,34 @@ for (const v of S.villagers) P.applyPrivacy(v, hidden);
 // その場で町に迎える（前の受付で「次の朝」にしていた人も、今日来たことにする）
 const { added, worldChanged } = W.welcomeNow(S, { now: NOW });
 
+// 拠点の場所の投票（0 日目）：コメントの票をその場で数え直す（町の画面と投票のページに出す）。
+//   config の baseVote.until を過ぎていたら、ここで締めて拠点を決める（決めていなければ 1 日目にする朝の sim.js で決まる）
+const BASE = require('./base');
+let stateChanged = false, baseWorld = false;
+const bv = BASE.voteOf(S.state);
+if (bv) {
+  const due = bv.closesAt && Date.parse(bv.closesAt) <= NOW.getTime();
+  if (due) {
+    const hist = (type, text, extra) => S.history.push({ day, date, type, text, ...(extra || {}) });
+    const r = BASE.decideBase({ ...S, inbox }, { day, now: NOW, hist });
+    for (const v of S.villagers) { const L = S.life[v.key], d = L && L.diary[L.diary.length - 1]; if (d && d.day === day) d.text += r.diary; }
+    stateChanged = baseWorld = true;
+    console.log(r.text);
+  } else if (inbox && inbox.voteComments) {
+    const before = JSON.stringify([bv.votes, bv.voters, bv.commentCount]);
+    BASE.tallyBase(bv, { inbox, config, now: NOW });
+    stateChanged = before !== JSON.stringify([bv.votes, bv.voters, bv.commentCount]);
+  }
+}
+if (baseWorld) {
+  // テントは拠点のそばへ（家はまだない）。区画も拠点のまわりに作り直したので、家の割り当てもし直す
+  W.assignHomes(S.villagers.filter((v) => v.joinedDay <= day && S.life[v.key]), S.life, S.world, config);
+  ST.writeWorld(DATA, S.world, { clearR: ((config.terrain && config.terrain.clearBlocks) ?? 4) * 1.9 + 2.5 });
+  ST.writeLife(DATA, S.life);
+  write('history.json', S.history);
+}
+if (stateChanged) write('state.json', S.state);
+
 const changed = removed || registered || added.length || comments.length;
 if (removed || registered || added.length) {
   write('villagers.json', S.villagers);

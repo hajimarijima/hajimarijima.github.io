@@ -23,6 +23,9 @@ const CON = require('../js/construction.js'); // 材料 → 部品 → 建てる
 const CB = require('../js/combat.js'); // 夜の戦い・バッジの段 // 1 日 24 時間の行動の記号と数の決まり
 const W = require('./welcome'); // 新しく来た人を迎える決まり・町を始める日の決まり（join.js と共通）
 const IS = require('../js/island.js'); // 島の形（どこが陸か・まだ行けない島・橋）
+const BASE = require('./base'); // 拠点の場所の投票（0 日目）
+// 村のまん中（拠点）。前のデータは (0, -1)
+const ctrOf = (world) => (world && world.square ? { x: world.square.x, z: world.square.z } : { x: 0, z: -1 });
 
 const ROOT = path.join(__dirname, '..');
 const DATA = process.env.TOWN_DATA || path.join(ROOT, 'data');
@@ -56,14 +59,15 @@ function siteOptions(world, state) {
   // まだ橋がかかっていない島の区画は、候補に出さない
   const openIsl = (id) => !id || IS.isOpen((world.islands || []).find((i) => i.id === id));
   const free = world.plots.map((p, i) => ({ x: p.x, z: p.z, plot: i, island: p.island })).filter((p) => !used.has(p.plot) && openIsl(p.island));
-  const r = (p) => Math.hypot(p.x, p.z + 1);
+  const C = ctrOf(world);
+  const r = (p) => Math.hypot(p.x - C.x, p.z - C.z);
   const isl = (p) => (p.island && world.islands ? IS.islandName(world, p.x, p.z) : '');
   const trees = (p) => world.trees.filter((t) => !t.gone && t.state === 'tree' && Math.hypot(t.x - p.x, t.z - p.z) < 9).length;
   const mainFree = free.filter((p) => !p.island);
   const sea = (mainFree.length ? mainFree : free).slice().sort((a, b) => b.z - a.z || r(a) - r(b))[0];
   const mid = free.filter((p) => p !== sea && !p.island).sort((a, b) => r(a) - r(b))[0] || free.find((p) => p !== sea);
   const forest = free.filter((p) => p !== sea && p !== mid && p.z < 10).sort((a, b) => trees(b) - trees(a) || r(b) - r(a))[0] || free.find((p) => p !== sea && p !== mid);
-  const dir = (p) => (Math.abs(p.x) > Math.abs(p.z + 1) ? (p.x > 0 ? '東' : '西') : (p.z < -1 ? '北' : '南'));
+  const dir = (p) => (Math.abs(p.x - C.x) > Math.abs(p.z - C.z) ? (p.x > C.x ? '東' : '西') : (p.z < C.z ? '北' : '南'));
   return [
     { name: '海のそば', x: sea.x, z: sea.z, plot: sea.plot },
     { name: (isl(forest) || dir(forest)) + 'の森の入口', x: forest.x, z: forest.z, plot: forest.plot },
@@ -89,6 +93,8 @@ function stepDay(S) {
   if (!world.chest) world.chest = { x: 5.2, z: 0.6, day: 0 };
   if (!world.animals) world.animals = [];
   if (!state.firsts) state.firsts = {};
+  // 拠点の場所の投票（0 日目）は、1 日目にする時に締めて決める（tools/base.js）。拠点にチェスト・たき火・広場を置き、区画も拠点のまわりに作り直す
+  const baseDecided = BASE.decideBase(S, { day, now: S.now || new Date(), hist });
   // 釣り・畑・動物は別の乱数（ここが増えても、木・岩・投票の流れは変わらない）
   const R2 = makeRng(state.seed + ':farm:' + day);
   // 「はじめて」の出来事は、町の歴史に 1 回だけ書く
@@ -204,7 +210,8 @@ function stepDay(S) {
   // 何を建てるかと、どこに建てるかは同じ日に、時間を分けて開く（同じ A/B/C でも、コメントの時刻で区別できる）
   const BV = config.buildVote;
   const diaryExtra = {}; // key -> 文
-  let closedVoters = [];
+  let closedVoters = baseDecided ? baseDecided.who.slice() : [];
+  if (baseDecided) for (const v of active) diaryExtra[v.key] = baseDecided.diary;
   const KIND_Q = { what: '何を建てる？', where: 'どこに建てる？', tool: 'どの道具を作る？' };
   const genDemo = (vote) => { // 見本の投票コメントを作る（締め切り後のコメントも混ぜて、数えないことを確かめる）
     vote.demoComments = vote.demoComments || [];
@@ -261,7 +268,7 @@ function stepDay(S) {
       const def = state.plan && B(state.plan.build);
       if (state.plan && !state.plan.site) {
         const farm = world.buildings.find((b) => b.type === 'farm');
-        if (def.plot === 'ring') state.plan.site = { x: 0, z: -1, plot: 'ring', label: '町のまわり' };
+        if (def.plot === 'ring') state.plan.site = { ...ctrOf(world), plot: 'ring', label: '町のまわり' };
         else if (def.plot === 'farm' && farm) state.plan.site = { x: +(farm.x + Math.cos(farm.rot) * 4.4).toFixed(2), z: +(farm.z - Math.sin(farm.rot) * 4.4).toFixed(2), plot: 'farm', label: '畑のとなり', rot: farm.rot };
         else if (def.plot && world.special[def.plot]) state.plan.site = { ...world.special[def.plot], plot: def.plot, label: def.plot === 'center' ? '町のまん中' : '海べ' };
         else state.plan.site = { x: opt.x, z: opt.z, plot: opt.plot, label: opt.name };
@@ -289,9 +296,12 @@ function stepDay(S) {
     return out;
   };
   const openVote = (kind, options, h0, h1) => {
+    // 拠点の投票を今日締めた時は、それより前のコメントを数えない（同じ投稿に A/B/C が続いても区別できる）
+    const bc = state.base && state.base.day === day && state.base.closesAt;
+    const op = bc && Date.parse(bc) > Date.parse(jst(date, h0)) ? new Date(bc).toISOString() : jst(date, h0);
     const v = {
       kind, question: KIND_Q[kind], openedDay: day, closesDay: day + 1,
-      opensAt: jst(date, h0), closesAt: h1 >= 24 ? jst(addDays(date, 1), h1 - 24) : jst(date, h1),
+      opensAt: op, closesAt: h1 >= 24 ? jst(addDays(date, 1), h1 - 24) : jst(date, h1),
       options: options.map((o, i) => ({ key: 'ABC'[i], ...o })),
       votes: { A: 0, B: 0, C: 0 }, manual: { A: 0, B: 0, C: 0 }, voters: 0, timeline: [],
     };
@@ -582,7 +592,8 @@ function stepDay(S) {
     return r;
   };
   const objOf = {};
-  const farPlace = (o) => (ISL && IS.islandName(world, o.x, o.z)) ? IS.islandName(world, o.x, o.z) + (o.hp !== undefined ? 'の岩場' : 'の森') : (Math.abs(o.x) > Math.abs(o.z + 1) ? (o.x > 0 ? '東' : '西') : (o.z < -1 ? '北' : '南')) + (o.hp !== undefined ? 'の山' : 'の森');
+  const CT = ctrOf(world);
+  const farPlace = (o) => (ISL && IS.islandName(world, o.x, o.z)) ? IS.islandName(world, o.x, o.z) + (o.hp !== undefined ? 'の岩場' : 'の森') : (Math.abs(o.x - CT.x) > Math.abs(o.z - CT.z) ? (o.x > CT.x ? '東' : '西') : (o.z < CT.z ? '北' : '南')) + (o.hp !== undefined ? 'の山' : 'の森');
   // 木にもたれて寝る木：村のまん中から FAR.treeR 以内（広場のふちから数マス）の木だけ。人ごとに決まった 1 本
   const nearTrees = IX.trees.nearest(center.x, center.z, 16, (t) => t.state === 'tree' && !t.gone && dist(t, center) <= FAR.treeR);
   const sleepTree = (c) => { const ok = nearTrees.filter((t) => t.state === 'tree' && !t.gone); return ok.length ? ok[hashStr('st:' + c.v.key) % ok.length] : null; };
@@ -1223,7 +1234,7 @@ function stepDay(S) {
     r.x = +x.toFixed(2); r.z = +z.toFixed(2); IX.rocks.set(r, r.x, r.z);
     r.max = R.int(GA.rockItems[0], GA.rockItems[1]); r.hp = r.max;
     r.blocks = O.genBlocks(state.seed, { id: r.id + '#' + r.gen, max: r.max }, config.ores);
-    if (Math.hypot(r.x, r.z + 1) > 44) r.far = 1; else delete r.far;
+    if (Math.hypot(r.x - ctrOf(world).x, r.z - ctrOf(world).z) > 44) r.far = 1; else delete r.far;
     delete r.back; delete r.gone;
   }
   for (const b of world.bushes) if (!b.ready) { b.regrow -= 1; if (b.regrow <= 0) b.ready = true; }
@@ -1353,7 +1364,7 @@ function stepDay(S) {
     const pos = plan.site;
     const id = plan.build + '_' + world.buildings.length;
     const builders = plan.builders || [];
-    const b = { id, type: plan.build, x: pos.x, z: pos.z, plot: pos.plot, rot: +Math.atan2(-pos.x, -(pos.z + 1)).toFixed(3), day, builders, variant: R.int(0, 3), voted: true };
+    const b = { id, type: plan.build, x: pos.x, z: pos.z, plot: pos.plot, rot: +Math.atan2(-(pos.x - ctrOf(world).x), -(pos.z - ctrOf(world).z)).toFixed(3), day, builders, variant: R.int(0, 3), voted: true };
     if (pos.plot === 'coast' || pos.plot === 'coast2' || pos.plot === 'coast3') b.rot = Math.PI;
     if (pos.rot !== undefined) b.rot = pos.rot;
     world.buildings.push(b);
@@ -1588,6 +1599,7 @@ if (gate && S.state.day === 0) { // 0 日目から始める：1 日目は今日�
   S.state.startDate = W.jstToday(NOW);
   S.state.startedAt = NOW.toISOString();
 }
+S.now = NOW; // 拠点の投票を締める時刻
 for (let i = 0; i < days; i++) { stepDay(S); if (i === 0 && S.inbox) S.inbox = { ...S.inbox, joinComments: null }; }
 write('villagers.json', S.villagers);
 ST.writeWorld(DATA, S.world, { clearR: ((S.config.terrain && S.config.terrain.clearBlocks) ?? 4) * 1.9 + 2.5 });

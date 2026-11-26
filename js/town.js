@@ -8,7 +8,7 @@ import { makeCharacter, animate, setTool as setTool0, setCarry as setCarry0, set
 const setTool = (ch, k) => { if (ch.userData.parts) setTool0(ch, k); };
 const setCarry = (ch, k) => { if (ch.userData.parts) setCarry0(ch, k); };
 const setShield = (ch, on) => { if (ch.userData.parts) setShield0(ch, on); };
-import { mat, box, hash, rnd, makeTree, makeRock, makeBush, makeBuilding, makeHouse, obstaclesFor, routeAround as routeAround0, declutter, makeRoads } from './world3d.js';
+import { mat, box, hash, rnd, makeTree, makeRock, makeBush, makeBuilding, makeHouse, obstaclesFor, routeAround as routeAround0, declutter, makeRoads, setTownCenter } from './world3d.js';
 import { makeField, makePond, animatePond, makeBobber, makeAnimal, animateAnimal, animalPos } from './farm3d.js';
 import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote, startNote, joinText } from './common.js';
 import { makeSky, jstHour, parseTime, phaseName } from './daynight.js';
@@ -20,7 +20,7 @@ let IS_VIDEO = false;
 import { makeTerrain, BLOCK } from './terrain_gen.js';
 import { makeTerrainView } from './terrain.js';
 import { SpatialHash, TILE } from './tilemap.js';
-import { islandAt, isOpen, randomLand, radiusAt, MAIN } from './island.js';
+import { islandAt, isOpen, randomLand, radiusAt, onLand, MAIN } from './island.js';
 import { makeClouds } from './clouds.js';
 import { seededRng, fightNight, roundsOf } from './combat.js';
 import { makeFloatText } from './floattext.js';
@@ -68,6 +68,12 @@ async function main() {
   const ISLANDS = !!(world.islands && world.islands.length);
   if (ISLANDS) for (const o of [...world.trees, ...world.rocks]) delete o.far;
   const onMain = (o) => !ISLANDS || (islandAt(world, o.x, o.z, -3) || { id: MAIN }).id === MAIN;
+  // 村のまん中（拠点）。拠点を投票で決めた町は、決まった場所（world.square）。道・柵・向きはここを中心にする
+  const CTR = world.square ? { x: world.square.x, z: world.square.z } : { x: 0, z: -1 };
+  setTownCenter(CTR, ISLANDS ? (x, z) => onLand(world, x, z, 1.2) : null);
+  // 拠点の場所の投票中（0 日目）：チェスト・たき火・広場はまだ無く、地図に A/B/C の候補が出る
+  const baseVote = (state.votes || []).find((v) => v.kind === 'base') || null;
+  if (baseVote) document.querySelector('.map').insertAdjacentHTML('beforeend', baseBanner(baseVote));
   if (!active.length) document.querySelector('.map').insertAdjacentHTML('beforeend', emptyNote(config));
   renderPanel(D);
 
@@ -169,7 +175,7 @@ async function main() {
   const TC = config.terrain || {};
   const keepOut = world.buildings.map((b) => ({ x: b.x, z: b.z, r: 2.5 }))
     .concat(state.plan && state.plan.site ? [{ x: state.plan.site.x, z: state.plan.site.z, r: 3 }] : [])
-    .concat((state.votes || []).filter((v) => v.kind === 'where').flatMap((v) => v.options.map((o) => ({ x: o.x, z: o.z, r: 3 }))));
+    .concat((state.votes || []).filter((v) => v.kind === 'where' || v.kind === 'base').flatMap((v) => v.options.map((o) => ({ x: o.x, z: o.z, r: 3 }))));
   const terrainGen = makeTerrain({ seed: TC.seed || 'town', seaZ: world.seaZ, zone: { x0: -112, x1: 112, z0: -112, z1: world.seaZ + 2 }, keepOut, keepR: TC.clearBlocks ?? 4, islands: world.islands || null });
   const VIEW_R = LITE ? (TC.viewChunksMobile || 5) : (TC.viewChunks || 8);
   const terrain = makeTerrainView(scene, terrainGen, { radius: VIEW_R, lod: LITE ? [1, 2] : [2, 5], perFrame: LITE ? 2 : 3, treeNear: LITE ? 2 : 3, rockNear: LITE ? 2 : 4, shadow: !LITE });
@@ -205,10 +211,10 @@ async function main() {
   const hasPlaza = world.buildings.some((b) => b.type === 'plaza');
   for (const b of world.buildings) {
     if (b.type === 'plaza' || b.plot === 'coast' || b.plot === 'coast2' || b.plot === 'coast3' || !onMain(b)) continue; // ほかの島の建物には、まん中からの道を引かない（海の上になる）
-    const len = Math.hypot(b.x, b.z + 1);
+    const len = Math.hypot(b.x - CTR.x, b.z - CTR.z);
     const path = new THREE.Mesh(new THREE.PlaneGeometry(1.2, len), mat(hasPlaza ? 0xc2b59a : 0xb59a72));
-    path.rotation.x = -Math.PI / 2; path.rotation.z = Math.atan2(b.x, b.z + 1);
-    path.position.set(b.x / 2, 0.02, (b.z - 1) / 2); path.receiveShadow = true; scene.add(path);
+    path.rotation.x = -Math.PI / 2; path.rotation.z = Math.atan2(b.x - CTR.x, b.z - CTR.z);
+    path.position.set((b.x + CTR.x) / 2, 0.02, (b.z + CTR.z) / 2); path.receiveShadow = true; scene.add(path);
   }
 
   const objById = {};
@@ -314,7 +320,7 @@ async function main() {
   }
   // たき火とテント（家がない人の寝床）
   const camp = world.campfire;
-  if (!hasPlaza && active.length) { // だれもいない間は、木と岩だけ
+  if (!hasPlaza && active.length && !baseVote) { // だれもいない間は、木と岩だけ。拠点の投票中は、たき火もまだない（テントだけ）
     const fire = new THREE.Group();
     for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; box(0.35, 0.25, 0.35, 0x7d7a74, Math.cos(a) * 0.7, 0.12, Math.sin(a) * 0.7, fire); }
     box(0.6, 0.15, 0.15, 0x6b4628, 0, 0.12, 0, fire); box(0.15, 0.15, 0.6, 0x6b4628, 0, 0.18, 0, fire);
@@ -345,7 +351,7 @@ async function main() {
   // チェスト（集めた物が入る）
   let chestObj = null;
   if (world.chest && world.chest.day) {
-    chestObj = makeChest(); chestObj.position.set(world.chest.x, 0, world.chest.z); chestObj.rotation.y = Math.atan2(-world.chest.x, -(world.chest.z + 1)); chestObj.scale.setScalar(1.3); scene.add(chestObj);
+    chestObj = makeChest(); chestObj.position.set(world.chest.x, 0, world.chest.z); chestObj.rotation.y = Math.atan2(-(world.chest.x - CTR.x), -(world.chest.z - CTR.z)); chestObj.scale.setScalar(1.3); scene.add(chestObj);
     const tag = document.createElement('a'); tag.className = 'btag chesttag'; tag.href = '#chestcard'; tag.textContent = '町のチェスト'; tag.style.pointerEvents = 'auto';
     const lo = new CSS2DObject(tag); lo.position.set(world.chest.x, 2.6, world.chest.z); scene.add(lo); btags.push(lo);
   }
@@ -384,7 +390,7 @@ async function main() {
       for (const [x, z] of [[-sw, -sd], [sw, -sd], [-sw, sd], [sw, sd]]) box(0.16, sh, 0.16, 0x9b6b3d, x, sh / 2, z, g);
       for (const y of [1.1, Math.min(sh - 0.2, 2.4)]) { box(sw * 2 + 0.2, 0.14, 0.14, 0x8a5a33, 0, y, -sd, g); box(sw * 2 + 0.2, 0.14, 0.14, 0x8a5a33, 0, y, sd, g); box(0.14, 0.14, sd * 2 + 0.2, 0x8a5a33, -sw, y, 0, g); box(0.14, 0.14, sd * 2 + 0.2, 0x8a5a33, sw, y, 0, g); }
     }
-    g.position.set(plan.site.x, 0, plan.site.z); g.rotation.y = Math.atan2(-plan.site.x, -(plan.site.z + 1)); scene.add(g);
+    g.position.set(plan.site.x, 0, plan.site.z); g.rotation.y = Math.atan2(-(plan.site.x - CTR.x), -(plan.site.z - CTR.z)); scene.add(g);
     const stN = ['土台', '壁', '屋根', 'できあがり'][prog >= 1 ? 3 : prog >= st[1] ? 2 : prog >= st[0] ? 1 : 0];
     const tag = document.createElement('div'); tag.className = 'btag new'; tag.textContent = '建てている：' + config.buildings[plan.build].name + (plan.started ? `（${stN} ${Math.round(prog * 100)}%）` : '（材料と部品を集めている）');
     const lo = new CSS2DObject(tag); lo.position.set(plan.site.x, 4.2, plan.site.z); scene.add(lo); btags.push(lo);
@@ -394,6 +400,13 @@ async function main() {
   for (const v of state.votes || []) {
     if (v.kind !== 'where') continue;
     for (const o of v.options) { const m = makeMarker(o.key); m.position.set(o.x, 0, o.z); scene.add(m); markers.push(m); }
+  }
+  // 拠点の場所の投票中：A/B/C の候補に旗と札（名前と今の票）。札はいつも出す（ほかの札と重なれば上へずらす）
+  if (baseVote) for (const o of baseVote.options) {
+    const m = makeMarker(o.key); m.position.set(o.x, 0, o.z); m.scale.setScalar(1.35); scene.add(m); markers.push(m);
+    const tag = document.createElement('a'); tag.className = 'btag basetag bt-' + o.key; tag.href = 'vote.html'; tag.style.pointerEvents = 'auto';
+    tag.innerHTML = `<b>${esc(o.key)}</b> ${esc(o.name)}<span class="bt-n">${(baseVote.votes || {})[o.key] || 0}票</span>`;
+    const lo = new CSS2DObject(tag); lo.position.set(o.x, 5.2, o.z); scene.add(lo); btags.push(lo);
   }
   // 昼と夜
   const sky = makeSky(scene, { hemi, sun, sunDist: 60, lightAnchors, maxLights: LITE ? 2 : 8, dome: true, camera, radius: 320 });
@@ -443,7 +456,7 @@ async function main() {
   for (const t of world.trees) if (t.state === 'tree' && !t.far && !t.gone) solids.push({ x: t.x, z: t.z, r: 0.95 * (t.size || 1), tree: t });
   for (const t of world.trees) if (t.state === 'stump' && !t.far && !t.gone) solids.push({ x: t.x, z: t.z, r: 0.75 * (t.size || 1) }); // 切り株にも乗らない
   for (const t of Object.values(tentAt)) solids.push({ x: t.x, z: t.z, r: 1.05 });
-  solids.push({ x: camp.x, z: camp.z, r: 1.3 });
+  if (!baseVote) solids.push({ x: camp.x, z: camp.z, r: 1.3 });
   if (world.chest && world.chest.day) solids.push({ x: world.chest.x, z: world.chest.z, r: 0.95 });
   for (const f of world.fields || []) solids.push({ x: f.x, z: f.z, r: 1.9 });
   // 歩く道は、体の分だけ広げた円をよける
@@ -451,7 +464,7 @@ async function main() {
   let solidIx = null;
   const solidNear = (x, z) => { if (!solidIx) solidIx = SpatialHash.of(solids, 4); return solidIx.near(x, z, 9); };
   // 広場をかこむ道（だ円、中心 (0,-1)・半径 12-3.7）からの距離。道の上には寝ない・ベッドを置かない
-  const ringD = (x, z) => Math.abs(Math.hypot(x, (z + 1) / 0.92) - 8.3);
+  const ringD = (x, z) => Math.abs(Math.hypot(x - CTR.x, (z - CTR.z) / 0.92) - 8.3);
   // 体の だ円の、向き yaw の人から (dx, dz) の方への半径
   const bodyR = (yaw, dx, dz) => { const l = Math.hypot(dx, dz) || 1, c = (Math.sin(yaw) * dx + Math.cos(yaw) * dz) / l, s = Math.sqrt(Math.max(0, 1 - c * c)); return (BODY_F * BODY_S) / Math.hypot(BODY_S * c, BODY_F * s); };
   // 横になって寝ている人（足もと → 頭の線）。歩く人も、ほかの寝る人も、ここに重ならない
@@ -1265,7 +1278,7 @@ async function main() {
     for (const s of [-1.6, 1.6]) box(0.1, 2.2, 0.1, 0x8a5a33, s, 1.1, -0.6, g);
     for (let i = 0; i < 7; i++) box(0.3, 0.3, 0.05, [0xd9506a, 0xe2c04e, 0x4b9a5e, 0x3f78b8][i % 4], -1.35 + i * 0.45, 1.9 - Math.sin((i / 6) * Math.PI) * 0.3, -0.6, g).rotation.z = Math.PI / 4;
     const at = pushOut({ x: p.home.x + 1.2, z: p.home.z + 0.4 });
-    g.position.set(at.x, 0, at.z); g.rotation.y = Math.atan2(-at.x, -(at.z + 1)); scene.add(g);
+    g.position.set(at.x, 0, at.z); g.rotation.y = Math.atan2(-(at.x - CTR.x), -(at.z - CTR.z)); scene.add(g);
   }
 
   // 0:家→仕事場 1:仕事 2:仕事場→置き場 3:置く 4:置き場→仕事場 5:立ち話へ 6:立ち話 7:仕事場へもどる
@@ -1598,7 +1611,7 @@ async function main() {
     }
     for (const bt of btags) {
       const dd = camera.position.distanceTo(bt.position);
-      bt.element.style.opacity = dd > 75 * VIEW_K && !bt.element.classList.contains('new') && !bt.element.classList.contains('islandtag') && !bt.element.classList.contains('chesttag') ? '0' : '1';
+      bt.element.style.opacity = dd > 75 * VIEW_K && !bt.element.classList.contains('new') && !bt.element.classList.contains('islandtag') && !bt.element.classList.contains('chesttag') && !bt.element.classList.contains('basetag') ? '0' : '1';
     }
     // 地形はどこまでも続くので、見る場所の左右の制限はなし（高さだけ地面に）
     controls.target.y = 0;
@@ -1660,6 +1673,13 @@ async function main() {
   function closeCard() { card.hidden = true; }
 }
 
+// 拠点の場所の投票中の帯（地図の上）。票はコメントを数えた数（15 分ごとの受付で数え直す）
+function baseBanner(v) {
+  const n = v.votes || {};
+  const tally = v.options.map((o) => `<span class="bv-opt"><i class="bv-k bv-${o.key}">${esc(o.key)}</i>${esc(o.name)} <b>${n[o.key] || 0}</b>票</span>`).join('');
+  return `<a class="basevote" href="vote.html"><span class="bv-title">拠点の場所を投票中！ コメントに A・B・C のどれかを書いてね</span><span class="bv-tally">${tally}</span></a>`;
+}
+
 function renderPanel(D) {
   const { state, history, active, life, config, world } = D;
   const hud = document.getElementById('hud');
@@ -1678,11 +1698,11 @@ function renderPanel(D) {
   const nextEl = document.getElementById('next');
   if (plan) {
     nextEl.innerHTML = `<b>${esc(config.buildings[plan.build].name)}</b>` + (plan.site ? `（${esc(plan.site.label)}）` : '（場所は投票中）') + ' <a href="#chestcard">あつまり具合を見る</a>';
-  } else nextEl.textContent = active.length ? '投票で決めます。' : '村人が来たら、投票で決めます。';
+  } else nextEl.textContent = (state.votes || []).some((v) => v.kind === 'base') ? 'まず拠点（チェストとたき火を置く所）の場所を投票で決めます。建物は、そのまわりに建てます。' : active.length ? '投票で決めます。' : '村人が来たら、投票で決めます。';
   const hm = (iso) => { const d = new Date(iso); return `${(d.getUTCHours() + 9) % 24}時`; };
   const votes = state.votes || [];
   document.getElementById('votebox').innerHTML = votes.length
-    ? votes.map((v) => `<b>${esc(v.question)}</b>（${hm(v.opensAt)}〜${hm(v.closesAt)}）<br>` + v.options.map((o) => `${esc(o.key + ' ' + o.name)} <span class="muted">${v.votes[o.key]}票</span>`).join(' / ')).join('<br>') + ' <a href="vote.html">票を見る</a>'
+    ? votes.map((v) => `<b>${esc(v.question)}</b>（${v.kind === 'base' ? (v.closesAt ? `${((d) => `${d.getUTCMonth() + 1}月${d.getUTCDate()}日 ${d.getUTCHours()}時`)(new Date(Date.parse(v.closesAt) + 9 * 3600e3))}まで` : '町が始まる時まで') : `${hm(v.opensAt)}〜${hm(v.closesAt)}`}）<br>` + v.options.map((o) => `${esc(o.key + ' ' + o.name)} <span class="muted">${v.votes[o.key]}票</span>`).join(' / ')).join('<br>') + ' <a href="vote.html">票を見る</a>'
     : active.length ? '次の投票は、今の建物ができたあとに開きます。<a href="vote.html">くわしく</a>' : '村人が来たら「何を建てる？」の投票が始まります。';
   // 町のチェスト
   // 町のチェスト：木材・石・食べ物の量 → 今つくっている物（あつまった数／いる数）→ 中身（材料・部品・食べ物・道具・その他）
