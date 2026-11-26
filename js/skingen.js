@@ -122,9 +122,14 @@ const HAIR_VARIANTS = {
   braidf: { id: 'braid', name: '三つ編み（肩の前）', sf: 6, bk: 8, body: 0, braid: 'front' },
   twintail: { id: 'twintail', name: 'ツインテール', sf: 3, bk: 5, tail: false, twin: true },
   hime: { id: 'hime', name: '姫カット', fr: [3, 3, 3, 3, 3, 3, 3, 3], sf: 8, bk: 8, body: 4 },
+  // 女の子のショート：耳が出る短さ。前髪はまん中が少し長く丸い、えり足もまん中が長い丸み（bkr：うしろの列ごとの深さ）
+  fshort: { id: 'fshort', name: 'ショート', fr: [2, 2, 3, 3, 3, 3, 2, 2], sf: 2, bk: 5, bkr: [4, 5, 6, 6, 6, 6, 5, 4], tufts: false, curly: false, buzz: false, round: true },
 };
 const LONGISH = ['long', 'longbangs', 'semilong', 'hime', 'braid'];
-const SIDE_LEN = { long: 8, longbangs: 8, hime: 8, semilong: 7, braid: 6, bob: 6, bangs: 6, twintail: 5 };
+const GIRLISH = ['long', 'longbangs', 'semilong', 'hime', 'braid', 'bob', 'ponytail', 'twintail', 'bun', 'bangs'];
+const SIDE_LEN = { long: 8, longbangs: 8, hime: 8, semilong: 8, braid: 6, bob: 6, bangs: 6, twintail: 8, fshort: 3 };
+// 若い女の子の明るい髪色（白・灰の代わり）
+const YOUNG_HAIR = [['薄い金', '#ecd28e'], ['銀', '#c4cbdc'], ['薄い桃', '#eaa9c0']].map(([n, c]) => ({ name: n, c: hex(c) }));
 function hairVariant(s, body, seed) {
   if (body === 'male') return s;
   const h = hashStr('hairvar:' + body + ':' + seed);
@@ -132,6 +137,7 @@ function hairVariant(s, body, seed) {
   if (s.id === 'long' || s.id === 'longbangs') k = ['', '', 'semilong', 'braid', 'braidf'][h % 5];
   else if (s.id === 'ponytail') k = ['', 'twintail'][h % 2];
   else if (s.id === 'bangs' && body === 'female') k = ['', 'hime'][h % 2];
+  else if (body === 'female' && ['short', 'sidepart', 'swept', 'spiky', 'buzz'].includes(s.id)) k = 'fshort'; // 男の子の短髪は女の子には使わない
   return k ? { ...s, ...HAIR_VARIANTS[k] } : s;
 }
 
@@ -146,10 +152,13 @@ export function makeSkin(seed, body = 'none') {
   const slim = female; // 女性は細い腕（3px）
 
   const skin = R.pick(SKIN_TONES);
-  const hairDef = R.weighted(HAIR.map((h) => [h, h.w]));
-  const hair = hairDef.c;
+  const hairDef0 = R.weighted(HAIR.map((h) => [h, h.w]));
   const baseStyle = R.weighted(HAIR_STYLES.map((s) => [s, s.w[bi]]));
-  const style = hairVariant(baseStyle, body, seed); // 女性・長い髪の人は、セミロング・三つ編み・ツインテール・姫カットにもなる（乱数は使わない＝ほかの見た目は変わらない）
+  const style = hairVariant(baseStyle, body, seed); // 女性・長い髪の人は、セミロング・三つ編み・ツインテール・姫カット・女の子のショートにもなる（乱数は使わない＝ほかの見た目は変わらない）
+  // 若い女の子に白・灰の髪はおばあさんに見えるので、薄い金・銀・薄い桃色に置きかえる（番号で決まる）
+  const girlish = female || (body === 'none' && GIRLISH.includes(style.id));
+  const hairDef = girlish && (hairDef0.name === '白' || hairDef0.name === '灰') ? YOUNG_HAIR[hashStr('haircol:' + body + ':' + seed) % YOUNG_HAIR.length] : hairDef0;
+  const hair = hairDef.c;
   const eye = R.pick(EYES);
   traits.push('体: ' + BODY_LABEL[body]);
   traits.push('髪: ' + style.name + '・' + hairDef.name);
@@ -206,7 +215,7 @@ export function makeSkin(seed, body = 'none') {
     if (face === 'front') return style.fr[u];
     if (face === 'right') return lerp(style.bk, Math.max(style.sf, style.fr[0]), u / 7);
     if (face === 'left') return lerp(Math.max(style.sf, style.fr[7]), style.bk, u / 7);
-    if (face === 'back') return style.bk;
+    if (face === 'back') return style.bkr ? style.bkr[u] : style.bk;
     return 0;
   }
   function hairPx(face, u, v, depth) {
@@ -349,7 +358,7 @@ export function makeSkin(seed, body = 'none') {
     }
     if (face === 'bottom') return null;
     // 横とうしろ
-    let d = face === 'back' ? style.bk : hairDepth(face, u);
+    let d = hairDepth(face, u);
     if (long) d = 8;
     const k = face === 'back' ? u : u + 11;
     // 三つ編み（うしろ）：うしろの下 3 段のまん中は編み目。胴の重ね層へ続く
@@ -475,9 +484,14 @@ export function makeSkin(seed, body = 'none') {
         const ends = (u + seedNum) % 2 ? L : Math.max(1, L - 1); // 毛先はぎざぎざ
         if (v < ends) return HP(backF(u) * grad(v) * (v === ends - 1 ? 0.78 : v === ends - 2 ? 0.9 : 1));
       }
-      // 肩の前にかかる髪（ロングは胸の上まで、セミロングは肩だけ）
-      const fl = L >= 4 ? 4 : 2;
-      if (face === 'front' && (u === 0 || u === 7) && v < fl) return HP(strand[u + 3] * (v === fl - 1 ? 0.8 : 1));
+      // 肩の前にかかる髪：ロング・姫カットは胸の上まで 2 列、セミロングは鎖骨まで 1 列（前から見てボブと違いが分かる）
+      if (face === 'front') {
+        const fl = (u === 0 || u === 7) ? (L >= 4 ? 5 : 3) : (u === 1 || u === 6) && L >= 4 ? 3 : 0;
+        if (v < fl) {
+          if (fl >= 3 && v === fl - 1 && (u + seedNum) % 2 === 1 && (u === 1 || u === 6)) return null;
+          return HP(strand[u + 3] * (v === fl - 1 ? 0.78 : v === 0 ? 1.06 : 0.97));
+        }
+      }
     }
     if (style.braid === 'back' && face === 'back' && (u === 3 || u === 4)) {
       if (v <= 7) { const b = braidPx(u, v); b.c = tone(b.c, grad(v)); return b; }
@@ -497,6 +511,32 @@ export function makeSkin(seed, body = 'none') {
     if (style.tail && face === 'back' && (u === 3 || u === 4) && v <= 4) return HP(strand[u + 20] * grad(v) * (v === 4 ? 0.8 : u === 3 ? 1.08 : 0.96));
     return null;
   }, true);
+  // 腕の重ね層（袖の層）の髪：ツインテールの房は頭の両横から肩の上へ垂れ、セミロングの毛先は肩にかかる。
+  //   腕の内側（首に近い側）の列だけに描く。右腕（-x）の内側は前の面の右はし（u＝幅-1）、左腕は左はし（u＝0）
+  if (!style.bald && !style.buzz && (style.twin || style.id === 'semilong')) {
+    const aw = slim ? 3 : 4;
+    const sleeveHair = (isLeft) => (face, u, v, fw) => {
+      const inner = isLeft ? u : fw - 1 - u; // 内側から何列目（前・うしろ・上の面）
+      const HP = (f) => ({ c: tone(hair, f), amp: 0.04 });
+      if (style.twin) {
+        // 房：内側 2 列。上の面は全部、前とうしろは 5 段（毛先は細く）。結び目から下へ明→中→暗
+        if (face === 'top') return inner <= 1 ? HP(strand[(u + 24) % 32] * 1.1) : null;
+        if (face === 'front' || face === 'back') {
+          const iu = face === 'back' ? (isLeft ? fw - 1 - u : u) : inner; // うしろの面は左右が逆
+          if (iu > 1 || v > 4) return null;
+          if (v === 4 && iu === 1) return null;
+          return HP(strand[(iu + 24) % 32] * (v === 4 ? 0.76 : v === 3 ? 0.88 : v === 0 ? 1.08 : 1));
+        }
+        return null;
+      }
+      // セミロング：肩の上の内側 1 列と、前の上 2 段
+      if (face === 'top') return inner === 0 && v >= 1 ? HP(strand[(u + 9) % 32] * 1.04) : null;
+      if (face === 'front' && inner === 0 && v <= 1) return HP(strand[(u + 9) % 32] * (v === 1 ? 0.78 : 0.96));
+      return null;
+    };
+    S.paint(P.rsleeve, [aw, 12, 4], sleeveHair(false), true);
+    S.paint(P.lsleeve, [aw, 12, 4], sleeveHair(true), true);
+  }
   // ---------- 腕（女性は 3px の細い腕） ----------
   const sleeveColor = top === 'jacket' || top === 'hoodie' || top === 'cardigan' ? topColor.c : shirt.c;
   const longArm = top === 'jacket' || top === 'hoodie' || top === 'cardigan' ? true : longSleeve && !dress;

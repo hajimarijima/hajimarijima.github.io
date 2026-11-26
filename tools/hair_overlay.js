@@ -23,7 +23,8 @@ const dry = args.includes('--dry');
 const bi = args.indexOf('--backup');
 const BACKUP = bi >= 0 ? path.resolve(args[bi + 1]) : path.join(os.tmpdir(), 'town-skins-backup');
 // 髪が描かれる所：頭（下の層・重ね層）と胴（下の層・重ね層＝背中に垂れる髪）。ここ以外（腕・脚）が作り方どおりなら、作り方の物とみる
-const inHat = (x, y) => y < 16 || (x >= 16 && x < 40 && y >= 16 && y < 48);
+//   袖の層（右 x40〜55・y32〜47、左 x48〜63・y48〜63）もツインテールの房・肩の毛先が描かれる
+const inHat = (x, y) => y < 16 || (x >= 16 && x < 40 && y >= 16 && y < 48) || (x >= 40 && x < 56 && y >= 32 && y < 48) || (x >= 48 && y >= 48);
 
 // 2) の作り方：見本の色に近い所だけに髪を重ねる
 function sampleOverlay(px) {
