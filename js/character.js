@@ -78,6 +78,8 @@ function geos() {
     rleg: boxGeo(0, 16, 4, 12, 4), rpants: boxGeo(0, 32, 4, 12, 4, 0.5),
     lleg: boxGeo(16, 48, 4, 12, 4), lpants: boxGeo(0, 48, 4, 12, 4, 0.5),
     // 細い腕（3px）のスキン
+    // ツインテールの房（スキンの使われていない x56〜63・y16〜25 に描いてある。描いていないスキンでは透けて見えない）
+    tail: boxGeo(56, 16, 2, 8, 2),
     rarmS: boxGeo(40, 16, 3, 12, 4), rsleeveS: boxGeo(40, 32, 3, 12, 4, 0.5),
     larmS: boxGeo(32, 48, 3, 12, 4), lsleeveS: boxGeo(48, 48, 3, 12, 4, 0.5),
   };
@@ -234,6 +236,7 @@ function makeCarry(kind) {
 // キャラクターを作る。返す group の userData.parts でアニメさせる
 // slim：細い腕（3px）のスキン（女性の見た目など）
 // chibi：2 頭身のデフォルメ（見本。頭 1.7 倍、体と手足は短く太く。頭と体はおよそ 1:1）。スキンの絵はそのまま使う
+const TAIL_Z = 2.5, TAIL_Z_ARMOR = 3.4; // 房の箱のまん中の前後（px）。胴は ±2、防具は ±2.75（腕の防具 ±2.9）
 export const CHIBI = { head: 1.7, torso: [1.1, 0.55, 1.1], arm: [1.2, 0.55, 1.2], leg: [1.2, 0.5, 1.2] };
 export function makeCharacter(url, { scale = 1, oneHand = null, slim = false, chibi = false } = {}) {
   const G = geos();
@@ -251,6 +254,9 @@ export function makeCharacter(url, { scale = 1, oneHand = null, slim = false, ch
 
   const torso = new THREE.Group(); torso.position.y = 18 * PX;
   torso.add(mk(G.body, base)); torso.add(mk(G.jacket, over));
+  // ツインテールの房：胸の両横（x ±2.9px、上は首の高さで頭の下に隠れる）に縦に垂れる箱。前へ 3.5px まで出るので真横からも見える。
+  //   胴に付けるので、歩いても腕と一緒にはゆれない。胴の防具を着た時は防具の外まで前へ出す（setArmor）
+  const tails = [-1, 1].map((s) => { const t = mk(G.tail, over); t.position.set(s * 2.9 * PX, 2 * PX, TAIL_Z * PX); torso.add(t); return t; });
 
   const limb = (g1, g2, x, y) => {
     const p = new THREE.Group(); p.position.set(x, y, 0);
@@ -286,7 +292,7 @@ export function makeCharacter(url, { scale = 1, oneHand = null, slim = false, ch
   root.userData.oneHand = oneHand ?? root.userData.seed < 0.4;
   root.userData.balance = root.userData.seed < 0.2 ? 'out' : 'down';
   root.userData.base = bp; root.userData.chibi = !!chibi;
-  root.userData.parts = { torso, body, head, rarm, larm, rleg, lleg, hand, front, tool: null, toolKind: null, carry: null, carryKind: null };
+  root.userData.parts = { tails, torso, body, head, rarm, larm, rleg, lleg, hand, front, tool: null, toolKind: null, carry: null, carryKind: null };
   return root;
 }
 
@@ -366,6 +372,7 @@ export function setArmor(ch, look) {
   for (const m of P.armor || []) m.parent && m.parent.remove(m);
   P.armor = []; P.armorKey = key; P.armorBody = !!(look && look.body);
   if (P.accent && P.accent.children[1]) P.accent.children[1].visible = !P.armorBody; // スカーフの先は胴の層の中
+  for (const t of P.tails || []) t.position.z = (P.armorBody ? TAIL_Z_ARMOR : TAIL_Z) * PX; // ツインテールの房は防具の外へ
   if (!look) return;
   const add = (parent, A, w, h, d, x, y, z) => { const m = box(w * PX, h * PX, d * PX, armorMats(A.tier, A.color, w, h, d), x * PX, y * PX, z * PX); parent.add(m); P.armor.push(m); };
   if (look.head) {
