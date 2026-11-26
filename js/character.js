@@ -256,7 +256,12 @@ export function makeCharacter(url, { scale = 1, oneHand = null, slim = false, ch
   torso.add(mk(G.body, base)); torso.add(mk(G.jacket, over));
   // ツインテールの房：胸の両横（x ±2.9px、上は首の高さで頭の下に隠れる）に縦に垂れる箱。前へ 3.5px まで出るので真横からも見える。
   //   胴に付けるので、歩いても腕と一緒にはゆれない。胴の防具を着た時は防具の外まで前へ出す（setArmor）
-  const tails = [-1, 1].map((s) => { const t = mk(G.tail, over); t.position.set(s * 2.9 * PX, 2 * PX, TAIL_Z * PX); torso.add(t); return t; });
+  //   肩のうしろ側にも同じ箱を置く（真うしろ・うしろ斜めからも房が見える）。userData.back：うしろ側は z を負に
+  const tails = [];
+  for (const back of [false, true]) for (const s of [-1, 1]) {
+    const t = mk(G.tail, over); t.userData.back = back;
+    t.position.set(s * 2.9 * PX, 2 * PX, (back ? -TAIL_Z : TAIL_Z) * PX); torso.add(t); tails.push(t);
+  }
 
   const limb = (g1, g2, x, y) => {
     const p = new THREE.Group(); p.position.set(x, y, 0);
@@ -372,7 +377,7 @@ export function setArmor(ch, look) {
   for (const m of P.armor || []) m.parent && m.parent.remove(m);
   P.armor = []; P.armorKey = key; P.armorBody = !!(look && look.body);
   if (P.accent && P.accent.children[1]) P.accent.children[1].visible = !P.armorBody; // スカーフの先は胴の層の中
-  for (const t of P.tails || []) t.position.z = (P.armorBody ? TAIL_Z_ARMOR : TAIL_Z) * PX; // ツインテールの房は防具の外へ
+  for (const t of P.tails || []) t.position.z = (P.armorBody ? TAIL_Z_ARMOR : TAIL_Z) * (t.userData.back ? -1 : 1) * PX; // ツインテールの房は防具の外へ
   if (!look) return;
   const add = (parent, A, w, h, d, x, y, z) => { const m = box(w * PX, h * PX, d * PX, armorMats(A.tier, A.color, w, h, d), x * PX, y * PX, z * PX); parent.add(m); P.armor.push(m); };
   if (look.head) {

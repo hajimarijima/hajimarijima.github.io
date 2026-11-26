@@ -45,7 +45,8 @@ const OUTFITS = [
   { name: 'パステル', shirt: [C('空色', '#b4d2ec'), C('桃', '#f0c0c8')], shirt2: [CREAM], top: [CREAM, C('うす緑', '#bcd8b0')], low: [BEIGE, GRAY, C('白っぽい', '#e6e2d6')], shoes: ['#dcdcd6', '#c8a46e'], acc: ['#e3a0ae', '#86b8e2'] },
   { name: '畑', shirt: [C('赤', '#b44a3a'), CREAM], shirt2: [C('こげ茶', '#80583a')], top: [C('ジーンズ', '#46649a'), KHAKI], low: [DJEANS, BROWN, KHAKI], shoes: ['#5a3c28', '#3a2a20'], acc: ['#e6c878', '#f0ece0'] },
 ];
-const EYES = ['#5a3c28', '#28202a', '#3c6ebe', '#3c8250', '#6e7882', '#b4782a'].map(hex);
+// 瞳の色：茶・こげ茶・青・緑・灰・こはく。真っ黒は使わない（遠目でも瞳の色が分かる明るさ）
+const EYES = ['#8a5a34', '#6c4630', '#3c7ad0', '#3c9256', '#7a8a9c', '#c4862e'].map(hex);
 const LEATHER = hex('#5e3e26');
 const GOLD = hex('#e0b648');
 
@@ -257,9 +258,10 @@ export function makeSkin(seed, body = 'none') {
     if (v === d && d > 0) f *= darkGirl ? 0.96 : 0.86; // 前髪の下の影（肌の濃い女の子は薄く＝顔が暗くならない）
     if (face === 'front') {
       if (v === 4) {
-        if (eyeStyle === 'white') { if (u === 1 || u === 6) return [244, 244, 246]; if (u === 2 || u === 5) return tone(eye, 0.9); }
-        else if (eyeStyle === 'big') { if (u === 1 || u === 6) return tone(eye, 1.15); if (u === 2 || u === 5) return tone(eye, 0.75); }
-        else if (u === 2 || u === 5) return [36, 30, 36];
+        // 目は 2 マス：白目（または明るい瞳のつや）＋色のある瞳。黒 1 色にはしない
+        if (eyeStyle === 'white') { if (u === 1 || u === 6) return [244, 244, 246]; if (u === 2 || u === 5) return tone(eye, 1.05); }
+        else if (eyeStyle === 'big') { if (u === 1 || u === 6) return mix(tone(eye, 1.3), [255, 255, 255], 0.3); if (u === 2 || u === 5) return tone(eye, 0.95); }
+        else if (u === 2 || u === 5) return tone(eye, 0.85);
       }
       if (v === 3 && (u === 1 || u === 2 || u === 5 || u === 6)) return darkGirl ? tone(mix(hairDark, skin, 0.35), 1.05) : eyeStyle === 'big' || lashes ? hairDark : tone(mix(hairDark, skin, style.bald ? 0.5 : 0.15), 1);
       if (lashes && v === 4 && (u === 0 || u === 7) && d <= 4) return tone(hairDark, 0.9); // まつ毛（目じり）
@@ -370,8 +372,8 @@ export function makeSkin(seed, body = 'none') {
     if (face === 'back' && style.braid === 'back' && (u === 3 || u === 4) && v >= 5) return braidPx(u, v);
     // 三つ編み（肩の前）：右横の前寄りの下を通って、胴の前へ
     if (face === 'right' && style.braid === 'front' && u >= 6 && v >= 4) return braidPx(u, v);
-    // ツインテール：横の前寄り（耳の前）に結び目と束。下は胸の両横の房の箱（tails）へ続く
-    if (style.twin && ((face === 'right' && (u === 5 || u === 6)) || (face === 'left' && (u === 1 || u === 2))) && v >= 2) {
+    // ツインテール：横のまん中（耳の上）に結び目と束。下は胸の両横と肩のうしろの房の箱（tails）へ、前後に分かれて続く
+    if (style.twin && (face === 'right' || face === 'left') && u >= 2 && u <= 5 && v >= 2) {
       if (v === 2) return tone(tieC, 1);
       return H(strand[u + 24] * (v === 3 ? 1.12 : 1));
     }
