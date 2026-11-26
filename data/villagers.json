@@ -103,5 +103,167 @@
   },
   "hidden": false,
   "display": "kbokn0219"
+ },
+ {
+  "key": "e59b5baeec",
+  "igId": "8baae9d0e22369f4",
+  "name": "dinosaur101007",
+  "userHash": "94bd5fc23217b27c",
+  "skin": 14,
+  "joined": "2026-11-26",
+  "joinedDay": 0,
+  "source": "comment",
+  "startTool": "axe",
+  "birthday": "06-18",
+  "profile": {
+   "food": "たまご"
+  },
+  "hidden": false,
+  "display": "dinosaur101007",
+  "joinedAt": "17:45"
+ },
+ {
+  "key": "dc36f7f32b",
+  "igId": "d900854387fbf090",
+  "name": "peco_1019",
+  "userHash": "ad1e34f6931264b0",
+  "skin": 98,
+  "joined": "2026-11-26",
+  "joinedDay": 0,
+  "source": "comment",
+  "startTool": "axe",
+  "birthday": "06-07",
+  "profile": {
+   "food": "魚"
+  },
+  "hidden": false,
+  "display": "peco_1019",
+  "joinedAt": "17:45"
+ },
+ {
+  "key": "6764b0cb0a",
+  "igId": "a01c061d620d093b",
+  "name": "_mayu1030",
+  "userHash": "9e7bb4689a6bf6da",
+  "skin": 139,
+  "joined": "2026-11-26",
+  "joinedDay": 0,
+  "source": "comment",
+  "startTool": "fishing_rod",
+  "birthday": "01-20",
+  "profile": {
+   "food": "じゃがいも"
+  },
+  "hidden": false,
+  "display": "_mayu1030",
+  "joinedAt": "17:45"
+ },
+ {
+  "key": "90b16eb3df",
+  "igId": "7b19158e86306ca2",
+  "name": "kasu._.1111",
+  "userHash": "3c181e3be830a9dd",
+  "skin": 118,
+  "joined": "2026-11-26",
+  "joinedDay": 0,
+  "source": "comment",
+  "startTool": "pickaxe",
+  "birthday": "10-28",
+  "profile": {
+   "food": "魚"
+  },
+  "hidden": false,
+  "display": "kasu._.1111",
+  "joinedAt": "17:45"
+ },
+ {
+  "key": "677d1a8768",
+  "igId": "edc5e1417d8a154e",
+  "name": "naoto68483",
+  "userHash": "53b377405802e242",
+  "skin": 167,
+  "joined": "2026-11-26",
+  "joinedDay": 0,
+  "source": "comment",
+  "startTool": "hoe",
+  "birthday": "05-16",
+  "profile": {
+   "food": "りんご"
+  },
+  "hidden": false,
+  "display": "naoto68483",
+  "joinedAt": "17:45"
+ },
+ {
+  "key": "ac1879066f",
+  "igId": "0c9e1abb26578a73",
+  "name": "yecha737",
+  "userHash": "3f1f9da9c9453de3",
+  "skin": 161,
+  "joined": "2026-11-26",
+  "joinedDay": 0,
+  "source": "comment",
+  "startTool": "axe",
+  "birthday": "07-24",
+  "profile": {
+   "food": "木の実"
+  },
+  "hidden": false,
+  "display": "yecha737",
+  "joinedAt": "17:45"
+ },
+ {
+  "key": "54ca827060",
+  "igId": "2a4ee4ddb0f13f38",
+  "name": "jgpdbj.331",
+  "userHash": "97058f8c0d2dcd5e",
+  "skin": 116,
+  "joined": "2026-11-26",
+  "joinedDay": 0,
+  "source": "comment",
+  "startTool": "fishing_rod",
+  "birthday": "12-10",
+  "profile": {
+   "food": "きのこ"
+  },
+  "hidden": false,
+  "display": "jgpdbj.331",
+  "joinedAt": "17:45"
+ },
+ {
+  "key": "7657063664",
+  "igId": "1e894427dafad5a6",
+  "name": "ayano.ay.0907",
+  "userHash": "e2e4467cac31684f",
+  "skin": 166,
+  "joined": "2026-11-26",
+  "joinedDay": 0,
+  "source": "comment",
+  "birthday": "02-06",
+  "profile": {
+   "food": "魚"
+  },
+  "hidden": false,
+  "display": "ayano.ay.0907",
+  "joinedAt": "17:45"
+ },
+ {
+  "key": "fecbebe3e7",
+  "igId": "cfade2729b327eb4",
+  "name": "chunchun_diary_01",
+  "userHash": "e47842953573602e",
+  "skin": 65,
+  "joined": "2026-11-26",
+  "joinedDay": 0,
+  "source": "comment",
+  "startTool": "fishing_rod",
+  "profile": {
+   "food": "ωノ"
+  },
+  "birthday": "11-21",
+  "hidden": false,
+  "display": "chunchun_diary_01",
+  "profileAt": "2026-11-26T08:21:43.000Z",
+  "joinedAt": "17:45"
  }
 ]
