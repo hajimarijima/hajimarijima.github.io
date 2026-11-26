@@ -1817,6 +1817,12 @@
     "tameRange": 60,
     "followRange": 12
   },
+  "expansion": {
+    "note": "島を広げる決まり（小さな島の町だけ。前の広い平地の町では動かない）。北の海の向こうに「北の島」があり、はじめは行けない。フォロワーが followers 人をこえた日から、チェストの木材と石を毎日 perDay まで使って橋を作る（keep の分はチェストに残す）。cost の分がそろうと橋ができあがり、次の日から村人が北の島で木を切り・岩を掘り・家を建てられる。workShare：橋ができたあと、木こりと石掘りのうち北の島へ働きに行く人の割合。crew：毎日橋を作る人数。数を変えれば早くも遅くもできる",
+    "bridges": {
+      "north": { "followers": 50, "minDay": 2, "cost": { "wood": 60, "stone": 24 }, "perDay": { "wood": 20, "stone": 8 }, "keep": { "wood": 10, "stone": 5 }, "workShare": 0.35, "crew": 3 }
+    }
+  },
   "terrain": {
     "note": "町のまわりの地形（チャンクごとに種から作る）。clearBlocks：建物（建てる場所も）のまわり何ブロックに木と岩を置かないか（sim.js の生えかわりも同じ）。viewChunks：見える距離（チャンク）",
     "seed": "town",

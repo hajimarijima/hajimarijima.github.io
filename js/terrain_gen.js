@@ -4,6 +4,7 @@
 //   - 町（sim.js が木や岩を置く範囲 zone）の中は平らな草地。南（seaZ より先）は海で、境目は砂浜
 //   - 外へ行くほど、ノイズで 丘・山（高いと石・雪）・川（くねった帯）・小さな湖・森の濃い所と薄い所 が出てくる
 //   - 建物（予定地も）のまわり keepR ブロックには、木も岩も作らない
+import { shoreDist } from './island.js';
 export const BLOCK = 1.9;
 export const CHUNK = 16;
 
@@ -28,7 +29,10 @@ function makeNoise(seed) {
 const smooth = (a, b, x) => { const k = Math.max(0, Math.min(1, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
 
 // zone：{ x0, x1, z0, z1 }（町の範囲・ワールド座標）。keepOut：[{ x, z, r }]（r はワールド座標の半径。建物と予定地）
-export function makeTerrain({ seed = 'town', zone = { x0: -112, x1: 112, z0: -112, z1: 36 }, seaZ = 34, keepOut = [], keepR = 4 } = {}) {
+// islands：島の形の町（world.islands）。渡すと、島の上だけが平らな陸（ふちは砂浜）で、まわりはぜんぶ海になる。
+//   木と岩はぜんぶ world.json の物（島の外の見た目だけの木と岩は作らない）。渡さなければ前のとおり。
+export function makeTerrain({ seed = 'town', zone = { x0: -112, x1: 112, z0: -112, z1: 36 }, seaZ = 34, keepOut = [], keepR = 4, islands = null } = {}) {
+  if (islands && islands.length) return makeIslandTerrain({ islands, seaZ, zone });
   const S = hash32(String(seed));
   const nC = makeNoise(S ^ 0x1111), nM = makeNoise(S ^ 0x2222), nH = makeNoise(S ^ 0x3333), nR = makeNoise(S ^ 0x4444),
     nL = makeNoise(S ^ 0x5555), nF = makeNoise(S ^ 0x6666), nK = makeNoise(S ^ 0x7777), nW = makeNoise(S ^ 0x8888);
@@ -107,4 +111,53 @@ export function makeTerrain({ seed = 'town', zone = { x0: -112, x1: 112, z0: -11
   }
   const heightAt = (x, z) => { const c = cell(Math.floor(x / BLOCK), Math.floor(z / BLOCK)); return c.h > 0 ? c.h * BLOCK : 0; };
   return { cell, chunkObjects, heightAt, forest, outside, nearBuilding, zone, seaZ };
+}
+
+// 島の形の地形：島の中は平らな草地、岸から BEACH までは砂浜、外は海（岸から 8 より先は深い）
+const BEACH = 3.8;
+//   wild の島（遠くの大陸）だけは、内側へ行くほど丘と山（高い所は石と雪）になり、見た目だけの森がある
+function makeIslandTerrain({ islands, seaZ, zone }) {
+  const cache = new Map();
+  const nH = makeNoise(0x51a7), nM = makeNoise(0x77e1), nF = makeNoise(0x3c3c);
+  const fbm = (n, x, y, o = 3) => { let s = 0, a = 1, f = 1, t = 0; for (let i = 0; i < o; i++) { s += n(x * f, y * f) * a; t += a; a *= 0.5; f *= 2.03; } return s / t; };
+  const cellHash = (i, j, k) => { let h = Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(k + 1, 2147483647) + 0x2545; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  function cell(i, j) {
+    const key = i * 100003 + j;
+    const hit = cache.get(key); if (hit) return hit;
+    const x = (i + 0.5) * BLOCK, z = (j + 0.5) * BLOCK;
+    let sd = -Infinity, best = null;
+    for (const isl of islands) { const d = shoreDist(isl, x, z); if (d > sd) { sd = d; best = isl; } }
+    let c;
+    if (sd < 0) c = { h: sd < -8 ? -2 : -1, kind: 'water', w: 0 };
+    else if (best && best.wild && sd >= BEACH) {
+      const ridge = Math.pow(1 - Math.abs(nM(x / 140, z / 140)), 3);
+      const raw = smooth(BEACH, 70, sd) * (2 + Math.max(0, fbm(nH, x / 90, z / 90) + 0.25) * 9 + ridge * 16 * smooth(30, 120, sd));
+      const h = Math.round(raw);
+      c = { h, kind: h >= 13 ? 'snow' : h >= 8 ? 'stone' : 'grass', w: 0, wild: 1 };
+    } else c = { h: 0, kind: sd < BEACH ? 'sand' : 'grass', w: 0 };
+    if (cache.size > 400000) cache.clear();
+    cache.set(key, c);
+    return c;
+  }
+  // 見た目だけの木と岩（wild の島の上だけ）
+  function chunkObjects(ci, cj) {
+    const trees = [], rocks = [];
+    const i0 = ci * CHUNK, j0 = cj * CHUNK;
+    for (let gi = 0; gi < CHUNK; gi += 3) for (let gj = 0; gj < CHUNK; gj += 3) {
+      const i = i0 + gi + Math.floor(cellHash(i0 + gi, j0 + gj, 1) * 3), j = j0 + gj + Math.floor(cellHash(i0 + gi, j0 + gj, 2) * 3);
+      if (i >= i0 + CHUNK || j >= j0 + CHUNK) continue;
+      const c = cell(i, j);
+      if (!c.wild || c.kind === 'snow') continue;
+      const x = (i + 0.5) * BLOCK, z = (j + 0.5) * BLOCK, r = cellHash(i, j, 3);
+      const forest = Math.max(0, Math.min(1, (fbm(nF, x / 120, z / 120, 2) + 0.15) * 1.8));
+      if (c.kind === 'grass' && r < 0.1 + forest * 0.6) trees.push({ id: 'w' + i + '_' + j, x, z, y: c.h * BLOCK, state: 'tree', kind: Math.floor(cellHash(i, j, 4) * 3), size: 0.85 + cellHash(i, j, 5) * 0.35 });
+      else if (r > (c.kind === 'stone' ? 0.85 : 0.97)) rocks.push({ id: 'wr' + i + '_' + j, x, z, y: c.h * BLOCK, hp: 10, max: 10, kind: Math.floor(cellHash(i, j, 6) * 3), blocks: 'ssssssssss' });
+    }
+    return { trees, rocks };
+  }
+  const heightAt = (x, z) => { const c = cell(Math.floor(x / BLOCK), Math.floor(z / BLOCK)); return c.h > 0 ? c.h * BLOCK : 0; };
+  return {
+    cell, chunkObjects, heightAt, forest: () => 0,
+    outside: () => 0, nearBuilding: () => false, zone, seaZ, islands,
+  };
 }

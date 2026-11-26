@@ -58,18 +58,21 @@ const hm = (iso) => `${(new Date(iso).getUTCHours() + 9) % 24}時`;
 // ---------- 時間割 ----------
 const T = {
   s0: 0, join: 2.0, pick: 6.4, rock: 9.2, level: 15.4, what: 20.8, where: 24.6, tree: 28.6, night: 35.0,
-  craft: 36.4, build: 39.4, chest: 42.6, fish: 46.4, farm: 49.6, ranch: 52.4, end: 55.2,
+  craft: 36.4, build: 39.4, chest: 42.6, fish: 46.4, farm: 49.6, ranch: 52.4, tease: 55.2, danger: 57.6, end: 60.0,
 };
-const DURATION = 58.2;
-const SC_ORDER = ['s0', 'join', 'pick', 'rock', 'level', 'what', 'where', 'tree', 'night', 'craft', 'build', 'chest', 'fish', 'farm', 'ranch', 'end'];
+// tease：予告（フォロワーが増えると何かが起きるかも）・danger：予告（何日目かの夜、島が危なくなるかも。night.js の敵の夜。日にちは決めない）
+const DURATION = 63.0;
+const SC_ORDER = ['s0', 'join', 'pick', 'rock', 'level', 'what', 'where', 'tree', 'night', 'craft', 'build', 'chest', 'fish', 'farm', 'ranch', 'tease', 'danger', 'end'];
 const scene0 = (t) => { let s = 's0'; for (const k of SC_ORDER) if (t >= T[k]) s = k; return s; };
 const dayAt = (t) => (t < T.join ? 0 : t < T.night + 0.7 ? 1 : 2);
 function hourAt(t) {
   if (t < T.join) return lerp(10, 11, t / T.join);
   if (t < T.night) return lerp(8, 16.5, (t - T.join) / (T.night - T.join));
   if (t < T.craft) return lerp(17, 30.6, (t - T.night) / (T.craft - T.night)) % 24;
-  if (t < T.end) return lerp(7, 15.5, (t - T.craft) / (T.end - T.craft));
-  return lerp(15.5, 16, (t - T.end) / (DURATION - T.end));
+  if (t < T.tease) return lerp(7, 15.5, (t - T.craft) / (T.tease - T.craft));
+  if (t < T.danger) return lerp(16.6, 18.2, (t - T.tease) / (T.danger - T.tease)); // 夕方
+  if (t < T.end) return lerp(21.5, 22.5, (t - T.danger) / (T.end - T.danger));    // 夜
+  return lerp(8, 8.6, (t - T.end) / (DURATION - T.end));                          // 夜が明けた朝
 }
 
 // ---------- three.js ----------
@@ -178,7 +181,7 @@ const inClearing = (o, rock) => { if (rock) { const dx = o.x - TREE.x, dz = o.z 
 // これからの畑と柵（イメージ）の場面も、手前の木と岩をどけて撮る（木の幹がカメラの前をふさいだり、名札に葉がかぶったりしないように）
 const nearFarm = (o) => o.x > -50 && o.x < -21 && o.z > -16 && o.z < 13;
 const NAT = [natureFor(D.days[0]), natureFor(D.days[1]), natureFor(D.days[2]), natureFor(D.days[0], inClearing), natureFor(D.days[2], nearFarm)];
-const natIdx = (t) => (t >= T.tree && t < T.night ? 3 : t < T.night + 0.7 ? 0 : t < T.build ? 1 : t >= T.farm && t < T.end ? 4 : 2);
+const natIdx = (t) => (t >= T.tree && t < T.night ? 3 : t < T.night + 0.7 ? 0 : t < T.build ? 1 : t >= T.farm && t < T.tease ? 4 : 2);
 for (const b of D.bushes) scene.add(makeBush({ ...b, ready: true }));
 const treeObj = makeTree({ ...TREE, state: 'tree' }); scene.add(treeObj);
 const rockObj = makeRock({ ...ROCK0, hp: 99 }); scene.add(rockObj);
@@ -329,12 +332,19 @@ function levelScene(t) {
     const my = LV.stops.filter((s) => s.li === li);
     const i = Math.max(0, Math.min(2, Math.floor(u / (LV.stopLen + LV.walk))));
     const w = u - i * (LV.stopLen + LV.walk);
-    let p = my[i].p, pose = 'dig';
+    let p = my[i].p, pose = 'dig', walkTo = null;
     if (u < 0) pose = 'idle'; // 場面が変わった時には、もう最初の所にいる（遠くから歩かせない）
-    else if (w > LV.stopLen && i < 2) { const k = (w - LV.stopLen) / LV.walk; p = { x: lerp(my[i].p.x, my[i + 1].p.x, k), z: lerp(my[i].p.z, my[i + 1].p.z, k) }; pose = 'walk'; }
+    else if (w > LV.stopLen && i < 2) { const k = (w - LV.stopLen) / LV.walk; p = { x: lerp(my[i].p.x, my[i + 1].p.x, k), z: lerp(my[i].p.z, my[i + 1].p.z, k) }; pose = 'walk'; walkTo = my[i + 1].p; }
     else if (u > 3 * (LV.stopLen + LV.walk)) pose = 'idle';
     const away = { x: SQ.x + Math.cos(my[i].a) * 7, z: SQ.z + Math.sin(my[i].a) * 7 };
-    put(key, p, faceTo(p, away), pose === 'dig' ? 'gather' : pose, t + li, null); // 手で草をぬく
+    // 歩く間は次の所を向く。着いたら 0.25 秒でくるっと外向き（草の方）へ、歩き出す前の 0.2 秒で進む向きへ回る（その場で急に向きが飛ばない）
+    const turn = (a, b, k) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * ease(k);
+    let fc = walkTo ? faceTo(my[i].p, walkTo) : faceTo(p, away);
+    if (!walkTo && u >= 0 && pose !== 'idle') {
+      if (i > 0 && w < 0.25) fc = turn(faceTo(my[i - 1].p, my[i].p), fc, w / 0.25);
+      else if (i < 2 && w > LV.stopLen - 0.2) fc = turn(fc, faceTo(my[i].p, my[i + 1].p), (w - (LV.stopLen - 0.2)) / 0.2);
+    }
+    put(key, p, fc, pose === 'dig' ? 'gather' : pose, t + li, null); // 手で草をぬく
   });
   // ほかの人は、それぞれの仕事へ（森へ歩いていく）
   CREW.filter((k) => !LEVELERS.includes(k) && k !== KJ).forEach((key, i) => {
@@ -412,7 +422,7 @@ function treeScene(t, after) {
     }
   }
   // 打つ人
-  if (t < TR.t1) { const k = clamp01((t - T.tree) / (TR.t1 - T.tree)); const p = { x: lerp(TR.from.x, TR.ws.x, k), z: lerp(TR.from.z, TR.ws.z, k) }; put(KCH, p, faceTo(p, TREE), 'walk', t, CH_TOOL); }
+  if (t < TR.t1) { const k = clamp01((t - T.tree) / (TR.t1 - T.tree)); const p = { x: lerp(TR.from.x, TR.ws.x, k), z: lerp(TR.from.z, TR.ws.z, k) }; put(KCH, p, faceTo(TR.from, TR.ws), 'walk', t, CH_TOOL); } // 歩く間は進む向き
   else if (t < TR.tFell + 0.25) put(KCH, TR.ws, faceTo(TR.ws, TREE), 'chop', u * VC.rate / 1.6, CH_TOOL);
   else put(KCH, TR.ws, faceTo(TR.ws, logPos(1)), t - TR.tFell > TR.VAN && t - TR.tFell < TR.VAN + 1.2 ? 'gather' : 'idle', t, CH_TOOL);
 }
@@ -452,7 +462,7 @@ function rockScene(t, state) {
     else if (a < 2.2) { const q = (a - 1.1) / 1.1; fx.plus('+1 ' + IT[kind].name, ROCK0.x, 3.6 + q * 0.5, ROCK0.z, q < 0.75 ? 1 : (1 - q) * 4, kind === 'coal' ? '#e0e0e0' : '#fff6c8', 1.1); } // 岩の上（顔に重ならない）
   }
   const done = u > breakTime(RK.N - 1, VD, RK.hits) + 0.25;
-  if (u < 0) { const k = clamp01((t - T.rock) / 1.0); const p = { x: lerp(RK.from.x, RK.ws.x, k), z: lerp(RK.from.z, RK.ws.z, k) }; put(KJ, p, faceTo(p, ROCK0), k < 1 ? 'walk' : 'idle', t, 'pick:wood'); return; }
+  if (u < 0) { const k = clamp01((t - T.rock) / 1.0); const p = { x: lerp(RK.from.x, RK.ws.x, k), z: lerp(RK.from.z, RK.ws.z, k) }; put(KJ, p, k < 1 ? faceTo(RK.from, RK.ws) : faceTo(p, ROCK0), k < 1 ? 'walk' : 'idle', t, 'pick:wood'); return; } // 歩く間は進む向き
   put(KJ, RK.ws, faceTo(RK.ws, ROCK0), done ? 'idle' : 'dig', done ? t : Math.max(0, u) * VD.rate / 1.3, 'pick:wood');
 }
 
@@ -483,7 +493,7 @@ const CAM_CHEST = [CH.c.x + CH.F.x * 10.5 - CH.Sd.x * 4.4, 4.8, CH.c.z + CH.F.z 
 function chestScene(t) {
   const a = t - CH.open;
   setChestOpen(chest, a < 0 ? 0 : Math.min(1, a / 0.25));
-  if (t < CH.arrive) { const k = clamp01((t - T.chest) / (CH.arrive - T.chest)); const p = { x: lerp(CH.from.x, CH.at.x, k), z: lerp(CH.from.z, CH.at.z, k) }; put(KCH, p, faceTo(p, CH.c), 'carry', t, null, 'wood'); }
+  if (t < CH.arrive) { const k = clamp01((t - T.chest) / (CH.arrive - T.chest)); const p = { x: lerp(CH.from.x, CH.at.x, k), z: lerp(CH.from.z, CH.at.z, k) }; put(KCH, p, faceTo(CH.from, CH.at), 'carry', t, null, 'wood'); } // 歩く間は進む向き
   else put(KCH, CH.at, faceTo(CH.at, CH.c), a < 0.9 ? 'gather' : 'idle', t, null, null);
   for (let i = 0; i < 3; i++) {
     const q = (a - i * 0.18) / 0.45;
@@ -506,7 +516,9 @@ function fishScene(t) {
   const key = KFI || CREW[4];
   const u = t - T.fish + 3.0, f = fishCycle(u);
   put(key, FS.ws, faceTo(FS.ws, FS.bp), 'fish', u, 'rod:' + ((KFI && D2.life[KFI][4] !== 'hand' && D2.life[KFI][4]) || 'wood'));
-  const y = 0.1 + Math.sin(t * 2.2) * 0.02 - f.sink * 0.16 + f.reel * 0.6;
+  // 釣れた後は、うきと魚を水から上へ引き上げる（魚はうきのすぐ下で、口を糸の先にしてぶら下がる）
+  const qc = f.caught ? clamp01((f.c - 0.74) / 0.1) : 0;
+  const y = 0.1 + Math.sin(t * 2.2) * 0.02 * (1 - qc) - f.sink * 0.16 + f.reel * 0.6 + qc * 1.0;
   bob.visible = true; fishLine.visible = true;
   bob.position.set(lerp(FS.bp.x, FS.ws.x, f.reel * 0.45), y, lerp(FS.bp.z, FS.ws.z, f.reel * 0.45));
   bob.userData.ring.scale.setScalar(1 + f.sink * 1.6);
@@ -514,8 +526,10 @@ function fishScene(t) {
   const tool = ch.userData.parts.tool;
   if (tool && tool.userData.tip) { tool.userData.tip.getWorldPosition(_tip); fishLine.geometry.setFromPoints([_tip.clone(), bob.position.clone().setY(y + 0.25)]); }
   if (f.caught) {
-    const q = clamp01((f.c - 0.74) / 0.1);
-    fx.item(FISH_KEY, bob.position.x, y + 0.3 + q * 0.5, bob.position.z, u * 5, 2.2);
+    // 魚の頭は +x（口は +0.18）。z 軸で 90° 回して頭を上に、体は下へ垂らす。横腹をカメラに向け、少しだけ振り子のようにゆれる
+    const S = 2.2, side = Math.atan2(CAM_FISH[0] - bob.position.x, CAM_FISH[2] - bob.position.z);
+    const sw = Math.sin(t * 5.5) * 0.12, mouthY = y - 0.06, len = 0.18 * S;
+    fx.item(FISH_KEY, bob.position.x + Math.sin(sw) * len * Math.cos(side), mouthY - Math.cos(sw) * len, bob.position.z - Math.sin(sw) * len * Math.sin(side), side, S, Math.PI / 2 + sw);
     if (f.c > 0.78) fx.plus('+1 ' + IT[FISH_KEY].name, FS.bp.x, 1.9 + (f.c - 0.78) * 1.5, FS.bp.z, 1, '#bfe8ff', 1.2);
   }
   if (f.sink > 0.2) fx.chips(chipList({ x: FS.bp.x, y: 0.12, z: FS.bp.z }, { x: 0, z: 0 }, 'splash', (f.c - 0.62) * 7, 8), 0xd8ecf8);
@@ -580,6 +594,54 @@ const CAM_WHERE = (() => {
 })();
 const CAM_WIDE0 = orbit(A0 + 0.15, 26, 32), CAM_WIDE1 = orbit(A0, 21, 27);
 const A_END = bestAngle((SITE.x + SQ.x) / 2, (SITE.z + SQ.z) / 2, 27, 2, 0.4, 27);
+// ---------- 予告：夜の森の目（イメージ）。村のはしから低く森を見る。光る目は木の手前の暗がりに ----------
+const DG = (() => {
+  const trees = NAT[2].trees;
+  let best = null;
+  for (let k = 0; k < 48; k++) {
+    const a = (k / 48) * Math.PI * 2, d = { x: Math.sin(a), z: Math.cos(a) };
+    const cp = { x: SQ.x + d.x * 5, z: SQ.z + d.z * 5 };
+    if (d.z > -0.35) continue; // 海（南）の側は見ない。森の奥（北）へ向く
+    let n = 0, bad = 0;
+    for (const t of trees) {
+      const dx = t.x - cp.x, dz = t.z - cp.z, along = dx * d.x + dz * d.z, side = Math.abs(dx * d.z - dz * d.x);
+      if (along > 14 && along < 34 && side < along * 0.28) n++;
+      if (along > -2 && along < 14 && side < 4 + along * 0.3) bad++; // 手前の木は画面をふさぐ
+    }
+    for (const r of NAT[2].rocks) { const dx = r.x - cp.x, dz = r.z - cp.z, along = dx * d.x + dz * d.z; if (along > 0 && along < 14 && Math.abs(dx * d.z - dz * d.x) < 4) bad++; }
+    const cost = -n + bad * 4;
+    if (!best || cost < best.cost) best = { cost, a, d, cp };
+  }
+  const { d, cp } = best;
+  const cam = [cp.x, 3.2, cp.z, cp.x + d.x * 30, 2.4, cp.z + d.z * 30];
+  // 目を置く所：森のふちの木（手前に木がない物）の、カメラ側で少し横
+  const near = trees.map((t) => { const dx = t.x - cp.x, dz = t.z - cp.z; return { t, along: dx * d.x + dz * d.z, side: dx * d.z - dz * d.x }; })
+    .filter((o) => o.along > 13 && o.along < 32 && Math.abs(o.side) < o.along * 0.24).sort((p, q) => p.along - q.along);
+  const eyes = [];
+  for (const o of near) {
+    if (eyes.length >= 3) break;
+    const s = o.t.size || 1, u = unit(cp.x - o.t.x, cp.z - o.t.z), sd = { x: -u.z, z: u.x }, sg = o.side > 0 ? -1 : 1;
+    const p = { x: o.t.x + u.x * (1.4 * s) + sd.x * sg * (1.3 * s), z: o.t.z + u.z * (1.4 * s) + sd.z * sg * (1.3 * s) };
+    if (trees.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < 1.0 * (q.size || 1))) continue; // 幹にめりこまない
+    if (eyes.some((e) => Math.hypot(e.x - p.x, e.z - p.z) < 5)) continue;
+    // カメラから目まで、ほかの木の幹にかくれない
+    const L = Math.hypot(p.x - cp.x, p.z - cp.z), v = unit(p.x - cp.x, p.z - cp.z);
+    if (trees.some((q) => { const dx = q.x - cp.x, dz = q.z - cp.z, al = dx * v.x + dz * v.z; return al > 0 && al < L - 0.5 && Math.abs(dx * v.z - dz * v.x) < 0.9 * (q.size || 1); })) continue;
+    eyes.push({ ...p, y: 1.3 + eyes.length * 0.25 });
+  }
+  return { cam, cp, d, eyes };
+})();
+const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffd23a, fog: false });
+const eyeGlowMat = new THREE.MeshBasicMaterial({ color: 0xff5a2a, fog: false, transparent: true, opacity: 0.2, depthWrite: false });
+const eyeObjs = DG.eyes.map((e) => {
+  const g = new THREE.Group();
+  for (const sx of [-0.3, 0.3]) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.22, 0.05), eyeMat); m.position.set(sx, 0, 0); g.add(m);
+    const gl = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.38, 0.02), eyeGlowMat); gl.position.set(sx, 0, -0.04); g.add(gl);
+  }
+  g.position.set(e.x, e.y, e.z); g.lookAt(DG.cp.x, e.y, DG.cp.z); g.visible = false; scene.add(g);
+  return g;
+});
 function cameraAt(t) {
   const sc = scene0(t);
   if (sc === 's0') return look(lerpCam(orbit(A0 + 0.3, 31, 36), CAM_WIDE0, ease(t / T.join)));
@@ -602,6 +664,13 @@ function cameraAt(t) {
   if (sc === 'fish') { const k = (t - T.fish) / (T.farm - T.fish); const c = CAM_FISH.slice(); c[1] -= k * 0.4; return look(c); }
   if (sc === 'farm') { const k = (t - T.farm) / (T.ranch - T.farm); const c = CAM_FARM.slice(); c[2] -= k * 1.0; return look(c); }
   if (sc === 'ranch') { const k = (t - T.ranch) / (T.end - T.ranch); const c = CAM_PEN.slice(); c[2] += k * 1.2; return look(c); }
+  if (sc === 'tease') { const k = (t - T.tease) / (T.danger - T.tease); return look(orbit(A_END - 0.06 + k * 0.08, 31 - k * 2, 31, 1.5, (SITE.x + SQ.x) / 2, (SITE.z + SQ.z) / 2)); }
+  if (sc === 'danger') {
+    // ゆっくり森へ寄る。地ひびきのように、少しだけゆれる
+    const k = (t - T.danger) / (T.end - T.danger), c = DG.cam.slice(), sh = 0.05 * clamp01(k * 2) * (Math.sin(t * 47) + 0.6 * Math.sin(t * 29));
+    c[0] += DG.d.x * k * 2.0; c[2] += DG.d.z * k * 2.0; c[1] += sh; c[4] += sh;
+    return look(c);
+  }
   if (sc === 'chest') return look(lerpCam(CAM_CHEST, [CAM_CHEST[3] + (CAM_CHEST[0] - CAM_CHEST[3]) * 0.9, 4.4, CAM_CHEST[5] + (CAM_CHEST[2] - CAM_CHEST[5]) * 0.9, CAM_CHEST[3], 1.6, CAM_CHEST[5]], ease((t - T.chest) / 2.3)));
   const k = ease((t - T.end) / 3);
   return look(lerpCam(orbit(A_END, 27, 27, 1.5, (SITE.x + SQ.x) / 2, (SITE.z + SQ.z) / 2), orbit(A_END + 0.12, 34, 33, 1.5, (SITE.x + SQ.x) / 2, (SITE.z + SQ.z) / 2), k));
@@ -645,7 +714,9 @@ const CAPS = [
   [T.chest + 0.1, CH.gui, ['集めた物は、町のチェストへ']],
   [T.fish + 0.1, T.farm, KFI ? ['池で釣り。うきが沈んだら釣り上げる', '村ではじめて魚が釣れた'] : ['池で釣り。うきが沈んだら釣り上げる']],
   [T.farm + 0.1, T.ranch, ['これから：畑は何日かで実る', '金やダイヤの道具も作れる']],
-  [T.ranch, T.end, ['柵で動物を飼うと', 'たまご・ミルク・羊毛がもらえる']],
+  [T.ranch, T.tease, ['柵で動物を飼うと', 'たまご・ミルク・羊毛がもらえる']],
+  [T.tease + 0.2, T.danger - 0.1, ['フォロワーが増えると、', '島に何かが起きるかも…'], { color: '#ffe08a' }],
+  [T.danger + 0.35, T.end - 0.1, ['何日目かの夜、', '島が危なくなるかも…'], { color: '#ffb4a6', bg: 'rgba(28, 6, 10, 0.82)', size: 70 }],
 ];
 function captions(t) {
   CAPS.forEach(([a, b, lines, o = {}], i) => {
@@ -653,14 +724,14 @@ function captions(t) {
     const prev = CAPS[i - 1], next = CAPS[i + 1];
     const inA = prev && Math.abs(prev[1] - a) < 0.05 ? (t >= a ? 1 : 0) : clamp01((t - a) / 0.25);
     const outA = next && Math.abs(next[0] - b) < 0.05 ? (t < b ? 1 : 0) : clamp01((b - t) / 0.25);
-    caption(lines, o.y || CAP, o.size || 64, Math.min(inA, outA));
+    caption(lines, o.y || CAP, o.size || 64, Math.min(inA, outA), o);
   });
 }
-function dayBadge(day) {
+function dayBadge(day, label = null, bg = 'rgba(47, 74, 55, 0.92)') {
   ctx.save();
   ctx.font = `700 84px ${FONT}`; ctx.textBaseline = 'middle';
-  const txt = day == null ? 'これから' : `${day}日目`; const w = ctx.measureText(txt).width;
-  ctx.fillStyle = 'rgba(47, 74, 55, 0.92)'; roundRect(64, SAFE_TOP + 24, w + 72, 124, 62); ctx.fill();
+  const txt = label || (day == null ? 'これから' : `${day}日目`); const w = ctx.measureText(txt).width;
+  ctx.fillStyle = bg; roundRect(64, SAFE_TOP + 24, w + 72, 124, 62); ctx.fill();
   ctx.fillStyle = '#fff'; ctx.fillText(txt, 100, SAFE_TOP + 88);
   ctx.restore();
 }
@@ -918,6 +989,47 @@ function chestGui(t, a) {
   ctx.restore();
 }
 
+// ---------- 予告の画面効果 ----------
+function sparkle(x, y, r, a) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a; ctx.translate(x, y);
+  ctx.fillStyle = '#fff3b0'; ctx.shadowColor = '#ffd23a'; ctx.shadowBlur = r * 0.8;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) { const ang = i * Math.PI / 4, rr = i % 2 ? r * 0.22 : r; ctx.lineTo(Math.cos(ang) * rr, Math.sin(ang) * rr); }
+  ctx.closePath(); ctx.fill(); ctx.restore();
+}
+// フォロワーが増えると…：建てている所の上に「？」と、きらきら
+function teaseFx(t) {
+  const u = t - T.tease;
+  // 村人の頭（高さ 4.5）の画面の位置から、いつも 360px 上に置く（カメラが寄っても頭や振り上げた道具に近づかない）
+  _pv.set(SITE.x, 4.5, SITE.z).project(camera);
+  const x = (_pv.x + 1) / 2 * W, y = Math.min(860, (1 - _pv.y) / 2 * H - 360) + Math.sin(t * 4) * 8;
+  const s = Math.max(0.01, backOut(clamp01((u - 0.3) / 0.35))) * clamp01((T.danger - t) / 0.2);
+  if (u > 0.3) {
+    ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.arc(4, 8, 74, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffe08a'; ctx.beginPath(); ctx.arc(0, 0, 74, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#fffdf4'; ctx.lineWidth = 8; ctx.stroke();
+    ctx.fillStyle = '#7a4a10'; ctx.font = `700 100px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('？', 2, 6);
+    ctx.restore();
+  }
+  for (let i = 0; i < 7; i++) {
+    const ang = i * 0.9 + 0.4, rr = 150 + (i % 3) * 60;
+    const ph = (u * 1.4 + i * 0.29) % 1;
+    sparkle(x + Math.cos(ang) * rr, y + Math.sin(ang) * rr * 0.7, 18 + (i % 2) * 12, Math.sin(ph * Math.PI) * clamp01((u - 0.4) / 0.3) * clamp01((T.danger - t) / 0.2));
+  }
+}
+// 何日目かの夜…：まわりを暗く、少し赤く
+function dangerFx(t) {
+  const k = clamp01((t - T.danger) / 0.4);
+  ctx.save();
+  ctx.fillStyle = `rgba(30, 6, 24, ${0.16 * k})`; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(W / 2, H * 0.45, H * 0.18, W / 2, H * 0.45, H * 0.62);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(40, 0, 8, ${0.72 * k})`);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
 // ---------- 1 コマ ----------
 window.renderFrame = (t) => {
   hideAll(); fx.begin();
@@ -966,9 +1078,17 @@ window.renderFrame = (t) => {
   else if (sc === 'fish') fishScene(t);
   else if (sc === 'farm') farmScene(t);
   else if (sc === 'ranch') ranchScene(t);
-  else if (sc === 'end') buildScene(t);
+  else if (sc === 'end' || sc === 'tease') buildScene(t);
   // 夜は村人を出さない（暗い中に「+1」だけ浮かないように、fx も出さない）
-  if (sc === 'night') { hideAll(); fx.begin(); }
+  if (sc === 'night' || sc === 'danger') { hideAll(); fx.begin(); }
+  // 予告の夜：森の暗がりに光る目（順に開いて、ときどきまばたき）
+  eyeObjs.forEach((g, i) => {
+    const a = t - T.danger - 0.5 - i * 0.35;
+    g.visible = sc === 'danger' && a > 0;
+    if (!g.visible) return;
+    const open = Math.min(1, a / 0.18), blink = ((t * 1.3 + i * 0.37) % 1.6) < 0.12 ? 0.12 : 1;
+    g.scale.set(1, Math.max(0.05, open * blink), 1);
+  });
 
   sky.anchors = fire.visible ? [{ x: D.campfire.x, y: 1.4, z: D.campfire.z }] : [];
   sky.placeLights(camera.position);
@@ -978,7 +1098,10 @@ window.renderFrame = (t) => {
 
   // 文字（上下 15% はあける）
   const ending = t >= T.end;
-  if (!ending) dayBadge(sc === 'farm' || sc === 'ranch' ? null : day);
+  if (sc === 'tease') teaseFx(t);
+  if (sc === 'danger') dangerFx(t);
+  if (sc === 'danger') dayBadge(null, '？日目の夜', 'rgba(92, 22, 30, 0.92)');
+  else if (!ending) dayBadge(sc === 'farm' || sc === 'ranch' || sc === 'tease' ? null : day);
   counterChip(villagerCount(t));
   if (t >= T.join) imageLabel();
   commentCards(t);
@@ -1002,6 +1125,8 @@ const SFX = [];
 for (let k = 0; k < TR.hits; k++) SFX.push({ t: TR.t1 + (k + VC.phase) / VC.rate, type: 'chop', gain: 1 });
 for (let k = 0; k < RK.hits * RK.N; k++) SFX.push({ t: RK.t1 + (k + VD.phase) / VD.rate, type: 'dig', gain: 1 });
 for (let k = 0; T.build + 0.5 + k * 0.83 < T.chest; k++) SFX.push({ t: T.build + 0.5 + k * 0.83, type: 'chop', gain: 0.5 });
+SFX.push({ t: T.tease + 0.3, type: 'chime', gain: 0.8 });   // 予告：きらん
+SFX.push({ t: T.danger, type: 'whoosh', gain: 1.0 });        // 予告の夜：森の風
 window.SFX = SFX.filter((s) => s.t < DURATION);
 
 // スキンと絵の読み込みを待つ
@@ -1027,4 +1152,9 @@ window.sendAll = async () => {
   return window.SEND;
 };
 window.REEL = { W, H, FPS, DURATION, ready: true, T, TR: { t1: TR.t1, tFell: TR.tFell, van: TR.tFell + TR.VAN }, RK: { t1: RK.t1, b: [0, 1, 2].map((i) => RK.t1 + breakTime(i, VD, RK.hits)) }, LV: { done: LV.done }, CH: { arrive: CH.arrive, gui: CH.gui }, KEYS: { KJ: !!KJ, KCH: !!KCH, KFI: !!KFI, L: LEVELERS.length, B: BUILDERS.length, MADE, CH_TIER } };
+// 確かめ用：そのコマの村人と動物の位置と向き（歩く向きのずれを調べる tools 側から使う）
+window.PROBE = () => ({
+  chars: Object.entries(chars).filter(([, c]) => c.visible).map(([k, c]) => ({ k, x: c.position.x, z: c.position.z, ry: c.rotation.y, front: 'z' })),
+  animals: [...wild.map(({ a, o }) => ({ k: a.id, o })), ...penAnimals.map(({ a, o }) => ({ k: a.id, o }))].filter((v) => v.o.visible).map(({ k, o }) => ({ k, x: o.position.x, z: o.position.z, ry: o.rotation.y, front: 'x' })),
+});
 window.renderFrame(0);

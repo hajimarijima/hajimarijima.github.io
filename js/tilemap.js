@@ -159,8 +159,8 @@ export function townTiles(world, { clearR = 0 } = {}) {
   const m = new TileMap('g');
   const disc = (x, z, r, ch, only) => { const i0 = tileOf(x - r), i1 = tileOf(x + r), j0 = tileOf(z - r), j1 = tileOf(z + r); for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (((i + 0.5) * TILE - x) ** 2 + ((j + 0.5) * TILE - z) ** 2 <= r * r && (!only || only.includes(m.get(i, j)))) m.set(i, j, ch); };
   const half = (world.size || 220) / 2;
-  // 海と砂浜
-  for (let j = tileOf(world.seaZ - 3); j <= tileOf(world.seaZ + 6); j++) for (let i = tileOf(-half); i <= tileOf(half); i++) m.set(i, j, (j + 0.5) * TILE > world.seaZ ? 'w' : 's');
+  // 海と砂浜（前の形だけ。島の形の時は、海と岸は js/island.js が決める）
+  if (!world.islands) for (let j = tileOf(world.seaZ - 3); j <= tileOf(world.seaZ + 6); j++) for (let i = tileOf(-half); i <= tileOf(half); i++) m.set(i, j, (j + 0.5) * TILE > world.seaZ ? 'w' : 's');
   if (world.square) disc(world.square.x, world.square.z, world.square.r, 'q');
   if (world.pond) disc(world.pond.x, world.pond.z, world.pond.r, 'w');
   for (const b of world.buildings || []) disc(b.x, b.z, Math.max(1.5, clearR * 0.45), 'b');

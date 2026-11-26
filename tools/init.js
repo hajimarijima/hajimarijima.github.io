@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 'use strict';
-// 町を「何もない平地に木と岩だけ」の 0 日目に戻す。
-// 使い方: node tools/init.js [--demo] [--seed 文字列] [--start 2026-11-01]
+// 町を「何もない島に木と岩だけ」の 0 日目に戻す。
+// 使い方: node tools/init.js [--demo] [--seed 文字列] [--start 2026-11-01] [--legacy]
 //   --demo を付けると見本の村人 20 人を入れる（参加日はばらばら）。
+//   ふだんは「小さな島（はじまり島）＋ 橋がかかるまで行けない北の島」を作る（tools/island_layout.js）。
+//   --legacy（または環境変数 TOWN_LAYOUT=legacy）で、前の「南だけが海の広い平地」を作る（前の動画をそのまま作り直す時など）。
 const fs = require('fs');
 const path = require('path');
 const { makeRng } = require('./rand');
@@ -19,6 +21,7 @@ const seed = opt('--seed', 'machi-12');
 // 1 日目の日付（0 日目はその前の日）。既定は「明日」（日本時間）＝今日が 0 日目。町を始めた時に sim.js --gate が始めた日へ合わせ直す
 const start = opt('--start', new Date(Date.now() + 9 * 3600e3 + 24 * 3600e3).toISOString().slice(0, 10));
 const R = makeRng('world:' + seed);
+const legacy = args.includes('--legacy') || /^legacy$/i.test(process.env.TOWN_LAYOUT || '');
 
 let ORES = null; try { ORES = JSON.parse(fs.readFileSync(path.join(DATA, 'config.json'), 'utf8')).ores; } catch (e) { /* なければ既定の確率 */ }
 const write = (f, o) => fs.writeFileSync(path.join(DATA, f), JSON.stringify(o, null, 1) + '\n');
@@ -116,7 +119,7 @@ for (let i = 0; i < 16; i++) {
   animals.push({ id: 'a' + i, kind: KINDS[(i + Math.floor(i / 4)) % 4], x: +x.toFixed(2), z: +z.toFixed(2), pen: null });
 }
 
-const world = {
+const oldWorld = {
   size: 220, seaZ: SEA_Z,
   trees, rocks, bushes,
   fields: [], fieldSlots,
@@ -127,6 +130,8 @@ const world = {
   square: { ...SQUARE, leveled: 0 }, debris,
   chest: { x: 5.2, z: 0.6, day: 0 }, // 集めた物を入れるチェスト（最初の村人が来た日に置く）
 };
+// ふだんは小さな島（前の形は --legacy の時だけ）。島の乱数は別なので、下の村人の並びは前と同じ
+const world = legacy ? oldWorld : require('./island_layout').buildIslandWorld({ seed, ores: ORES, gather: GATHER, debris: oldWorld.debris });
 
 // ---------- 村人 ----------
 // 見本の名前は「村人1」の形（Instagram の ID には日本語が使えないので、実在の人と重ならない）
@@ -153,14 +158,37 @@ const state = {
   weather: '晴れ', updated: null,
 };
 
+// --keep-villagers：もう住むと決まった村人（data/villagers.json）は残す。印（key・igId・userHash）・スキン・最初の道具は今のまま。
+//   町のアカウントの持ち主（config.json の joinExclude）は外す。残した人は 0 日目の新しい島ですぐ暮らし始める（welcome.js）
+const keepVillagers = args.includes('--keep-villagers');
+let CFG = null; try { CFG = JSON.parse(fs.readFileSync(path.join(DATA, 'config.json'), 'utf8')); } catch (e) { /* なし */ }
+if (keepVillagers && !demo) {
+  const old = (() => { try { return JSON.parse(fs.readFileSync(path.join(DATA, 'villagers.json'), 'utf8')); } catch (e) { return []; } })();
+  const owners = require('./welcome').ownerNames(null, CFG);
+  for (const v of old) {
+    if (owners.includes(String(v.name || '').toLowerCase())) continue;
+    villagers.push({ ...v, joinedDay: 0, joined: state.date });
+  }
+}
+
 writeWorld(DATA, world);
 write('villagers.json', villagers);
 write('state.json', state);
 write('life.json', {});
 fs.rmSync(path.join(DATA, 'diary'), { recursive: true, force: true }); // 日記（人ごとのファイル）も空に
 write('social.json', { pairs: {}, talks: [] });
-write('history.json', [{ day: 0, date: state.date, type: 'start', text: '何もない平地に、木と岩だけがある。ここから町づくりが始まる。' }]);
-console.log('0 日目にしました（' + (demo ? '見本の村人 ' + villagers.length + ' 人' : '村人なし') + '）');
+const history0 = [{ day: 0, date: state.date, type: 'start', text: legacy ? '何もない平地に、木と岩だけがある。ここから町づくりが始まる。' : '海にかこまれた小さな島に、木と岩だけがある。北の海の向こうにも、もう 1 つ島が見える。ここから町づくりが始まる。' }];
+write('history.json', history0);
+if (keepVillagers && villagers.length && CFG) {
+  const { readLife, writeLife } = require('./store');
+  const S = { config: CFG, villagers, world, state, life: readLife(DATA), history: history0, social: { pairs: {}, talks: [] } };
+  require('./welcome').welcomeNow(S, { now: new Date() });
+  write('villagers.json', S.villagers);
+  writeLife(DATA, S.life);
+  write('history.json', S.history);
+  write('social.json', S.social);
+}
+console.log('0 日目にしました（' + (legacy ? '前の広い平地・' : '小さな島・') + (demo ? '見本の村人 ' + villagers.length + ' 人' : keepVillagers ? '前からの村人 ' + villagers.length + ' 人を残した' : '村人なし') + '）');
 // 町を始める日時（config.json の startAt）が、もう過ぎた時刻のままだと、次の朝すぐ 1 日目になる
 try {
   const cfg = JSON.parse(fs.readFileSync(path.join(DATA, 'config.json'), 'utf8'));

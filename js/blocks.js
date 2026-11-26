@@ -546,9 +546,9 @@ export function makeFx(scene) {
       m.position.set(x, y, z); m.scale.setScalar(Math.max(0.001, s)); m.rotation.set(r, r * 0.7, 0);
     },
     chips(list, c) { for (const q of list) this.chip(c, q.x, q.y, q.z, q.s, q.r); },
-    item(kind, x, y, z, rot = 0, s = 1) {
+    item(kind, x, y, z, rot = 0, s = 1, rz = 0) { // rz：先に z 軸で傾ける（魚を頭を上にしてぶら下げる時など）
       const m = take('item' + kind, () => itemMesh(kind));
-      m.position.set(x, y, z); m.rotation.set(0, rot, 0); m.scale.setScalar(s);
+      m.position.set(x, y, z); m.rotation.set(0, rot, rz); m.scale.setScalar(s);
     },
     glow(kind, x, y, z, a, time = 0, size = 1) {
       const col = GLOW_COL[kind] || GLOW_COL.iron;

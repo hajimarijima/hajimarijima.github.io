@@ -14,7 +14,7 @@ import { makeBush } from '../js/world3d.js';
 import { makePond, animatePond, makeAnimal } from '../js/farm3d.js';
 import { decodeWorld } from '../js/tilemap.js';
 
-const W = 1080, H = 1920, FPS = 30, DURATION = 27;
+const W = 1080, H = 1920, FPS = 30, DURATION = 31.4;
 const SAFE_TOP = H * 0.12, SAFE_BOTTOM = H * 0.85;
 const FONT = '"BIZ UDPGothic", "Yu Gothic", "Meiryo", sans-serif';
 const lerp = (a, b, k) => a + (b - a) * k;
@@ -36,13 +36,16 @@ const TOOLS = [
 ];
 
 // ---------- 時間割 ----------
-const T = { sky: 0, site: 6.5, town: 12.5, join: 16, next: 22.5 };
+// tease：予告（フォロワーが増えると何かが起きるかも）・danger：予告（何日目かの夜、島が危なくなるかも。night.js の敵の夜。日にちは決めない）
+const T = { sky: 0, site: 6.5, town: 12.5, join: 16, tease: 22.5, danger: 24.7, next: 26.9 };
 function hourAt(t) {
-  // つなぎ目で空の色が飛ばないよう、時刻は切れ目なく進める
+  // つなぎ目で空の色が飛ばないよう、時刻は切れ目なく進める（予告の夜と、その後の朝だけは場面を切りかえる）
   if (t < T.site) return lerp(6.4, 8.6, t / T.site);           // 朝焼け
   if (t < T.join) return lerp(8.6, 12, (t - T.site) / (T.join - T.site));
-  if (t < T.next) return lerp(12, 16.9, (t - T.join) / (T.next - T.join));
-  return lerp(16.9, 18.3, (t - T.next) / (DURATION - T.next)); // 夕焼け
+  if (t < T.tease) return lerp(12, 16.9, (t - T.join) / (T.tease - T.join));
+  if (t < T.danger) return lerp(16.9, 18.2, (t - T.tease) / (T.danger - T.tease)); // 夕焼け
+  if (t < T.next) return lerp(21.5, 22.5, (t - T.danger) / (T.next - T.danger));   // 夜
+  return lerp(6.2, 7.2, (t - T.next) / (DURATION - T.next)); // 夜が明けた朝焼け
 }
 
 // ---------- three.js ----------
@@ -117,6 +120,9 @@ const CAM = {
   join0: [30, 50, 30, 170, -35, -170, 50],
   join1: [10, 60, 30, 210, -35, -230, 50],
   // しめ：海の上から、西の夕日と海岸を見る
+  // 予告：夕方の島を東の海の上から（広場を下に、森を上に）
+  tease0: [44, 52, 48, -4, 0, -4, 56],
+  tease1: [38, 46, 42, -3, 0, -3, 56],
   next0: [70, 34, 80, -120, 0, 20, 50],
   next1: [50, 40, 70, -160, 4, 10, 50],
 };
@@ -124,9 +130,63 @@ function cameraAt(t) {
   if (t < T.site) return look(path([[0, CAM.s0], [0.5, CAM.s1], [1, CAM.s2]], t / T.site));
   if (t < T.town) return look(path([[0, CAM.s2], [0.2, CAM.site0], [1, CAM.site1]], (t - T.site) / (T.town - T.site)));
   if (t < T.join) return look(lerpCam(CAM.site1, CAM.town1, ease((t - T.town) / (T.join - T.town))));
-  if (t < T.next) return look(path([[0, CAM.town1], [0.25, CAM.join0], [1, CAM.join1]], (t - T.join) / (T.next - T.join)));
-  return look(path([[0, CAM.join1], [0.12, CAM.next0], [1, CAM.next1]], (t - T.next) / (DURATION - T.next)));
+  if (t < T.tease) return look(path([[0, CAM.town1], [0.25, CAM.join0], [1, CAM.join1]], (t - T.join) / (T.tease - T.join)));
+  if (t < T.danger) return look(path([[0, CAM.join1], [0.3, CAM.tease0], [1, CAM.tease1]], (t - T.tease) / (T.danger - T.tease)));
+  if (t < T.next) {
+    // 予告の夜：村のまん中から低く森を見て、ゆっくり寄る。地ひびきのように少しゆれる
+    const k = (t - T.danger) / (T.next - T.danger), c = DG.cam.slice(), sh = 0.05 * clamp01(k * 2) * (Math.sin(t * 47) + 0.6 * Math.sin(t * 29));
+    c[0] += DG.d.x * k * 2.0; c[2] += DG.d.z * k * 2.0; c[1] += sh; c[4] += sh;
+    return look(c);
+  }
+  return look(lerpCam(CAM.next0, CAM.next1, ease((t - T.next) / (DURATION - T.next))));
 }
+// ---------- 予告：夜の森の目（イメージ）。光る目は木の手前の暗がりに ----------
+const DG = (() => {
+  let best = null;
+  for (let k = 0; k < 48; k++) {
+    const a = (k / 48) * Math.PI * 2, d = { x: Math.sin(a), z: Math.cos(a) };
+    const cp = { x: SQ.x + d.x * 5, z: SQ.z + d.z * 5 };
+    if (d.z > -0.35) continue; // 海（南）の側は見ない。森の奥（北）へ向く
+    let n = 0, bad = 0;
+    for (const t of trees) {
+      const dx = t.x - cp.x, dz = t.z - cp.z, along = dx * d.x + dz * d.z, side = Math.abs(dx * d.z - dz * d.x);
+      if (along > 14 && along < 34 && side < along * 0.28) n++;
+      if (along > -2 && along < 14 && side < 4 + along * 0.3) bad++;
+    }
+    for (const r of rocks) { const dx = r.x - cp.x, dz = r.z - cp.z, along = dx * d.x + dz * d.z; if (along > 0 && along < 14 && Math.abs(dx * d.z - dz * d.x) < 4) bad++; }
+    if (POND) { const dx = POND.x - cp.x, dz = POND.z - cp.z, along = dx * d.x + dz * d.z; if (along > 0 && along < 16 && Math.abs(dx * d.z - dz * d.x) < (POND.r || 4) + 2) bad += 3; }
+    const cost = -n + bad * 4;
+    if (!best || cost < best.cost) best = { cost, d, cp };
+  }
+  const { d, cp } = best;
+  const cam = [cp.x, 3.2, cp.z, cp.x + d.x * 30, 2.4, cp.z + d.z * 30, 50];
+  const near = trees.map((t) => { const dx = t.x - cp.x, dz = t.z - cp.z; return { t, along: dx * d.x + dz * d.z, side: dx * d.z - dz * d.x }; })
+    .filter((o) => o.along > 12 && o.along < 26 && Math.abs(o.side) < o.along * 0.2).sort((p, q) => p.along - q.along);
+  const eyes = [];
+  for (const o of near) {
+    if (eyes.length >= 3) break;
+    const s = o.t.size || 1, l = Math.hypot(cp.x - o.t.x, cp.z - o.t.z) || 1, u = { x: (cp.x - o.t.x) / l, z: (cp.z - o.t.z) / l }, sd = { x: -u.z, z: u.x }, sg = o.side > 0 ? -1 : 1;
+    const p = { x: o.t.x + u.x * (1.4 * s) + sd.x * sg * (1.3 * s), z: o.t.z + u.z * (1.4 * s) + sd.z * sg * (1.3 * s) };
+    if (trees.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < 1.0 * (q.size || 1))) continue; // 幹にめりこまない
+    if (rocks.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < 2.0)) continue;
+    if (eyes.some((e) => Math.hypot(e.x - p.x, e.z - p.z) < 5)) continue;
+    const L = Math.hypot(p.x - cp.x, p.z - cp.z), v = { x: (p.x - cp.x) / L, z: (p.z - cp.z) / L };
+    if (trees.some((q) => { const dx = q.x - cp.x, dz = q.z - cp.z, al = dx * v.x + dz * v.z; return al > 0 && al < L - 0.5 && Math.abs(dx * v.z - dz * v.x) < 0.9 * (q.size || 1); })) continue;
+    eyes.push({ ...p, y: 1.3 + eyes.length * 0.25 });
+  }
+  return { cam, cp, d, eyes };
+})();
+const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffd23a, fog: false });
+const eyeGlowMat = new THREE.MeshBasicMaterial({ color: 0xff5a2a, fog: false, transparent: true, opacity: 0.2, depthWrite: false });
+const eyeObjs = DG.eyes.map((e) => {
+  const g = new THREE.Group();
+  for (const sx of [-0.3, 0.3]) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.22, 0.05), eyeMat); m.position.set(sx, 0, 0); g.add(m);
+    const gl = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.38, 0.02), eyeGlowMat); gl.position.set(sx, 0, -0.04); g.add(gl);
+  }
+  g.position.set(e.x, e.y, e.z); g.lookAt(DG.cp.x, e.y, DG.cp.z); g.visible = false; scene.add(g);
+  return g;
+});
 
 // 名札を付ける木と岩：名札が出る時のカメラで、画面のまん中あたり（上の札や字幕にかからない所）に見えるもの
 const onScreen = (p, y, t) => { cameraAt(t); camera.updateMatrixWorld(true); const v = new THREE.Vector3(p.x, y, p.z).project(camera); const x = (v.x + 1) / 2 * W, sy = (1 - v.y) / 2 * H; return v.z < 1 && x > 200 && x < W - 200 && sy > 560 && sy < 1300; };
@@ -158,15 +218,15 @@ function caption(lines, y, size, alpha = 1, opts = {}) {
 // a で出はじめ、b で消えきる（b のあとは 0）
 const fadeIO = (t, a, b, f = 0.3) => Math.min(clamp01((t - a) / f), clamp01((b - t) / f));
 // 左上：島の名前とパート 1・0 日目
-function badges() {
+function badges(night = false) {
   ctx.save(); ctx.textBaseline = 'middle';
   ctx.font = `700 46px ${FONT}`;
   const p = 'はじまり島　パート 1', pw = ctx.measureText(p).width;
   ctx.fillStyle = 'rgba(255, 224, 138, 0.96)'; roundRect(56, SAFE_TOP, pw + 56, 76, 38); ctx.fill();
   ctx.fillStyle = '#2f2a1a'; ctx.fillText(p, 84, SAFE_TOP + 39);
   ctx.font = `700 84px ${FONT}`;
-  const d = '0日目', dw = ctx.measureText(d).width;
-  ctx.fillStyle = 'rgba(47, 74, 55, 0.92)'; roundRect(56, SAFE_TOP + 92, dw + 72, 124, 62); ctx.fill();
+  const d = night ? '？日目の夜' : '0日目', dw = ctx.measureText(d).width;
+  ctx.fillStyle = night ? 'rgba(92, 22, 30, 0.92)' : 'rgba(47, 74, 55, 0.92)'; roundRect(56, SAFE_TOP + 92, dw + 72, 124, 62); ctx.fill();
   ctx.fillStyle = '#fff'; ctx.fillText(d, 92, SAFE_TOP + 156);
   ctx.restore();
 }
@@ -201,7 +261,7 @@ function callout(text, p, y, alpha, color = '#2f4a37', lift = 150) {
 // 道具の絵（アイコンの 16×16 をそのまま大きく）
 const ICON = {};
 for (const o of TOOLS) { const im = new Image(); im.src = '../icons/' + o.item + '.png'; ICON[o.id] = im; }
-const JOIN_END = T.next - 0.15; // 参加の札はここで消えきる
+const JOIN_END = T.tease - 0.15; // 参加の札はここで消えきる
 function joinCard(t) {
   const a = fadeIO(t, T.join + 0.1, JOIN_END, 0.3);
   if (a <= 0.002) return;
@@ -284,7 +344,49 @@ const CAPS = [
   [1.6, 5.9, ['フォロワーといっしょに作る', '島づくり'], { y: H / 2 + 450, size: 62, color: '#ffe08a' }],
   [T.site + 0.4, T.town - 0.1, ['ここが、村のまん中になる所'], { size: 66 }],
   [T.town + 0.2, T.join - 0.1, ['ここに町を作ります', '村人は 0 人'], { y: SAFE_BOTTOM - 260, size: 76, colors: ['#fffdf4', '#ffe08a'] }],
+  [T.tease + 0.25, T.danger - 0.1, ['フォロワーが増えると、', '島に何かが起きるかも…'], { size: 70, color: '#ffe08a' }],
+  [T.danger + 0.35, T.next - 0.1, ['何日目かの夜、', '島が危なくなるかも…'], { size: 70, color: '#ffb4a6', bg: 'rgba(28, 6, 10, 0.82)' }],
 ];
+// ---------- 予告の画面効果 ----------
+function sparkle(x, y, r, a) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a; ctx.translate(x, y);
+  ctx.fillStyle = '#fff3b0'; ctx.shadowColor = '#ffd23a'; ctx.shadowBlur = r * 0.8;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) { const ang = i * Math.PI / 4, rr = i % 2 ? r * 0.22 : r; ctx.lineTo(Math.cos(ang) * rr, Math.sin(ang) * rr); }
+  ctx.closePath(); ctx.fill(); ctx.restore();
+}
+// フォロワーが増えると…：広場の予定地の上に「？」と、きらきら
+function teaseFx(t) {
+  if (t < T.tease || t >= T.danger) return;
+  const u = t - T.tease, out = clamp01((T.danger - t) / 0.2);
+  _v.set(SQ.x, 4, SQ.z).project(camera);
+  const x = (_v.x + 1) / 2 * W, y = Math.min(980, (1 - _v.y) / 2 * H) + Math.sin(t * 4) * 10;
+  const s = Math.max(0.01, backOut(clamp01((u - 0.4) / 0.35))) * out;
+  if (u > 0.4) {
+    ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.arc(4, 8, 74, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffe08a'; ctx.beginPath(); ctx.arc(0, 0, 74, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#fffdf4'; ctx.lineWidth = 8; ctx.stroke();
+    ctx.fillStyle = '#7a4a10'; ctx.font = `700 100px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('？', 2, 6);
+    ctx.restore();
+  }
+  for (let i = 0; i < 7; i++) {
+    const ang = i * 0.9 + 0.4, rr = 150 + (i % 3) * 60, ph = (u * 1.4 + i * 0.29) % 1;
+    sparkle(x + Math.cos(ang) * rr, y + Math.sin(ang) * rr * 0.7, 18 + (i % 2) * 12, Math.sin(ph * Math.PI) * clamp01((u - 0.5) / 0.3) * out);
+  }
+}
+// 何日目かの夜…：まわりを暗く、少し赤く
+function dangerFx(t) {
+  if (t < T.danger || t >= T.next) return;
+  const k = clamp01((t - T.danger) / 0.4);
+  ctx.save();
+  ctx.fillStyle = `rgba(30, 6, 24, ${0.16 * k})`; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(W / 2, H * 0.45, H * 0.18, W / 2, H * 0.45, H * 0.62);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(40, 0, 8, ${0.72 * k})`);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
 const LAB_END = T.town - 0.1; // 名札も「ここに町を作ります」の前に消えきる
 window.renderFrame = (t) => {
   cameraAt(t);
@@ -306,8 +408,19 @@ window.renderFrame = (t) => {
   const chA = clamp01((t - (T.site + 1.9)) / 0.4);
   ghost.visible = chA > 0; ghost.scale.setScalar(1.3 * Math.max(0.01, backOut(chA)));
   pad.material.opacity = 0.45 * chA * (0.75 + 0.25 * Math.sin(t * 5));
+  // 予告の夜：森の暗がりに光る目（順に開いて、ときどきまばたき）
+  const night = t >= T.danger && t < T.next;
+  eyeObjs.forEach((g, i) => {
+    const a = t - T.danger - 0.5 - i * 0.3;
+    g.visible = night && a > 0;
+    if (!g.visible) return;
+    const open = Math.min(1, a / 0.18), blink = ((t * 1.3 + i * 0.37) % 1.6) < 0.12 ? 0.12 : 1;
+    g.scale.set(1, Math.max(0.05, open * blink), 1);
+  });
   renderer.render(scene, camera);
   ctx.drawImage(renderer.domElement, 0, 0, W, H);
+  teaseFx(t);
+  dangerFx(t);
 
   // 名札（予定地・チェスト・木・岩・池）
   const lab = (a) => fadeIO(t, a, LAB_END, 0.3);
@@ -319,7 +432,7 @@ window.renderFrame = (t) => {
   CAPS.forEach(([a, b, lines, o]) => caption(lines, o.y || SAFE_BOTTOM - 180, o.size || 64, fadeIO(t, a, b), o));
   joinCard(t);
   nextCard(t);
-  badges();
+  badges(night);
   counter(t);
   // 始めは白からふわっと
   if (t < 0.5) { ctx.fillStyle = `rgba(255,255,255,${1 - t / 0.5})`; ctx.fillRect(0, 0, W, H); }
@@ -332,6 +445,8 @@ if (POND) SFX.push({ t: T.site + 4.1, type: 'pop', gain: 1 });
 SFX.push({ t: T.town + 1.2, type: 'chime', gain: 0.8 });
 [T.join + 0.4, T.join + 1.4].forEach((t) => SFX.push({ t, type: 'pop', gain: 0.8 }));
 TOOLS.forEach((_, i) => SFX.push({ t: T.join + 2.2 + i * 0.35, type: 'pop', gain: 1 }));
+SFX.push({ t: T.tease + 0.4, type: 'chime', gain: 0.7 }); // 予告：きらん
+SFX.push({ t: T.danger, type: 'whoosh', gain: 1.0 });      // 予告の夜：森の風
 SFX.push({ t: NEXT_IN, type: 'chime', gain: 1 });
 SFX.push({ t: NEXT_IN + 1.0, type: 'pop', gain: 0.8 });
 SFX.push({ t: NEXT_IN + 1.8, type: 'pop', gain: 0.7 });

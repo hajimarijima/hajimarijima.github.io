@@ -58,45 +58,61 @@ function synth(duration, sfx) {
   const L = new Float32Array(n), R = new Float32Array(n);
   let seed = 12345; const noise = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x3fffffff - 1; };
   const add = (i, v, pan = 0) => { if (i >= 0 && i < n) { L[i] += v * (1 - pan) ; R[i] += v * (1 + pan); } };
-  // BGM：ゆっくりのペンタトニックのつま弾き＋やわらかい和音
-  const bpm = 84, beat = 60 / bpm;
+  // BGM：南の島ふうの明るい曲（スチールドラムの旋律・ウクレレの裏打ち・はずむベース・シェイカー・クラーベ）
+  const bpm = 116, beat = 60 / bpm, e8 = beat / 2;
   const midi = (m) => 440 * Math.pow(2, (m - 69) / 12);
-  const chords = [[60, 64, 67], [57, 60, 64], [53, 57, 60], [55, 59, 62]]; // C Am F G
-  const melody = [72, 74, 76, 79, 76, 74, 72, 69, 72, 74, 76, 74, 72, 69, 67, 69];
-  const pluck = (t0, f, amp, len, pan) => {
-    const s0 = Math.floor(t0 * SR), m = Math.floor(len * SR);
-    for (let k = 0; k < m; k++) {
-      const tt = k / SR, env = Math.min(1, tt / 0.008) * Math.exp(-tt * 3.2);
-      add(s0 + k, amp * env * (Math.sin(2 * Math.PI * f * tt) + 0.3 * Math.sin(4 * Math.PI * f * tt) + 0.1 * Math.sin(6 * Math.PI * f * tt)), pan);
-    }
-  };
-  const pad = (t0, f, amp, len) => {
-    const s0 = Math.floor(t0 * SR), m = Math.floor(len * SR);
-    for (let k = 0; k < m; k++) {
-      const tt = k / SR, env = Math.min(1, tt / 0.6) * Math.min(1, (len - tt) / 0.6);
-      add(s0 + k, amp * env * (Math.sin(2 * Math.PI * f * tt) + 0.5 * Math.sin(2 * Math.PI * f * 1.003 * tt)) * 0.5, 0);
-    }
-  };
+  const chords = [[60, 64, 67], [65, 69, 72], [67, 71, 74], [60, 64, 67], [57, 60, 64], [65, 69, 72], [67, 71, 74], [60, 64, 67]]; // C F G C Am F G C
+  const _ = null;
+  const melody = [
+    [72, _, 76, 79, _, 76, 74, 72], [77, _, 77, 76, 74, _, 72, _], [74, _, 79, 77, 74, _, 71, 74], [72, _, _, 67, 72, _, 76, _],
+    [76, _, 76, 79, 81, _, 79, 76], [77, _, 76, 74, 72, _, 74, _], [79, _, 77, 74, 71, 74, _, 79], [84, _, 79, _, 76, _, 72, _],
+  ];
+  const tone = (t0, len, fn) => { const s0 = Math.floor(t0 * SR), m = Math.floor(len * SR); for (let k = 0; k < m; k++) fn(s0 + k, k / SR); };
+  // スチールドラム：基音・1 オクターブ上・その上の 5 度が強く、すばやく立ち上がって鳴りが残る
+  const steel = (t0, f, amp, pan) => tone(t0, 1.3, (i, tt) => {
+    const env = Math.min(1, tt / 0.004) * Math.exp(-tt * 3.6), w = 2 * Math.PI * f * tt;
+    add(i, amp * env * (Math.sin(w) + 0.55 * Math.sin(2 * w) * Math.exp(-tt * 2) + 0.28 * Math.sin(3.01 * w) * Math.exp(-tt * 5) + 0.12 * Math.sin(4.2 * w) * Math.exp(-tt * 9)), pan);
+  });
+  // ウクレレ：高い 3 音を少しずらして「ちゃっ」と短く
+  const uke = (t0, ch, amp) => ch.forEach((m, j) => tone(t0 + j * 0.011, 0.22, (i, tt) => {
+    const f = midi(m), env = Math.min(1, tt / 0.003) * Math.exp(-tt * 16), w = 2 * Math.PI * f * tt;
+    add(i, amp * env * (Math.sin(w) + 0.45 * Math.sin(2 * w) + 0.2 * Math.sin(3 * w)), 0.3);
+  }));
+  const bass = (t0, f, amp, len) => tone(t0, len, (i, tt) => {
+    const env = Math.min(1, tt / 0.006) * Math.exp(-tt * 4.5) * Math.min(1, (len - tt) / 0.03), w = 2 * Math.PI * f * tt;
+    add(i, amp * env * (Math.sin(w) + 0.25 * Math.sin(2 * w)), 0);
+  });
+  // 太いキック（低く沈む「ドゥン」）と、長く響く重低音（808 ふう）
+  const kick = (t0, amp) => { let ph = 0; tone(t0, 0.45, (i, tt) => { ph += 2 * Math.PI * (42 + 110 * Math.exp(-tt * 28)) / SR; add(i, amp * Math.tanh(1.6 * Math.sin(ph)) * Math.exp(-tt * 7), 0); }); };
+  const sub = (t0, f, amp, len) => { let ph = 0; tone(t0, len, (i, tt) => { ph += 2 * Math.PI * f * (1 + 0.5 * Math.exp(-tt * 40)) / SR; const env = Math.min(1, tt / 0.005) * Math.exp(-tt * 1.8) * Math.min(1, (len - tt) / 0.05); add(i, amp * env * Math.tanh(1.4 * Math.sin(ph)), 0); }); };
+  const clave = (t0, amp) => tone(t0, 0.1, (i, tt) => add(i, amp * Math.sin(2 * Math.PI * 820 * tt) * Math.exp(-tt * 45), -0.35)); // 木のブロック（低め）
+  const shaker = (t0, amp) => { let prev = 0; tone(t0, 0.07, (i, tt) => { const x = noise(), h = x - prev; prev = x; add(i, amp * h * Math.min(1, tt / 0.01) * Math.exp(-tt * 55), 0.4); }); };
+  const claveSlots = [0, 3, 6, 10, 12]; // 3-2 のクラーベ（2 小節＝16 の 8 分音符の中で）
   for (let bar = 0; bar * 4 * beat < duration; bar++) {
-    const t0 = bar * 4 * beat, ch = chords[bar % 4];
-    for (const m of ch) pad(t0, midi(m - 12), 0.035, 4 * beat + 0.3);
-    pluck(t0, midi(ch[0] - 24), 0.09, 2.5, 0);
-    for (let b = 0; b < 8; b++) {
-      if ((bar * 8 + b) % 3 === 2) continue;
-      pluck(t0 + b * beat / 2, midi(melody[(bar * 8 + b) % melody.length]), 0.045, 1.4, b % 2 ? 0.25 : -0.25);
-    }
+    const t0 = bar * 4 * beat, ch = chords[bar % 8], root = ch[0] % 12 + 36;
+    // ベース：1 拍目に根音、2 拍目の裏に 5 度、3 拍目に根音、4 拍目の裏に 1 オクターブ上（カリプソのはずみ）
+    bass(t0, midi(root), 0.11, e8 * 2.6); bass(t0 + e8 * 3, midi(root + 7), 0.09, e8 * 1.0);
+    bass(t0 + e8 * 4, midi(root), 0.1, e8 * 2.6); bass(t0 + e8 * 7, midi(root + 12), 0.08, e8 * 0.9);
+    kick(t0, 0.34); kick(t0 + e8 * 3, 0.22); kick(t0 + beat * 2, 0.3);
+    sub(t0, midi(root - 12), 0.2, beat * 1.45); sub(t0 + e8 * 3, midi(root - 12), 0.15, beat * 0.95); sub(t0 + beat * 2, midi(root - 12), 0.18, beat * 1.9);
+    for (let b = 0; b < 4; b++) uke(t0 + b * beat + e8, ch, 0.03); // 裏打ち
+    for (let s = 0; s < 8; s++) shaker(t0 + s * e8, 0.025); // シェイカーは小さく（高い音をおさえる）
+    for (const c of claveSlots) { const s = c - (bar % 2) * 8; if (s >= 0 && s < 8) clave(t0 + s * e8, 0.05); }
+    if (bar < 1) continue; // 最初の 1 小節は伴奏だけ
+    const mel = melody[(bar - 1) % 8];
+    for (let b = 0; b < 8; b++) if (mel[b]) steel(t0 + b * e8, midi(mel[b] - 12), 0.08, b % 2 ? 0.15 : -0.15); // 旋律は 1 オクターブ下げる
   }
   // 木を切る音（こもった「コン」）と、岩を掘る音（かたい「カン」）
   for (const e of sfx) {
     const s0 = Math.floor(e.t * SR), pan = ((e.t * 7.3) % 1 - 0.5) * 0.4;
     if (e.type === 'pop') {
       // 名札や絵が出る「ぽん」：高さが上がる短い音
-      for (let k = 0; k < SR * 0.16; k++) { const tt = k / SR, f = 520 + 900 * tt / 0.16; add(s0 + k, 0.22 * e.gain * Math.sin(2 * Math.PI * f * tt) * Math.exp(-tt * 26), pan); }
+      for (let k = 0; k < SR * 0.16; k++) { const tt = k / SR, f = 300 + 400 * tt / 0.16; add(s0 + k, 0.22 * e.gain * Math.sin(2 * Math.PI * f * tt) * Math.exp(-tt * 26), pan); }
       continue;
     }
     if (e.type === 'chime') {
       // 予告の「きらん」：3 つの高い音を少しずつずらして
-      [1046.5, 1318.5, 1568].forEach((f, j) => { const o = Math.floor(j * 0.07 * SR); for (let k = 0; k < SR * 1.2; k++) { const tt = k / SR; add(s0 + o + k, 0.12 * e.gain * (Math.sin(2 * Math.PI * f * tt) + 0.3 * Math.sin(4 * Math.PI * f * tt)) * Math.exp(-tt * 3.5), (j - 1) * 0.3); } });
+      [523.25, 659.25, 784].forEach((f, j) => { const o = Math.floor(j * 0.07 * SR); for (let k = 0; k < SR * 1.2; k++) { const tt = k / SR; add(s0 + o + k, 0.12 * e.gain * (Math.sin(2 * Math.PI * f * tt) + 0.3 * Math.sin(4 * Math.PI * f * tt)) * Math.exp(-tt * 3.5), (j - 1) * 0.3); } });
       continue;
     }
     if (e.type === 'whoosh') {
@@ -114,7 +130,7 @@ function synth(duration, sfx) {
     } else {
       for (let k = 0; k < SR * 0.35; k++) {
         const tt = k / SR;
-        add(s0 + k, 0.17 * e.gain * ((Math.sin(2 * Math.PI * 1180 * tt) + 0.6 * Math.sin(2 * Math.PI * 1730 * tt)) * Math.exp(-tt * 18) + noise() * 0.7 * Math.exp(-tt * 70)), pan);
+        add(s0 + k, 0.17 * e.gain * ((Math.sin(2 * Math.PI * 520 * tt) + 0.5 * Math.sin(2 * Math.PI * 780 * tt)) * Math.exp(-tt * 18) + noise() * 0.3 * Math.exp(-tt * 70)), pan);
       }
     }
   }
@@ -193,6 +209,8 @@ if (process.argv.includes('--serve')) {
       const url = await page.evaluate((tt, qq) => { window.renderFrame(tt); return document.getElementById('out').toDataURL('image/jpeg', qq); }, t, q);
       return Buffer.from(url.split(',')[1], 'base64');
     };
+    // --audio-only：コマはそのまま（前に書き出した物を使う）で、音だけ作り直して mp4 にまとめ直す
+    if (process.argv.includes('--audio-only')) { encode(info); return; }
     const stills = arg('--stills');
     if (stills) {
       const dir = path.join(VIDEO, 'check'); fs.mkdirSync(dir, { recursive: true });

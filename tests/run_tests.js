@@ -512,7 +512,8 @@ t('鉱石：鉄・金・ダイヤを掘ると履歴に「〇〇が鉄鉱石を�
   node('tools/init.js', '--demo');
   const w0 = STORE.readWorld(dir);
   assert.ok(w0.rocks.every((r) => typeof r.blocks === 'string' && r.blocks.length === r.max), '岩ごとに中身がある');
-  assert.ok(w0.trees.some((t) => t.x < -90 || t.x > 90) && w0.trees.some((t) => t.z < -90), '町の外まで森が続く（一辺がおよそ 2 倍）');
+  // 小さな島の町：森は島の岸の近くまであり、北の島にも森がある（前の広い平地は「町の外まで森が続く」だった）
+  assert.ok(w0.trees.some((t) => Math.hypot(t.x, t.z) > 38 && t.z > -60) && w0.trees.some((t) => t.z < -80), '島の岸の近くまで森があり、北の島にも森がある');
   const vs = JSON.parse(fs.readFileSync(path.join(dir, 'villagers.json'), 'utf8'));
   assert.ok(vs.every((v) => /^村人\d+$/.test(v.name)), '見本の名前は実在しえない形');
   node('tools/sim.js', '--demo', '--days', '30');
@@ -1294,6 +1295,136 @@ t('すぐの入居：join.js で 0 日目に住み始め、daily（--gate）は�
   node('tools/join.js', '--now', '2026-11-30T09:00:00+09:00');
   const ow = read('villagers.json').find((x) => x.name === 'old_wait');
   assert.strictEqual(ow.joinedDay, 2); assert.ok(STORE.readLife(dir)[ow.key]);
+});
+
+// ---------- 小さな島と、となりの島への橋 ----------
+const ISX = require('../js/island.js');
+const islandRun = (() => {
+  let memo = null;
+  return () => {
+    if (memo) return memo;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-island-'));
+    fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+    const env = { ...process.env, TOWN_DATA: dir };
+    const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+    node('tools/init.js', '--demo', '--start', '2026-11-01');
+    const w0 = STORE.readWorld(dir);
+    const cfg = JSON.parse(fs.readFileSync(path.join(dir, 'config.json'), 'utf8'));
+    const need = cfg.expansion.bridges.north.followers;
+    const inbox = path.join(dir, 'inbox.json');
+    const days = [];
+    for (let d = 1; d <= 20; d++) {
+      fs.writeFileSync(inbox, JSON.stringify({ followers: d < 8 ? 10 : need + d })); // 8 日目にフォロワーが節目をこえる
+      node('tools/sim.js', '--inbox', inbox);
+      days.push({ state: JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')), world: STORE.readWorld(dir), life: STORE.readLife(dir) });
+    }
+    const history = JSON.parse(fs.readFileSync(path.join(dir, 'history.json'), 'utf8'));
+    fs.rmSync(dir, { recursive: true, force: true });
+    memo = { w0, cfg, days, history };
+    return memo;
+  };
+})();
+t('小さな島：はじまり島は 1 画面ほど（前の一辺 220 の半分以下）で、まわりは海', () => {
+  const { w0 } = islandRun();
+  assert.ok(w0.islands && w0.islands.length >= 2, '島が 2 つ（はじまり島と北の島）');
+  const m = w0.islands[0];
+  let rmin = 1e9, rmax = 0;
+  for (let a = 0; a < Math.PI * 2; a += 0.02) { const r = ISX.radiusAt(m, a); rmin = Math.min(rmin, r); rmax = Math.max(rmax, r); }
+  assert.ok(rmax * 2 <= 220 * 0.55 && rmin * 2 >= 220 * 0.35, `はじまり島のはば ${(rmin * 2).toFixed(0)}〜${(rmax * 2).toFixed(0)}`);
+  assert.ok(!ISX.onLand(w0, 0, rmax + 6, 0, { open: false }) && !ISX.onLand(w0, rmax + 6, 0, 0, { open: false }), '島の外は海');
+  assert.ok(!ISX.isOpen(w0.islands[1]), '北の島は、はじめは行けない');
+  for (const list of ['trees', 'rocks', 'bushes', 'animals', 'plots']) for (const o of w0[list]) assert.ok(ISX.onLand(w0, o.x, o.z, 0, { open: false }), `${list} が海の中 ${o.x},${o.z}`);
+  const onMain = (o) => ISX.shoreDist(m, o.x, o.z) > 0;
+  assert.ok(w0.trees.filter(onMain).length >= 80 && w0.rocks.filter(onMain).length >= 15, '30 人ほどが暮らせる木と岩');
+  assert.ok(w0.plots.filter((p) => !p.island).length >= 30, '家を建てる区画が 30 以上');
+  assert.ok(w0.animals.filter(onMain).length >= 12, '動物');
+});
+t('小さな島：広場・チェスト・たき火・池は島のまん中のそばで、岸から十分はなれている', () => {
+  const { w0 } = islandRun();
+  const m = w0.islands[0];
+  for (const [nm, o] of [['広場', w0.square], ['チェスト', w0.chest], ['たき火', w0.campfire]]) {
+    assert.ok(Math.hypot(o.x - m.x, o.z - m.z) < 8, nm + 'は島のまん中のそば');
+    assert.ok(ISX.shoreDist(m, o.x, o.z) > 38, nm + 'から岸まで ' + ISX.shoreDist(m, o.x, o.z).toFixed(1));
+  }
+  assert.ok(ISX.shoreDist(m, w0.pond.x, w0.pond.z) > 15, '池も岸から離れている');
+  for (const a of w0.animals) { const isl = ISX.islandAt(w0, a.x, a.z); assert.ok(isl && ISX.shoreDist(isl, a.x, a.z) >= 8.9, '動物の歩く輪が海に入らない ' + a.id); }
+});
+t('小さな島：建物・家・テントは陸の上で、重ならない', () => {
+  const { days } = islandRun();
+  const { world, life } = days[days.length - 1];
+  const cfg = islandRun().cfg;
+  const W3 = { footprint: (b) => { const L = cfg.buildings[b.type].look; return L.kind === 'house' ? Math.hypot(L.w, L.d) / 2 + 0.35 : 2; } };
+  assert.ok(world.buildings.length >= 3, '建物が建った ' + world.buildings.length);
+  for (const b of world.buildings) {
+    if (b.plot === 'ring') continue;
+    const isl = ISX.islandAt(world, b.x, b.z);
+    assert.ok(isl && ISX.shoreDist(isl, b.x, b.z) > W3.footprint(b) + 2, `建物 ${b.id} が陸の上`);
+    for (const o of world.buildings) if (o !== b && o.plot !== 'ring' && b.type !== 'canal' && o.type !== 'canal') assert.ok(Math.hypot(o.x - b.x, o.z - b.z) > 4, `建物 ${b.id} と ${o.id} が重なる`);
+  }
+  for (const k in life) { const h = life[k].home; if (h) assert.ok(world.buildings.some((b) => b.id === h && ISX.onLand(world, b.x, b.z, 2)), '家が陸の上 ' + h); }
+  assert.ok(ISX.shoreDist(world.islands[0], world.campfire.x, world.campfire.z) > 30, 'テントはたき火のそば（島のまん中）');
+});
+t('橋：フォロワーが節目をこえると橋を作り始め、できると北の島で働く（それまでは北の島の木と岩にさわらない）', () => {
+  const { days, history, cfg } = islandRun();
+  const north = (w) => w.islands.find((i) => i.id === 'north');
+  const onN = (w, o) => ISX.shoreDist(north(w), o.x, o.z) > 0;
+  const start = days.findIndex((d) => d.state.expansion && d.state.expansion.north) + 1;
+  assert.strictEqual(start, 8, '8 日目に作り始める');
+  const built = days.findIndex((d) => d.world.bridges[0].built) + 1;
+  assert.ok(built > start && built <= start + 6, '何日かでできる ' + built);
+  assert.ok(north(days[built - 1].world).open === built, '橋ができた日に北の島が開く');
+  for (const d of days.slice(0, built)) {
+    assert.ok(d.world.trees.filter((t) => onN(d.world, t)).every((t) => t.state === 'tree'), '橋の前に北の島の木を切らない');
+    assert.ok(d.world.rocks.filter((r) => onN(d.world, r)).every((r) => r.hp === r.max), '橋の前に北の島の岩を掘らない');
+  }
+  const last = days[days.length - 1];
+  const used = last.world.trees.filter((t) => onN(last.world, t) && t.state !== 'tree').length + last.world.rocks.filter((r) => onN(last.world, r) && r.hp < r.max).length;
+  assert.ok(used >= 5, '橋のあと北の島で木を切り岩を掘る ' + used);
+  const ex = last.state.expansion.north, c = cfg.expansion.bridges.north.cost;
+  assert.ok(ex.paid.wood >= c.wood && ex.paid.stone >= c.stone, '材料はチェストから使った');
+  assert.ok(history.some((h) => h.type === 'event' && h.day === start && /橋をかける/.test(h.text)), '歴史：作り始め');
+  assert.ok(history.some((h) => h.type === 'event' && h.day === built && /橋ができあがった/.test(h.text)), '歴史：できあがり');
+  assert.ok(Object.values(last.life).some((L) => L.diary.some((e) => /北の島/.test(e.text))), '日記にも残る');
+  // 橋ができたあとの「どこに建てる？」には、北の島の区画が出る
+  const where = history.filter((h) => h.type === 'vote_open' && h.day > built);
+  assert.ok(!where.length || where.some((h) => /北の島/.test(h.text)), '北の島の区画が候補に出る');
+});
+t('前の広い平地の world.json（島なし）も、今までどおり読める・陸と海の決まりも前と同じ', () => {
+  const w = { size: 220, seaZ: 34, trees: [], rocks: [] };
+  assert.ok(ISX.onLand(w, 50, 20) && !ISX.onLand(w, 0, 40), '南の seaZ より先は海');
+  assert.ok(ISX.reachable(w, -90, -90), '前の形はどこでも行ける');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-legacy-'));
+  fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+  const env = { ...process.env, TOWN_DATA: dir };
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js'), '--demo', '--legacy'], { env });
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/sim.js'), '--demo', '--days', '3'], { env });
+  const lw = STORE.readWorld(dir);
+  assert.ok(!lw.islands && lw.seaZ === 34 && lw.size === 220, '前の形のまま');
+  assert.ok(lw.trees.length > 300, '前の広さの木');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+t('作り直し（--keep-villagers）：住んでいる人は印のまま残り、持ち主は入らず、0 日目の島ですぐ暮らす', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-keep-'));
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  cfg.joinExclude = ['owner_acct'];
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
+  fs.writeFileSync(path.join(dir, 'villagers.json'), JSON.stringify([
+    { key: 'k0wner0000', igId: 'i0', name: 'owner_acct', userHash: 'u0', skin: 1, joined: '2026-11-01', joinedDay: 1, source: 'comment', hidden: false, display: 'owner_acct' },
+    { key: 'k1villager', igId: 'i1', name: 'someone_1', userHash: 'u1', skin: 42, joined: '2026-11-02', joinedDay: 2, source: 'comment', startTool: 'pickaxe', hidden: false, display: 'someone_1' },
+  ]));
+  const env = { ...process.env, TOWN_DATA: dir };
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js'), '--keep-villagers'], { env });
+  const vs = JSON.parse(fs.readFileSync(path.join(dir, 'villagers.json'), 'utf8'));
+  const st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
+  const life = STORE.readLife(dir), w = STORE.readWorld(dir);
+  assert.deepStrictEqual(vs.map((v) => v.key), ['k1villager'], '持ち主は入らない');
+  assert.ok(vs[0].igId === 'i1' && vs[0].userHash === 'u1' && vs[0].skin === 42 && vs[0].joinedDay === 0, '印・スキンはそのまま、0 日目の人');
+  assert.strictEqual(st.day, 0);
+  assert.ok(w.islands && !w.buildings.length, '新しい小さな島');
+  assert.ok(life.k1villager && life.k1villager.diary.length === 1 && life.k1villager.inv.some((s) => s && s.item === 'wood_pickaxe'), 'すぐ暮らし始める（日記・最初の道具）');
+  const out = execFileSync(process.execPath, [path.join(ROOT, 'tools/sim.js'), '--gate'], { env, encoding: 'utf8' });
+  assert.ok(/0 日目/.test(out) && JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')).day === 0, 'daily では 0 日目のまま');
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 console.log(`\nぜんぶ通りました（${ok} 件）`);

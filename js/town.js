@@ -8,7 +8,7 @@ import { makeCharacter, animate, setTool as setTool0, setCarry as setCarry0, set
 const setTool = (ch, k) => { if (ch.userData.parts) setTool0(ch, k); };
 const setCarry = (ch, k) => { if (ch.userData.parts) setCarry0(ch, k); };
 const setShield = (ch, on) => { if (ch.userData.parts) setShield0(ch, on); };
-import { mat, box, hash, rnd, makeTree, makeRock, makeBush, makeBuilding, makeHouse, obstaclesFor, routeAround, declutter, makeRoads } from './world3d.js';
+import { mat, box, hash, rnd, makeTree, makeRock, makeBush, makeBuilding, makeHouse, obstaclesFor, routeAround as routeAround0, declutter, makeRoads } from './world3d.js';
 import { makeField, makePond, animatePond, makeBobber, makeAnimal, animateAnimal, animalPos } from './farm3d.js';
 import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote, startNote, joinText } from './common.js';
 import { makeSky, jstHour, parseTime, phaseName } from './daynight.js';
@@ -20,6 +20,7 @@ let IS_VIDEO = false;
 import { makeTerrain, BLOCK } from './terrain_gen.js';
 import { makeTerrainView } from './terrain.js';
 import { SpatialHash, TILE } from './tilemap.js';
+import { islandAt, isOpen, randomLand, radiusAt, MAIN } from './island.js';
 import { makeClouds } from './clouds.js';
 import { seededRng, fightNight, roundsOf } from './combat.js';
 import { makeFloatText } from './floattext.js';
@@ -33,6 +34,19 @@ const FIXED_H = parseTime(QS.get('hour') ?? QS.get('time'));
 const hourNow = () => (FIXED_H ?? jstHour());
 
 nav('index.html');
+
+// ---------- 島から島へ歩く道：ちがう島へ行く時は、できあがった橋をわたる ----------
+const ROUTE = { world: null, bridges: [] };
+const islandOfPt = (p) => (islandAt(ROUTE.world, p.x, p.z, -4) || { id: MAIN }).id;
+function routeAround(a, b, obs) {
+  if (!ROUTE.world || !ROUTE.bridges.length) return routeAround0(a, b, obs);
+  const ia = islandOfPt(a), ib = islandOfPt(b);
+  if (ia === ib) return routeAround0(a, b, obs);
+  const br = ROUTE.bridges.find((x) => (x.to === ia && ib === MAIN) || (x.to === ib && ia === MAIN));
+  if (!br) return routeAround0(a, b, obs);
+  const [p, q] = ia === MAIN ? [br.a, br.b] : [br.b, br.a];
+  return [...routeAround0(a, p, obs), { x: q.x, z: q.z }, ...routeAround0(q, b, obs)];
+}
 
 // ---------- 煙・湯気 ----------
 const puffs = [];
@@ -50,6 +64,10 @@ async function main() {
   const D = await loadAll();
   TM0.data = performance.now();
   const { config, state, world, life, active } = D;
+  // 小さな島の町（world.islands）：木と岩は少ないので、遠い物も 1 本ずつぶつかる物として扱う（far の印は使わない）
+  const ISLANDS = !!(world.islands && world.islands.length);
+  if (ISLANDS) for (const o of [...world.trees, ...world.rocks]) delete o.far;
+  const onMain = (o) => !ISLANDS || (islandAt(world, o.x, o.z, -3) || { id: MAIN }).id === MAIN;
   if (!active.length) document.querySelector('.map').insertAdjacentHTML('beforeend', emptyNote(config));
   renderPanel(D);
 
@@ -83,6 +101,24 @@ async function main() {
   controls.zoomSpeed = 1.6;
   controls.minDistance = 8; controls.maxDistance = 190;
   controls.maxPolarAngle = 1.3; controls.minPolarAngle = 0.25;
+  // 小さな島の町：開いた時のカメラは、はじまり島がちょうど 1 画面に入る所（向きは前と同じ。画面の縦横の比で距離を決める）
+  let VIEW_K = 1; // 開いた時のカメラが前（約 69）より遠い分だけ、札や細かい姿を出す距離ものばす
+  if (ISLANDS) {
+    const m = world.islands[0];
+    camera.aspect = stage.clientWidth / Math.max(1, stage.clientHeight); camera.updateProjectionMatrix();
+    const tgt = new THREE.Vector3(m.x, 0, m.z + 2), dir = new THREE.Vector3(0, 46, 52).normalize();
+    const pts = Array.from({ length: 48 }, (_, k) => { const a = (k / 48) * Math.PI * 2, r = radiusAt(m, a) + 1.5; return new THREE.Vector3(m.x + Math.cos(a) * r, 0, m.z + Math.sin(a) * r); });
+    const q = new THREE.Vector3();
+    let d = 40;
+    for (; d < 320; d += 2) {
+      camera.position.copy(tgt).addScaledVector(dir, d); camera.lookAt(tgt); camera.updateMatrixWorld();
+      if (pts.every((p) => { q.copy(p).project(camera); return Math.abs(q.x) < 0.95 && q.y < 0.86 && q.y > -0.95; })) break;
+    }
+    controls.target.copy(tgt);
+    controls.maxDistance = Math.max(controls.maxDistance, d * 1.4);
+    VIEW_K = Math.max(1, d / 69.4);
+    camera.far = Math.max(camera.far, d * 4); camera.updateProjectionMatrix();
+  }
   controls.screenSpacePanning = false;
   controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
   window.TOWN = { camera, controls, lite: LITE }; // 確かめ用（カメラを動かして撮る）
@@ -134,7 +170,7 @@ async function main() {
   const keepOut = world.buildings.map((b) => ({ x: b.x, z: b.z, r: 2.5 }))
     .concat(state.plan && state.plan.site ? [{ x: state.plan.site.x, z: state.plan.site.z, r: 3 }] : [])
     .concat((state.votes || []).filter((v) => v.kind === 'where').flatMap((v) => v.options.map((o) => ({ x: o.x, z: o.z, r: 3 }))));
-  const terrainGen = makeTerrain({ seed: TC.seed || 'town', seaZ: world.seaZ, zone: { x0: -112, x1: 112, z0: -112, z1: world.seaZ + 2 }, keepOut, keepR: TC.clearBlocks ?? 4 });
+  const terrainGen = makeTerrain({ seed: TC.seed || 'town', seaZ: world.seaZ, zone: { x0: -112, x1: 112, z0: -112, z1: world.seaZ + 2 }, keepOut, keepR: TC.clearBlocks ?? 4, islands: world.islands || null });
   const VIEW_R = LITE ? (TC.viewChunksMobile || 5) : (TC.viewChunks || 8);
   const terrain = makeTerrainView(scene, terrainGen, { radius: VIEW_R, lod: LITE ? [1, 2] : [2, 5], perFrame: LITE ? 2 : 3, treeNear: LITE ? 2 : 3, rockNear: LITE ? 2 : 4, shadow: !LITE });
   terrain.update(controls.target);
@@ -149,18 +185,26 @@ async function main() {
     cols.forEach((c, ci) => {
       const inst = new THREE.InstancedMesh(geo, mat(c), 60);
       const m4 = new THREE.Matrix4();
-      for (let i = 0; i < 60; i++) { const x = (R() - 0.5) * 140, z = (R() - 0.5) * 120 - 10; m4.makeTranslation(x, 0.12, Math.min(z, world.seaZ - 4)); inst.setMatrixAt(i, m4); }
+      for (let i = 0; i < 60; i++) {
+        let x = (R() - 0.5) * 140, z = (R() - 0.5) * 120 - 10, hide = 0;
+        if (ISLANDS) { const p = randomLand(world, R, 5, 12) || { x: 0, z: 0, y: -60 }; x = p.x; z = p.z; hide = p.y || 0; } // 島の草の上だけ（だめなら見えない所）
+        m4.makeTranslation(x, 0.12 + hide, ISLANDS ? z : Math.min(z, world.seaZ - 4)); inst.setMatrixAt(i, m4);
+      }
       scene.add(inst);
     });
     const tufts = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.15, 0.5), mat(0x76a84c), 260);
     const m4 = new THREE.Matrix4();
-    for (let i = 0; i < 260; i++) { m4.makeTranslation((R() - 0.5) * 150, 0.07, Math.min((R() - 0.5) * 130 - 10, world.seaZ - 4)); tufts.setMatrixAt(i, m4); }
+    for (let i = 0; i < 260; i++) {
+      let x = (R() - 0.5) * 150, z = Math.min((R() - 0.5) * 130 - 10, world.seaZ - 4), hide = 0;
+      if (ISLANDS) { const p = randomLand(world, R, 5, 12) || { x: 0, z: 0, y: -60 }; x = p.x; z = p.z; hide = p.y || 0; }
+      m4.makeTranslation(x, 0.07 + hide, z); tufts.setMatrixAt(i, m4);
+    }
     scene.add(tufts);
   }
   // 道（広場があれば石畳、なければ土）
   const hasPlaza = world.buildings.some((b) => b.type === 'plaza');
   for (const b of world.buildings) {
-    if (b.type === 'plaza' || b.plot === 'coast' || b.plot === 'coast2' || b.plot === 'coast3') continue;
+    if (b.type === 'plaza' || b.plot === 'coast' || b.plot === 'coast2' || b.plot === 'coast3' || !onMain(b)) continue; // ほかの島の建物には、まん中からの道を引かない（海の上になる）
     const len = Math.hypot(b.x, b.z + 1);
     const path = new THREE.Mesh(new THREE.PlaneGeometry(1.2, len), mat(hasPlaza ? 0xc2b59a : 0xb59a72));
     path.rotation.x = -Math.PI / 2; path.rotation.z = Math.atan2(b.x, b.z + 1);
@@ -191,7 +235,7 @@ async function main() {
   // 池と、森や野原を歩く動物（柵に入った動物は柵の中を歩く）
   let pondObj = null;
   if (world.pond) { pondObj = makePond(world.pond); scene.add(pondObj); }
-  const animals = (world.animals || []).filter((a) => Math.hypot(a.x, a.z) < 70).map((a) => { const o = makeAnimal(a.kind); scene.add(o); return { a, o }; });
+  const animals = (world.animals || []).filter((a) => (ISLANDS ? !!islandAt(world, a.x, a.z) : Math.hypot(a.x, a.z) < 70)).map((a) => { const o = makeAnimal(a.kind); scene.add(o); return { a, o }; });
   const emitters = [];
   const btags = [];
   const lightAnchors = [];
@@ -217,7 +261,57 @@ async function main() {
     btags.push(lo);
   }
   // 道と家の前の小道
-  scene.add(makeRoads(world.buildings, world.plots, config));
+  scene.add(makeRoads(world.buildings, (world.plots || []).filter((p) => !p.island), config));
+  // 橋（となりの島へ。config.expansion）と、島の名前の札
+  const bridges = ISLANDS ? makeBridges() : [];
+  ROUTE.world = world; ROUTE.bridges = bridges.filter((b) => b.built);
+  function makeBridges() {
+    const out = [];
+    for (const br of world.bridges || []) {
+      const ex = (state.expansion || {})[br.id];
+      const prog = br.built ? 1 : ex ? Math.max(0, Math.min(1, ex.prog || 0)) : 0;
+      const isl = world.islands.find((i) => i.id === br.to);
+      const dx = br.b.x - br.a.x, dz = br.b.z - br.a.z, L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L;
+      const ext = 2, total = L + ext * 2, hw = (br.w || 3.4) / 2;
+      if (ex || br.built) {
+        // 橋は最初は無い。作り始めると 3 つの段階で少しずつできていく（板の上の面は地面と同じ高さ）
+        //   0〜35%：海にくいを岸から順に立てる / 35〜90%：くいの上に板を岸から少しずつ渡す / 90〜100%：手すりをつける
+        const g = new THREE.Group();
+        g.position.set(br.a.x - ux * ext, 0, br.a.z - uz * ext); g.rotation.y = Math.atan2(dx, dz);
+        const stage = (a, b) => Math.max(0, Math.min(1, (prog - a) / (b - a)));
+        const pPost = stage(0, 0.35), pPlank = stage(0.35, 0.9), pRail = stage(0.9, 1);
+        const P = 0.95, n = Math.ceil(total / P), shown = Math.round(n * pPlank), len = shown * P;
+        for (let k = 0; k < shown; k++) box(hw * 2, 0.14, P - 0.06, k % 2 ? 0xa57a4a : 0xb48a56, 0, -0.06, k * P + P / 2, g);
+        // くい（水の中から）。最初の日から岸のそばに 1 組は立っている
+        const posts = []; for (let s = 1.8; s < total - 0.5; s += 3.8) posts.push(s);
+        const nPost = Math.max(1, Math.round(posts.length * pPost));
+        for (const s of posts.slice(0, nPost)) for (const sx of [-1, 1]) box(0.34, 1.9, 0.34, 0x6e4a2a, sx * (hw + 0.05), -0.75, s, g);
+        // 手すり：柱と横木は、できた板の上にだけ
+        if (pRail > 0) {
+          const rlen = len * pRail;
+          for (const s of posts) if (s < rlen - 0.5) for (const sx of [-1, 1]) box(0.18, 0.95, 0.18, 0x7a5232, sx * (hw - 0.1), 0.47, s, g);
+          const rl = Math.max(0, rlen - 1.4);
+          if (rl > 0) for (const sx of [-1, 1]) box(0.14, 0.14, rl, 0x8a6038, sx * (hw - 0.1), 0.92, 0.7 + rl / 2, g);
+        }
+        if (!br.built) { // 作っている間：岸に材料の山
+          for (let i = 0; i < 3; i++) box(1.6, 0.22, 0.26, 0xa87a48, hw + 1.6, 0.12 + i * 0.24, 0.6 + (i % 2) * 0.1, g);
+          for (let i = 0; i < 2; i++) box(0.5, 0.42, 0.5, 0x9a9da2, -hw - 1.4 - i * 0.6, 0.21, 0.8, g);
+        }
+        g.traverse((o) => { if (o.isMesh) { o.castShadow = !LITE; o.receiveShadow = true; } });
+        scene.add(g);
+      }
+      if (ex || br.built) {
+        const tag = document.createElement('div');
+        tag.className = 'btag' + (br.built === state.day || !br.built ? ' new' : '');
+        tag.textContent = br.built ? (br.built === state.day ? '今日できた ' : '') + (br.name || '橋') : `橋を作っている（${Math.round(prog * 100)}%）`;
+        const lo = new CSS2DObject(tag); const mid = br.built ? 0.5 : Math.max(0.08, prog * 0.5);
+        lo.position.set(br.a.x + dx * mid, 3, br.a.z + dz * mid); scene.add(lo); btags.push(lo);
+      }
+      out.push({ ...br, a: { x: br.a.x - ux * 1, z: br.a.z - uz * 1 }, b: { x: br.b.x + ux * 1, z: br.b.z + uz * 1 } });
+    }
+    // 島には名前の札を出さない（海の向こうに見えているだけ）
+    return out;
+  }
   // たき火とテント（家がない人の寝床）
   const camp = world.campfire;
   if (!hasPlaza && active.length) { // だれもいない間は、木と岩だけ
@@ -663,7 +757,7 @@ async function main() {
   // ---------- 人が多い時の軽量化 ----------
   // ちゃんとした姿で描くのは、画面に入っていてカメラに近い FULL_MAX 人まで。
   // それより遠い人は、色の付いた簡単な形（まとめて 1 回で描く）にする。画面の外の人は動きをまばらに進める。
-  const FULL_MAX = LITE ? 24 : 60, FULL_DIST = LITE ? 70 : 95;
+  const FULL_MAX = LITE ? 24 : 60, FULL_DIST = (LITE ? 70 : 95) * VIEW_K;
   // 村人の位置は「マスごとの一覧」（空間ハッシュ、1 マス 8×8 ブロック）にも持つ。動いてマスが変わった時だけ付け替える。
   // 近くの人さがし（話す相手・ぶつからないように避ける・動物がついて行く人・ちゃんと描く人と名札の人）は、周りのマスだけを見る
   const pgrid = new SpatialHash(8 * TILE);
@@ -1478,10 +1572,10 @@ async function main() {
     for (const p of people) {
       if (p.lod !== 'full') { p._far = true; continue; } // 札はちゃんと描く人だけ
       const dd = camera.position.distanceTo(p.ch.getWorldPosition(tmp));
-      p._far = dd > 120;
-      p.label.style.opacity = p._far || p._hidden || !p.ch.visible ? '0' : dd > 80 ? '0.6' : '1';
+      p._far = dd > 120 * VIEW_K;
+      p.label.style.opacity = p._far || p._hidden || !p.ch.visible ? '0' : dd > 80 * VIEW_K ? '0.6' : '1';
       if (!p.ch.visible) p.bubble.hidden = true; // 家の中で寝ている人の札は出さない（CSS2D は親が見えなくても出るため）
-      p.label.style.fontSize = dd > 70 ? '10px' : '11px';
+      p.label.style.fontSize = dd > 70 * VIEW_K ? '10px' : '11px';
     }
     // 名前の札が重ならないように、近い人から置いて、ぶつかる札は上へずらす（それでも無理なら隠す）
     if ((frame++ & 3) === 0) {
@@ -1504,7 +1598,7 @@ async function main() {
     }
     for (const bt of btags) {
       const dd = camera.position.distanceTo(bt.position);
-      bt.element.style.opacity = dd > 75 && !bt.element.classList.contains('new') && !bt.element.classList.contains('chesttag') ? '0' : '1';
+      bt.element.style.opacity = dd > 75 * VIEW_K && !bt.element.classList.contains('new') && !bt.element.classList.contains('islandtag') && !bt.element.classList.contains('chesttag') ? '0' : '1';
     }
     // 地形はどこまでも続くので、見る場所の左右の制限はなし（高さだけ地面に）
     controls.target.y = 0;
@@ -1515,7 +1609,8 @@ async function main() {
     clouds.update(time, { x: controls.target.x, z: controls.target.z });
     // 霧：描く距離の上限の手前からかすませる（カメラが離れるほど遠くへ）
     // やわらかく：かすみ始めを手前にして、遠くほど空の色（地平線の色）に溶ける
-    scene.fog.far = dist * 0.7 + VIEW_UNITS * 0.95; scene.fog.near = Math.min(dist * 0.6, scene.fog.far * 0.22);
+    if (ISLANDS) { scene.fog.far = dist * 0.7 + VIEW_UNITS * 1.05; scene.fog.near = dist * 0.95; } // 島は霧の手前。北の島はうっすら、遠くの大陸はかすんで見える
+    else { scene.fog.far = dist * 0.7 + VIEW_UNITS * 0.95; scene.fog.near = Math.min(dist * 0.6, scene.fog.far * 0.22); }
     // 遠い人・画面の外の人は、ちゃんとした姿を描かない（描く間だけ隠して、すぐ戻す）
     placeProxies();
     if (mobs.length) { const R0 = stage.getBoundingClientRect(); ft.end(camera, R0.width, R0.height, R0.left, R0.top); }

@@ -213,10 +213,12 @@ export function animalPos(a, t, pen) {
   // 歩く → 止まって草を食べる、をくり返す
   const cyc = (u / 6.28) % 1, walking = cyc < 0.6;
   const w = walking ? cyc / 0.6 : 1;
-  const ang = Math.floor(u / 6.28) * 2.4 + ph + w * 2.6;
-  const x = a.x + Math.cos(ang) * R * (0.6 + 0.4 * Math.sin(ph)), z = a.z + Math.sin(ang) * R * 0.8;
-  // 進む向き（円の接線）。動物の頭は +x 向きなので、+x が接線を向くように回す
-  const face = Math.atan2(-Math.cos(ang), -Math.sin(ang));
+  const ang = Math.floor(u / 6.28) * 2.6 + ph + w * 2.6; // 1 回ぶん歩き終えた所から次が始まる（後ろへ飛ばない）
+  const RX = R * (0.6 + 0.4 * Math.sin(ph)), RZ = R * 0.8;
+  const x = a.x + Math.cos(ang) * RX, z = a.z + Math.sin(ang) * RZ;
+  // 進む向き（だ円の接線 = 速さの向き (vx, vz) = (-sin·RX, cos·RZ)）。動物の頭は +x 向き。
+  // rotation.y = θ で +x は (cosθ, -sinθ) を向くので、θ = atan2(-vz, vx)
+  const face = Math.atan2(-Math.cos(ang) * RZ, -Math.sin(ang) * RX);
   const graze = walking ? 0 : Math.min(1, (cyc - 0.55) / 0.08) * (cyc > 0.95 ? (1 - cyc) / 0.05 : 1);
   return { x, z, face, move: walking ? 1 : 0, graze };
 }
