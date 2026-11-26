@@ -84,11 +84,39 @@ h2 { font-size: 17px; margin: 22px 0 10px; }
 .btag.new { background: #ffe08a; font-weight: 700; }
 .titlebadge { display: inline-block; font-size: 11px; line-height: 1.5; padding: 0 7px; margin: 2px 4px 2px 0; border-radius: 999px; background: #f6d77a; color: #5a3d00; border: 1px solid #d9b247; font-weight: 700; white-space: nowrap; vertical-align: middle; }
 .titles { margin: -4px 0 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.btn.igpost { display: block; text-align: center; margin: 8px 0 12px; padding: 12px 16px; font-size: 16px; font-weight: 700; background: linear-gradient(45deg, #f09433, #dc2743 50%, #bc1888); color: #fff; border-color: transparent; }
 .cardtitles { display: block; margin: 1px 0 2px; }
 .cardbtns { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 .cardbtns .btn.ig { background: linear-gradient(45deg, #f09433, #dc2743 50%, #bc1888); color: #fff; border-color: transparent; text-align: center; }
 .titles .titlebadge { font-size: 13px; padding: 1px 10px; }
-.person .titlebadge { display: block; width: max-content; margin: 1px 0; }
+.person .titlebadge { display: inline-flex; width: max-content; margin: 1px 4px 1px 0; }
+/* バッジの絵（48 ドットのドット絵。小さい所は 24 で出す） */
+.bdgrow { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; vertical-align: middle; }
+.person .bdgrow { display: flex; margin: 1px 0; }
+.bdgrow .titlebadge { display: inline-flex; align-items: center; gap: 3px; margin: 0; padding: 1px 8px 1px 2px; }
+.bdgimg { image-rendering: pixelated; flex: none; }
+.bdgrow .bdgimg { width: 24px; height: 24px; display: block; }
+.bdgrow .titlebadge .bdgimg { width: 20px; height: 20px; margin: -2px 0; }
+.bdgi { display: inline-block; line-height: 0; }
+.bdgtxt { display: inline-block; width: 20px; text-align: center; }
+.titles.badges { margin: 2px 0 10px; }
+.titles .badge b { display: block; font-size: 14px; }
+.bdgall { font-size: 13px; align-self: center; }
+/* バッジのページ */
+.bdglist { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 10px; margin: 8px 0 18px; padding: 0; list-style: none; }
+.bdgcard { display: flex; gap: 12px; align-items: flex-start; background: var(--card, #fff); border: 1px solid rgba(0,0,0,.1); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+.bdgcard > .bdgimg { width: 96px; height: 96px; filter: drop-shadow(0 2px 2px rgba(0,0,0,.35)); }
+.bdgcard.none > .bdgimg { filter: grayscale(1) contrast(.8); opacity: .6; }
+.bdgcard > div { min-width: 0; flex: 1; }
+.bdgcard.none h3 { color: var(--sub, #777); }
+.bdgcard h3 { margin: 2px 0 2px; font-size: 16px; }
+.bdgcard p { margin: 2px 0; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.bdgcard .who a { margin-right: 6px; white-space: nowrap; }
+.bdgcard .tiers { display: flex; gap: 4px; margin: 4px 0 2px; flex-wrap: wrap; }
+.bdgcard .tiers figure { margin: 0; text-align: center; font-size: 11px; line-height: 1.2; color: var(--sub, #777); }
+.bdgcard .tiers .bdgimg { width: 48px; height: 48px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.3)); }
+.bdgcard .tiers figure.none .bdgimg { filter: grayscale(1) brightness(1.15) contrast(.6); opacity: .5; }
+@media (max-width: 420px) { .bdgcard > .bdgimg { width: 48px; height: 48px; } }
 .nametag .tstar { color: #ffd34d; margin-left: 2px; font-size: 9px; }
 .btag.sleeptag { background: rgba(44,52,96,.82); color: #e8ecff; font-size: 10px; border-color: rgba(255,255,255,.25); }
 
@@ -278,12 +306,12 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .fallback { margin: 14px 0 0; padding: 10px 0 0; border-top: 1px dashed var(--line); }
 .fallback summary { cursor: pointer; font-size: 14px; color: var(--sub); }
 
-/* スマホ幅のメニュー：題名を短くして 6 つとも入れる */
+/* スマホ幅のメニュー：題名を短くして 7 つとも入れる（375 はばで「バッジ」まで見える。もっとせまい時は横にすべらせる） */
 @media (max-width: 420px) {
   .site-head .brand-pre { display: none; }
-  :root { --nav-w: 44px; }
+  :root { --nav-w: 40px; }
   .site-head nav { gap: 0; }
-  .site-head nav a { font-size: 13px; }
+  .site-head nav a { font-size: 12.5px; }
 }
 /* 村人が 0 人の時の案内 */
 .empty { margin: 8px 0; padding: 14px 16px; border-radius: var(--radius); background: #fff7df; border: 1px solid #ecd9a4; color: #5a4520; font-weight: 700; line-height: 1.7; }
@@ -338,6 +366,7 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .gauge svg{flex:none}
 .gauges{display:flex;flex-direction:column;gap:3px;margin-top:4px}
 .vcard .lvline{display:block}
+.vcard .gearline{display:block;font-size:12px;color:var(--sub)}
 
 /* 村人の一覧のページ送り */
 .pager{display:flex;gap:12px;align-items:center;justify-content:center;margin:16px 0}

@@ -12,6 +12,12 @@ const P = require('../tools/people');
 const STORE = require('../tools/store'); // world.json（地図の文字）と日記（人ごとのファイル）を読む
 
 const ROOT = path.join(__dirname, '..');
+// 本番の config.json を読む。拠点の投票（needPost）は、投票の投稿の URL を貼った後として試す
+function liveCfg() {
+  const c = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  if (!c.votePostUrl) c.votePostUrl = 'https://www.instagram.com/p/TEST/';
+  return c;
+}
 const sample = JSON.parse(fs.readFileSync(path.join(__dirname, 'sample_comments.json'), 'utf8'));
 let ok = 0;
 const t = (name, fn) => { fn(); ok++; console.log('OK  ' + name); };
@@ -185,7 +191,7 @@ t('同じ種なら同じ町になる', () => {
 
 // ---------- 持ち物欄 ----------
 const I = require('../tools/inventory');
-const IC = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8')).inventory;
+const IC = liveCfg().inventory;
 t('枠の数：最初 3・レベルと在籍日数で増える・上限 27', () => {
   assert.strictEqual(I.slotCount(1, 1, IC), 3);
   assert.strictEqual(I.slotCount(3, 1, IC), 4);
@@ -299,7 +305,7 @@ t('sim の関係・会話・誕生日（同じ種なら同じ結果、年は持�
 
 const PF = require('../js/profile-fields.js');
 const PR = require('../tools/profiles');
-const FIELDS = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8')).profileFields;
+const FIELDS = liveCfg().profileFields;
 t('プロフィールの項目：確かめ・悪い言葉・文字数', () => {
   for (const w of ['カステラ', 'ちょっとばかり', 'くずもち', 'らーめん']) assert.ok(!PF.badWord(w), w);
   for (const w of ['バーカ', '死ね', 'し ね', 'ｸｿ', '馬鹿']) assert.ok(PF.badWord(w), w);
@@ -379,7 +385,7 @@ t('本番の 0 日目：村人 0・建物 0 で、コメントがなくても何
 });
 t('夜：敵は来ても村人は死なない・ケガは次の日だけ休む・守りが強いほど来る数が減る', () => {
   const NI = require('../tools/night');
-  const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const config = liveCfg();
   const mk = (n) => Array.from({ length: n }, (_, i) => ({ key: 'v' + i, display: 'v' + i }));
   const run = (buildings) => {
     let sum = 0, nights = 0;
@@ -400,7 +406,7 @@ t('夜：敵は来ても村人は死なない・ケガは次の日だけ休む�
 });
 t('夜：sim.js で履歴に残り、ケガをした人は次の日「休み」になる', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-night-'));
-  const cfgN = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const cfgN = liveCfg();
   cfgN.enemies = { ...(cfgN.enemies || {}), enabled: true }; // ふだんは止めてある。コードは残っているので、出す設定で確かめる
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfgN));
   const env = { ...process.env, TOWN_DATA: dir };
@@ -440,7 +446,7 @@ t('夜：sim.js で履歴に残り、ケガをした人は次の日「休み」�
 });
 t('戦い：攻撃力は装備で決まる・クリティカルは良い装備ほど少し出やすい・同じ乱数で同じ結果・落とし物・バッジの段', () => {
   const CB = require('../js/combat.js');
-  const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8')), C = config.combat;
+  const config = liveCfg(), C = config.combat;
   const ws = [null, 'stone_pickaxe', 'wood_sword', 'stone_sword', 'iron_sword'];
   for (let i = 1; i < ws.length; i++) {
     assert.ok(CB.attackOf(ws[i], C) > CB.attackOf(ws[i - 1], C), `攻撃力 ${ws[i - 1]} < ${ws[i]}`);
@@ -476,7 +482,7 @@ t('戦い：攻撃力は装備で決まる・クリティカルは良い装備�
 });
 t('バッジ：はじまりの住人と技能バッジ（銅・銀・金・ダイヤ）・数の読み方・絵がある', () => {
   const CB = require('../js/combat.js');
-  const BG = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8')).badges;
+  const BG = liveCfg().badges;
   const L = { kills: { total: 120, zombie: 100 }, gathered: { wood: 600, stone: 10, food: 50 }, built: ['a', 'b', 'c', 'd', 'e'] };
   assert.strictEqual(CB.badgeCount(L, 'kills'), 120, 'kills は total を読む');
   assert.strictEqual(CB.badgeCount(L, 'gathered.wood'), 600);
@@ -494,7 +500,7 @@ t('バッジ：はじまりの住人と技能バッジ（銅・銀・金・ダ�
 });
 t('鉱石：岩の中身は種と岩の id で毎回同じ・確率は config.json・まれな物ほど少ない', () => {
   const O = require('../tools/ores');
-  const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const config = liveCfg();
   assert.ok(config.ores && config.ores.iron > 0 && config.ores.diamond < config.ores.iron, 'config.json に ores がある');
   const rock = { id: 'r5', max: 12 };
   assert.strictEqual(O.genBlocks('machi-12', rock, config.ores), O.genBlocks('machi-12', rock, config.ores));
@@ -531,7 +537,7 @@ t('鉱石：鉄・金・ダイヤを掘ると履歴に「〇〇が鉄鉱石を�
   assert.deepStrictEqual(h2.filter((x) => x.type === 'find').map((x) => x.text), finds.map((x) => x.text));
 });
 t('投票：候補は普通の村の建物だけ。時計台などの特別な建物はフォロワーが増えても自動では候補に入らない', () => {
-  const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const config = liveCfg();
   const plain = new Set(['hut', 'house', 'well', 'storehouse', 'workbench', 'fence', 'workshop', 'watch', 'garden', 'plaza', 'shop', 'lamps', 'wall', 'inn', 'farm', 'canal', 'pen']);
   for (const b of config.firstChoices.concat(config.choicePool)) assert.ok(plain.has(b), b);
   assert.ok(config.firstChoices.includes('workbench'), '作業台は最初から選べる');
@@ -552,7 +558,7 @@ t('投票：候補は普通の村の建物だけ。時計台などの特別な�
 
 // ---------- 建物のリクエスト（tools/requests.js） ----------
 const RQ = require('../tools/requests');
-const RCFG = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+const RCFG = liveCfg();
 t('リクエスト：いろいろな言い方を建物に読む。ただの感想・A/B/C の票は数えない', () => {
   const cases = { '図書館たててほしい': ['library'], '温泉ほしい！': ['onsen'], 'おんせん欲しいです': ['onsen'], '灯台つくって〜': ['lighthouse'], '時計台がいいな': ['clocktower'],
     '港と風車ができたらうれしい': ['port', 'windmill'], 'パン屋さんお願いします': ['bakery'], '大噴水ほしい': ['fountain'], '教会たてて': ['cathedral'] };
@@ -593,7 +599,7 @@ t('リクエスト：その他はよくない言葉を捨て、20 文字まで�
 // ---------- 道具作り ----------
 t('道具作り：板 3＋棒 2 で木のつるはし。原木から板・棒を自動で作る。足りない時は「あと いくつ」', () => {
   const CR = require('../tools/craft');
-  const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const config = liveCfg();
   const CC = config.crafting, IT = config.items;
   assert.deepStrictEqual(CC.recipes.wood_pickaxe.from, { planks: 3, stick: 2 });
   // 原木 2 → 板 8 → 棒に板 2 を使う → 板 3 を使って、板 3 と棒 2 が残る
@@ -645,7 +651,7 @@ t('道具作り：sim.js で序盤に木の道具を作り、こわれたら作�
 
 // ---------- 木と岩 ----------
 t('木と岩：切った木は切り株になり、別の場所に苗木→木・掘り切った岩は何日かで戻る（日数は config.json）・地図の全体に散らばる', () => {
-  const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const config = liveCfg();
   const RS = config.respawn;
   assert.ok(RS.stumpDays > 0 && RS.saplingDays > 0 && RS.rockDays[0] > 0, 'config.json に日数がある');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-regrow-'));
@@ -696,7 +702,7 @@ t('1 日目：村のまん中の草と石を整地し、チェストを置く', 
   fs.rmSync(dir, { recursive: true, force: true });
 });
 t('釣り・畑・動物：同じ種なら同じ結果・動物は減らない・はじめては歴史に残る', () => {
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const cfg = liveCfg();
   // 確率は config.json から読む（0〜1 の間・重みは正・宝物とがらくたはまれ）
   assert.ok(cfg.fishing.biteChance > 0 && cfg.fishing.biteChance <= 1);
   assert.ok(cfg.fishing.treasure.p < 0.1 && cfg.fishing.junk.p < 0.2, '宝物とがらくたはまれ');
@@ -735,7 +741,7 @@ t('釣り・畑・動物：同じ種なら同じ結果・動物は減らない�
   assert.ok(a.world.animals.filter((x) => x.pen).length <= cfg.animals.penCap, '柵の数を超えない');
 });
 t('最初の道具：コメントの言葉で選ぶ・なければ人の少ない仕事・木の道具を 1 つ持つ・プロフィールは参加した日に 1 回だけ', () => {
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const cfg = liveCfg();
   const ST = cfg.startTools;
   const cases = { '参加したい ピッケル': 'pickaxe', '参加したい つるはし': 'pickaxe', '参加したい！採掘': 'pickaxe', '参加したい 斧': 'axe', '参加します 木こり': 'axe', '参加したい 釣り': 'fishing_rod', '参加したい 釣りざお': 'fishing_rod', '参加 くわ': 'hoe', '参加したい 畑やりたい': 'hoe', '参加したい': null, '参加したい 剣': null, '参加したい 釣りと畑': 'fishing_rod' };
   for (const [k, v] of Object.entries(cases)) assert.strictEqual(P.parseStartTool(k, ST), v, k);
@@ -794,7 +800,7 @@ t('最初の道具：コメントの言葉で選ぶ・なければ人の少な�
 // ---------- 切り株・建物のまわり・草の畑・動物・体力とおなか ----------
 t('切り株はその場所に生えず別の場所に木が出る・建物のまわりに木と岩なし・草の畑と種・動物は種を持つ人が連れる・体力とおなか', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-life-'));
-  const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const config = liveCfg();
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(config));
   const env = { ...process.env, TOWN_DATA: dir };
   const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
@@ -975,7 +981,7 @@ t('投稿ツール：画面から読んだコメントを registrationsFrom の�
 
 // ---------- 1 日 24 時間の行動 ----------
 const HR = require('../js/hours.js');
-const HC = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8')).hours;
+const HC = liveCfg().hours;
 const hourRun = (() => {
   let memo = null;
   return () => {
@@ -1129,7 +1135,7 @@ t('建てている物・橋：sim が いる数／あつまった数 を残し�
   fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
   const env = { ...process.env, TOWN_DATA: dir };
   execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js'), '--demo'], { env });
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const cfg = liveCfg();
   let seenGather = 0, seenBuild = 0;
   const paidBefore = {};
   for (let d = 0; d < 10; d++) {
@@ -1270,7 +1276,7 @@ t('町を始める日：startAt の読み方と、gate のあいだは 0 日目�
 });
 t('すぐの入居：join.js で 0 日目に住み始め、daily（--gate）は始めるまで進まない・始めたら 1 日目', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-join-'));
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const cfg = liveCfg();
   cfg.startAt = null; cfg.joinExclude = ['town_owner2'];
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
   const env = { ...process.env, TOWN_DATA: dir };
@@ -1447,7 +1453,7 @@ t('前の広い平地の world.json（島なし）も、今までどおり読め
 });
 t('作り直し（--keep-villagers）：住んでいる人は印のまま残り、持ち主は入らず、0 日目の島ですぐ暮らす', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-keep-'));
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const cfg = liveCfg();
   cfg.joinExclude = ['owner_acct'];
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
   fs.writeFileSync(path.join(dir, 'villagers.json'), JSON.stringify([
@@ -1483,7 +1489,7 @@ t('拠点の投票：0 日目は候補 A/B/C が陸の上に出て、チェス�
   assert.ok(!w.chest.day && !w.buildings.length && !(w.debris || []).length, 'チェスト・建物・整地の草はまだない');
   const m = w.islands[0];
   for (const o of bv.options) {
-    assert.ok(ISX.shoreDist(m, o.x, o.z) >= 20, `${o.key} ${o.name} は岸から 20 以上（${ISX.shoreDist(m, o.x, o.z).toFixed(1)}）`);
+    assert.ok(ISX.shoreDist(m, o.x, o.z) >= 15, `${o.key} ${o.name} は岸から 15 以上（${ISX.shoreDist(m, o.x, o.z).toFixed(1)}。A は砂浜のそばなので 20 より近い）`);
     assert.ok(!w.trees.some((t) => Math.hypot(t.x - o.x, t.z - o.z) < 5) && !w.rocks.some((r) => Math.hypot(r.x - o.x, r.z - o.z) < 5), `${o.key} の旗のまわりは空いている`);
     assert.ok(Math.hypot(o.x - w.pond.x, o.z - w.pond.z) > w.pond.r + 10.5, `${o.key} の広場が池にかからない`);
     // そこに決まったら、家や建物の区画が十分ある
@@ -1501,8 +1507,14 @@ t('拠点の投票：0 日目は候補 A/B/C が陸の上に出て、チェス�
   fs.rmSync(dir, { recursive: true, force: true });
 });
 t('拠点の投票：1 人 1 票（最後のコメント）・持ち主は数えない・「Ａ」「a」「浜辺」も読む・2 つ書いたら数えない', () => {
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const cfg = liveCfg();
   cfg.joinExclude = ['owner_b'];
+  // needPost：投票の投稿の URL を貼るまでは数えない
+  cfg.votePostUrl = '';
+  { const st0 = { votes: [] }; const v0 = BASE.openBaseVote(st0, cfg, new Date('2026-11-27T10:00:00+09:00'));
+    BASE.tallyBase(v0, { inbox: { voteComments: [{ from: { id: '1', username: 'aa' }, text: 'A', timestamp: '2026-11-27T11:00:00+09:00' }] }, config: { ...cfg, baseVote: { ...cfg.baseVote, needPost: true } }, now: new Date('2026-11-27T22:00:00+09:00') });
+    assert.deepStrictEqual(v0.votes, { A: 0, B: 0, C: 0 }, 'URL を貼るまで数えない'); assert.ok(v0.waiting); }
+  cfg.votePostUrl = 'https://www.instagram.com/p/TEST/';
   const state = { votes: [] };
   const v = BASE.openBaseVote(state, cfg, new Date('2026-11-27T10:00:00+09:00'));
   const c = (id, u, text, h) => ({ from: { id, username: u }, text, timestamp: `2026-11-27T${String(h).padStart(2, '0')}:00:00+09:00` });
@@ -1529,8 +1541,9 @@ t('拠点の投票：1 人 1 票（最後のコメント）・持ち主は数え
 t('拠点の投票：1 日目にする朝に決まり、そこにチェスト・たき火・広場・区画・テントが移る（票なしは決めておいた場所）', () => {
   const run = (voteComments) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-base1-'));
-    const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+    const cfg = liveCfg();
     cfg.startAt = null; cfg.joinExclude = ['town_owner2'];
+    cfg.votePostUrl = 'https://www.instagram.com/p/TEST/'; // needPost：URL を貼った後の投票として試す
     fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
     const env = { ...process.env, TOWN_DATA: dir };
     const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
@@ -1580,7 +1593,7 @@ t('拠点の投票：1 日目にする朝に決まり、そこにチェスト・
 });
 t('拠点の投票：config の until を過ぎたら、0 日目のうちに受付（join.js）で決まる', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-base2-'));
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const cfg = liveCfg();
   cfg.baseVote.until = '2099-01-01 05:00';
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
   const env = { ...process.env, TOWN_DATA: dir };
@@ -1634,7 +1647,7 @@ t('りんごの木：前の形の world.json（fruit を持たない）も読め
 });
 t('りんごの木：食べ物の村人がもぐ・りんごはチェストへ・日記「りんごの木を見つけた」・もいだ木は regrowDays 日でまた実る', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-apple-'));
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const cfg = liveCfg();
   const RG = cfg.apples.regrowDays;
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
   const env = { ...process.env, TOWN_DATA: dir };
@@ -1672,7 +1685,7 @@ t('りんごの木：食べ物の村人がもぐ・りんごはチェストへ�
 t('りんごの木：切ると原木（＋なっていたりんご）。実の数え方はほかの木と同じ', () => {
   const src = fs.readFileSync(path.join(ROOT, 'tools/sim.js'), 'utf8');
   assert.ok(/o\.fruit === 'apple' && AP/.test(src) && /AP\.chop/.test(src), '切った時にりんごが落ちる');
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8')).apples;
+  const cfg = liveCfg().apples;
   assert.ok(cfg.note && cfg.pick[0] >= 1 && cfg.pick[1] >= cfg.pick[0] && cfg.regrowDays >= 1 && cfg.perDay >= 1, 'config.json の apples');
   assert.strictEqual(HR.CODE_ACTION.ga, 'apple'); assert.ok(HR.WORK.has('apple')); assert.ok(HR.hourText({ action: 'apple' }).includes('りんご'));
 });
@@ -1687,7 +1700,7 @@ t('住みたい：誕生日の読み取り（いろいろな書き方・全角�
   // ありえない日・書いていない時は読まない
   for (const k of ['住みたい', '住みたい ピッケル', '住みたい りんご', '13/40', '住みたい 13/40', '住みたい 2月30日', '住みたい 13/1', '住みたい 0/5', '住みたい 1340', '住みたい 4月31日', '住みたい 3.14.15']) assert.strictEqual(P.parseBirthday(k), null, k);
   // 道具と食べ物もいっしょに読める
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const cfg = liveCfg();
   for (const s of ['住みたい ピッケル 3/14 りんご', '住みたい 0314 ピッケル りんご', '住みたい りんご 誕生日は3月14日 ピッケル']) {
     assert.strictEqual(P.parseStartTool(s, cfg.startTools), 'pickaxe', s); assert.strictEqual(P.parseFood(s), 'りんご', s); assert.strictEqual(P.parseBirthday(s), '03-14', s);
   }
@@ -1699,7 +1712,7 @@ t('住みたい：好きな食べ物の読み取り（町の食べ物・言い�
   for (const k of ['住みたい', '住みたい ピッケル', '住みたい よろしく', '住みたいですし', 'クリスマスに住みたい', '住みたい 好きな食べ物 バーカ', '住みたい 好きな食べ物 あいうえおかきくけこさしす', '住みたい 好きな食べ物 http://x.example']) assert.strictEqual(P.parseFood(k), null, k);
 });
 t('住みたい：道具・誕生日・食べ物をいっしょに書ける（あとのコメントが勝つ・書いていない物は前のまま）', () => {
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const cfg = liveCfg();
   const cm = (id, text, ts) => ({ from: { id, username: 'u' + id }, text, timestamp: ts });
   const regs = P.registrationsFrom([
     cm('1', '住みたい ピッケル 誕生日12月25日 魚', '2026-11-01T00:00:00Z'),
@@ -1711,6 +1724,69 @@ t('住みたい：道具・誕生日・食べ物をいっしょに書ける（�
   assert.deepStrictEqual([by['1'].startTool, by['1'].birthday, by['1'].food], ['pickaxe', '12-25', '魚']);
   assert.deepStrictEqual([by['2'].startTool, by['2'].birthday, by['2'].food], ['fishing_rod', '03-14', 'りんご']);
   assert.ok(!by['3'].birthday && !by['3'].food && !by['3'].startTool);
+});
+t('住みたい：1 つのコメントにまとめて（1 行・改行・名札つき・MBTI）', () => {
+  const cfg = liveCfg();
+  const pc = (s) => P.parseCommentProfile(s, { word: '住みたい', startTools: cfg.startTools });
+  const one = (s, bd, food, mbti, at) => { const p = pc(s); assert.deepStrictEqual([p.birthday, p.food, p.mbti, p.mbtiAT], [bd, food, mbti, at], s); };
+  one('住みたい ピッケル 12月11日 リンゴ', '12-11', 'りんご', undefined, undefined);
+  one('住みたい ピッケル 12/11 りんご INFP', '12-11', 'りんご', 'INFP', undefined);
+  one('住みたい\nピッケル\n12/11\nりんご\nINFP', '12-11', 'りんご', 'INFP', undefined);
+  one('住みたい、ピッケル、12/11、カレー、enfp-t', '12-11', 'カレー', 'ENFP', 'T');
+  one('住みたい ピッケル 12/11 カレー', '12-11', 'カレー', undefined, undefined);
+  one('住みたい 誕生日 12/11 好きな食べ物 ラーメン MBTI INFP-A', '12-11', 'ラーメン', 'INFP', 'A');
+  one('住みたい ＩＮＴＪ', undefined, undefined, 'INTJ', undefined);
+  one('住みたい infpt 3/14', '03-14', undefined, 'INFP', 'T');
+  one('住みたい ピッケル 12/11 よろしく', '12-11', undefined, undefined, undefined); // あいさつは食べ物にしない
+  one('住みたい ピッケル よろしくお願いします カレー', undefined, 'カレー', undefined, undefined); // あいさつを除いて残った 1 語
+  one('住みたい カレー', undefined, 'カレー', undefined, undefined); // 町にない物もそのまま（日付・MBTI がなくてもよい）
+  one('住みたい12/11カレー', '12-11', 'カレー', undefined, undefined); // 続けて書いても日付・住みたいで区切る
+  one('住みたいピッケル12月11日カレー', '12-11', 'カレー', undefined, undefined);
+  one('住みたいピッケル12月11日カレーINFP', '12-11', 'カレー', 'INFP', undefined);
+  one('住みたい斧ラーメン', undefined, 'ラーメン', undefined, undefined);
+  for (const s of ['住みたい', '住みたいです！', 'わたしも住みたい', 'ぜひ住みたい！', '島に住みたい', '住みたい よろしく', '住みたい ピッケル 楽しそう', '住みたい たろうさん', '住みたい 😊✨', '住みたい 12時に見た', '住みたい http://x.example/curry', '住みたい あいうえおかきくけこさしす', '住みたい ピッケル です'])
+    assert.strictEqual(pc(s).food, undefined, s);
+  one('住みたい 12/11 カレー ラーメン', '12-11', undefined, undefined, undefined); // 2 つ残ったらどちらか分からない
+  one('住みたい 12時に見た', undefined, undefined, undefined, undefined);
+  one('住みたい https://example.com/ENTJ/3/14', undefined, undefined, undefined, undefined); // URL の中は読まない
+  one('住みたい #INFP @entj_cat', undefined, undefined, undefined, undefined);
+  one('住みたい 12/11 バーカ', '12-11', undefined, undefined, undefined); // 悪い言葉
+  one('住みたい 12/11 🍎✨ りんご', '12-11', 'りんご', undefined, undefined);
+  for (const s of ['INFOMATION', 'ENTJS', 'XNFP', 'information']) assert.strictEqual(P.parseMbti(s), null, s);
+  // config.mbtiOn が false の時は MBTI を読まない
+  assert.strictEqual(P.parseCommentProfile('住みたい INFP', { mbti: false }).mbti, undefined);
+  const regs = P.registrationsFrom([{ from: { id: '1', username: 'a' }, text: '住みたい\n斧\n12/11\nりんご\nINFP', timestamp: '2026-11-01T00:00:00Z' }], '住みたい', cfg.startTools);
+  assert.deepStrictEqual([regs[0].startTool, regs[0].birthday, regs[0].food, regs[0].mbti], ['axe', '12-11', 'りんご', 'INFP']);
+});
+t('住みたい：住んだあとのコメントでプロフィールを変える（道具は変えない・あとが勝つ・古いコメントで戻さない）', () => {
+  const cfg = liveCfg();
+  const o = { word: '住みたい', startTools: cfg.startTools };
+  const cm = (id, text, ts) => ({ from: { id, username: 'u' + id }, text, timestamp: ts });
+  const vs = [];
+  const c1 = [cm('1', '住みたい ピッケル', '2026-11-01T00:00:00Z')];
+  for (const r of P.registrationsFrom(c1, '住みたい', cfg.startTools)) P.upsertVillager(vs, { ...r, joined: 'x', joinedDay: 1, source: 'comment' }, new Set());
+  P.applyCommentProfiles(vs, c1, o); P.fillJoinProfile(vs[0]);
+  const v = vs[0];
+  assert.strictEqual(v.startTool, 'pickaxe');
+  assert.ok(!v.mbti, 'MBTI は自動で入れない');
+  // あとから：名札つき・MBTI だけ・住みたい つき
+  const c2 = [...c1, cm('1', '誕生日 12/11', '2026-11-02T00:00:00Z'), cm('1', 'MBTI ENFP', '2026-11-02T01:00:00Z'), cm('1', '好きな食べ物 カレー', '2026-11-02T02:00:00Z')];
+  assert.ok(P.applyCommentProfiles(vs, c2, o));
+  assert.deepStrictEqual([v.birthday, v.mbti, v.profile.food, v.startTool], ['12-11', 'ENFP', 'カレー', 'pickaxe']);
+  const c3 = [...c2, cm('1', '住みたい 釣り 3/14 りんご', '2026-11-03T00:00:00Z'), cm('1', 'INFP-T', '2026-11-03T01:00:00Z')];
+  P.applyCommentProfiles(vs, c3, o);
+  assert.deepStrictEqual([v.birthday, v.profile.food, v.mbti, v.mbtiAT, v.startTool], ['03-14', 'りんご', 'INFP', 'T', 'pickaxe'], '道具は変わらない');
+  assert.strictEqual(vs.length, 1, '住み直さない');
+  // ログインで直した値は、同じ（古い）コメントを読み直しても戻さない
+  v.birthday = '05-05';
+  assert.strictEqual(P.applyCommentProfiles(vs, c3, o), 0);
+  assert.strictEqual(v.birthday, '05-05');
+  // 住んだあとのコメントで、名札のない日付・会話・お祝いは読まない。住んでいない人は何もしない
+  P.applyCommentProfiles(vs, [...c3, cm('1', '12/24楽しみ！', '2026-11-04T00:00:00Z'), cm('1', '誕生日おめでとう 1/1', '2026-11-04T01:00:00Z'), cm('1', 'りんごおいしそう', '2026-11-04T02:00:00Z'), cm('1', 'https://x.com/ENTJ', '2026-11-04T03:00:00Z'), cm('9', '誕生日 1/2', '2026-11-04T00:00:00Z')], o);
+  assert.deepStrictEqual([v.birthday, v.profile.food, v.mbti, vs.length], ['05-05', 'りんご', 'INFP', 1]);
+  // mbtiOn: false なら MBTI は変えない
+  P.applyCommentProfiles(vs, [cm('1', 'MBTI ESTJ', '2026-11-05T00:00:00Z')], { ...o, mbti: false });
+  assert.strictEqual(v.mbti, 'INFP');
 });
 t('住みたい：何も書いていない人には、名前から決まった誕生日と町の食べ物（同じ人はいつも同じ・ある値は変えない）', () => {
   const mk = () => { const vs = []; P.upsertVillager(vs, { igId: '55', username: 'kaze', joinedDay: 0, source: 'comment' }, new Set()); return vs[0]; };
@@ -1746,7 +1822,7 @@ t('住みたい：何も書いていない人には、名前から決まった�
 });
 t('住みたい：join.js で入った人に誕生日・食べ物が入り、前からいる人にも足される', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-bday-'));
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const cfg = liveCfg();
   cfg.startAt = null;
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
   const env = { ...process.env, TOWN_DATA: dir };
@@ -1780,7 +1856,7 @@ t('住みたい：join.js で入った人に誕生日・食べ物が入り、前
 });
 t('称号：config の一覧・最初に住んだ 1 人だけ（来た順）・すでにおくった称号はおくらない', () => {
   const TT = require('../tools/titles');
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const cfg = liveCfg();
   const first = cfg.titles.list.find((x) => x.id === 'first_villager');
   assert.ok(cfg.titles.note && first && first.name === 'はじまりの村人' && first.desc === 'はじまり島に最初に住んだ人' && first.auto === 'first');
   const mk = () => ({ config: cfg, villagers: [{ key: 'b', display: 'B', joinedDay: 1, joined: '2026-11-02' }, { key: 'a', display: 'A', joinedDay: 0, joined: '2026-11-26' }, { key: 'c', display: 'C', joinedDay: 0, joined: '2026-11-26' }, { key: 'w', display: 'W', joinedDay: 5 }], life: { a: { diary: [{ day: 1, date: 'x', text: 'きょう。' }] }, b: { diary: [] }, c: { diary: [] } }, history: [] });
@@ -1794,9 +1870,87 @@ t('称号：config の一覧・最初に住んだ 1 人だけ（来た順）・�
   S.villagers.splice(1, 1); assert.strictEqual(TT.awardTitles(S, { day: 3, date: 'z' }).length, 0);
   // ページの表示（common.js の titleBadges）は説明を title 属性に入れ、文字はエスケープ
   const src = fs.readFileSync(path.join(ROOT, 'js/common.js'), 'utf8');
-  assert.ok(/export const titleBadges/.test(src) && /esc\(t\.name\)/.test(src));
-  assert.ok(/titleBadges\(v, D\.config\)/.test(fs.readFileSync(path.join(ROOT, 'people.html'), 'utf8')), '住人一覧にバッジ');
-  assert.ok(/titleBadges\(v, D\.config\)/.test(fs.readFileSync(path.join(ROOT, 'js/villager.js'), 'utf8')), '村人ページにバッジ');
+  assert.ok(/export const titleBadges/.test(src) && /esc\(b\.name/.test(src) && /export function badgeList/.test(src));
+  assert.ok(/titleBadges\(v, D\.config, L\)/.test(fs.readFileSync(path.join(ROOT, 'people.html'), 'utf8')), '住人一覧にバッジ');
+  assert.ok(/badgeList\(v, D\.config\)/.test(fs.readFileSync(path.join(ROOT, 'js/villager.js'), 'utf8')), '村人ページにバッジ');
+  assert.ok(/titleBadges\(v, config, L\)/.test(fs.readFileSync(path.join(ROOT, 'js/town.js'), 'utf8')), '町のカードにバッジ');
+});
+t('称号バッジ：config の形・絵がある・自動でおくる決まり（1 人 1 回だけ）', () => {
+  const TT = require('../tools/titles');
+  const cfg = liveCfg();
+  const L = cfg.titles.list, ids = L.map((x) => x.id);
+  assert.strictEqual(new Set(ids).size, ids.length, 'id が重ならない');
+  const AUTO = ['first', 'count', 'days', 'friends', 'fishRecord', 'bridge', 'home'];
+  for (const x of L) {
+    assert.ok(/^[a-z0-9_]+$/.test(x.id) && x.name && x.desc, x.id + ' の名前と説明');
+    assert.ok(!x.auto || AUTO.includes(x.auto), x.id + ' の auto');
+    if (x.auto && x.auto !== 'first') assert.ok(x.how, x.id + ' のもらい方');
+    if (['count', 'days', 'friends'].includes(x.auto)) assert.ok(x.n > 0, x.id + ' の n');
+    if (x.auto === 'count') assert.ok(x.stat, x.id + ' の stat');
+    if (x.img) assert.ok(fs.existsSync(path.join(ROOT, x.img)), x.id + ' の絵 ' + x.img);
+  }
+  assert.ok(L.length >= 7, '称号は 7 つ以上');
+  // 古い形（img・how・n がない称号）でも動く
+  assert.strictEqual(TT.awardTitles({ config: { titles: { list: [{ id: 'z', name: 'Z', auto: 'first' }] } }, villagers: [{ key: 'a', display: 'A', joinedDay: 0 }], life: { a: { diary: [] } }, history: [] }, { day: 1, date: 'x' }).length, 1);
+  assert.strictEqual(TT.awardTitles({ config: {}, villagers: [], life: {}, history: [] }, { day: 1, date: 'x' }).length, 0, 'titles がない config');
+  // 数え方
+  assert.strictEqual(TT.statCount({ items: { fish_funa: 3, fish_koi: 2, apple: 9, old_boot: 4 } }, 'items.fish_*'), 5, '* は前が同じ物を足す');
+  assert.strictEqual(TT.statCount({ items: { apple: 9 } }, 'items.apple'), 9);
+  assert.strictEqual(TT.statCount({}, 'items.apple'), 0);
+  assert.strictEqual(TT.statCount({ built: [1, 2] }, 'built'), 2);
+  // 自動でおくる
+  const mk = () => ({
+    config: cfg,
+    villagers: [
+      { key: 'a', display: 'A', joinedDay: 0, titles: ['first_villager'] },
+      { key: 'b', display: 'B', joinedDay: 0 },
+      { key: 'c', display: 'C', joinedDay: 20 },
+      { key: 'w', display: 'W', joinedDay: 99 },
+    ],
+    life: {
+      a: { diary: [{ day: 30, date: 'x', text: 'きょう。' }], items: { fish_funa: 12, fish_koi: 8, apple: 49 }, home: null },
+      b: { diary: [], items: { apple: 50 }, home: 'h1' },
+      c: { diary: [], items: { fish_funa: 19, old_boot: 5 } },
+      w: { diary: [], items: { apple: 500 } },
+    },
+    history: [],
+    state: { fishing: { top: { fish_koi: [[60, 'c', 3], [50, 'a', 2]] } }, expansion: { north: { crew: ['b'] } } },
+    social: { pairs: { 'a|b': { s: 45 }, 'a|c': { s: 25 }, 'a|w': { s: 1 } } },
+  });
+  const S = mk();
+  const got = (k) => (S.villagers.find((v) => v.key === k).titles || []).slice().sort();
+  const cfgN = (id) => cfg.titles.list.find((x) => x.id === id);
+  // 友だちの数は config の n。ここでは 2 人まで下げて確かめる
+  const cfg2 = JSON.parse(JSON.stringify(cfg)); cfg2.titles.list.find((x) => x.id === 'popular').n = 2; S.config = cfg2;
+  const r = TT.awardTitles(S, { day: 30, date: 'x' });
+  assert.ok(r.length > 0);
+  assert.deepStrictEqual(got('a'), ['angler', 'first_villager', 'old_timer', 'popular'].sort(), 'a：魚 20 匹・30 日・友だち 2 人（りんご 49 はまだ）');
+  assert.deepStrictEqual(got('b'), ['apple_lover', 'bridge_builder', 'homeowner', 'old_timer'].sort(), 'b：りんご 50・橋・家・30 日');
+  assert.deepStrictEqual(got('c'), ['big_catch'], 'c：コイの 1 位（魚は 19 匹で、古いくつは数えない・10 日）');
+  assert.deepStrictEqual(got('w'), [], 'まだ住んでいない人にはおくらない');
+  assert.ok(cfgN('angler').n === 20 && cfgN('old_timer').n === 30);
+  const hs = S.history.filter((h) => h.type === 'title');
+  assert.strictEqual(new Set(hs.map((h) => h.title)).size, hs.length, '歴史は称号ごとに 1 行');
+  assert.strictEqual(hs.reduce((s, h) => s + h.who.length, 0), r.length, 'もらった人は全員 who に入る');
+  assert.strictEqual(hs.find((h) => h.title === 'old_timer').text, 'A、B に称号『古株』がおくられた。', '同じ日の人はまとめる');
+  assert.ok(S.life.a.diary[0].text.startsWith('きょう。') && S.life.a.diary[0].text.includes('称号「釣り名人」をもらった'), '今日の日記の後ろに書く');
+  // 2 回目はおくらない（同じ日も次の日も）。1 位をとられても、もらった称号はなくならない
+  assert.strictEqual(TT.awardTitles(S, { day: 30, date: 'x' }).length, 0, '同じ日にもう一度');
+  S.state.fishing.top.fish_koi = [[70, 'b', 31]];
+  const r2 = TT.awardTitles(S, { day: 31, date: 'y' });
+  assert.deepStrictEqual(r2.map((x) => [x.v.key, x.title.id]), [['b', 'big_catch']], '新しい 1 位にだけ');
+  assert.ok(got('c').includes('big_catch'), 'c の大物ハンターは残る');
+  assert.strictEqual(TT.awardTitles(S, { day: 32, date: 'z' }).length, 0);
+  // state・social がない時（15 分ごとの受付）は、それを使う称号を飛ばす
+  const S3 = mk(); delete S3.state; delete S3.social;
+  TT.awardTitles(S3, { day: 30, date: 'x' });
+  assert.ok(!S3.villagers.some((v) => (v.titles || []).some((id) => ['big_catch', 'bridge_builder', 'popular'].includes(id))));
+  assert.ok(S3.villagers.find((v) => v.key === 'b').titles.includes('apple_lover'), '数で決まる称号はおくる');
+  // ページ
+  const page = fs.readFileSync(path.join(ROOT, 'badges.html'), 'utf8');
+  assert.ok(/nav\('badges\.html'\)/.test(page) && /config\.titles/.test(page) && /config\.badges/.test(page), 'バッジのページ');
+  assert.ok(/\['badges\.html', 'バッジ'\]/.test(fs.readFileSync(path.join(ROOT, 'js/common.js'), 'utf8')), 'ナビにバッジ');
+  assert.ok(/awardTitles\(\{[^}]*state[^}]*social/.test(fs.readFileSync(path.join(ROOT, 'tools/sim.js'), 'utf8')), 'sim は一日の終わりに state と social も渡す');
 });
 t('ベッド：前より小さい（はば・高さ 75%、長さ 80%）。寝る人の頭はまくら側の板の内側', () => {
   const BD = require('../js/beds.js');
@@ -1812,9 +1966,9 @@ t('ベッド：前より小さい（はば・高さ 75%、長さ 80%）。寝る
   // 部品はベッドの大きさの中
   for (const [w, h, d, x, y, z] of BD.bedParts()) assert.ok(Math.abs(x) + w / 2 <= BD.BED.w / 2 + 1e-9 && Math.abs(z) + d / 2 <= BD.BED.l / 2 + 1e-9);
 });
-t('ベッド：家ができたら家の中（床の中に並べる）。家がないうちはテントのそば（town.js）', () => {
+t('ベッド：家ができたら家の中（床の中に並べる）。家がないうちはテントの中（town.js）', () => {
   const BD = require('../js/beds.js');
-  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const cfg = liveCfg();
   const look = cfg.buildings.house.look;
   for (const rot of [0, Math.PI / 2, Math.PI, 0.6]) {
     const b = { id: 'h1', type: 'house', x: 20, z: 8, rot };
@@ -1833,5 +1987,398 @@ t('ベッド：家ができたら家の中（床の中に並べる）。家が�
   assert.ok(/filter\(\(p\) => !p\.bedAt\.inside\)/.test(src), '家の中のベッドは描かない');
   assert.ok(/Zz 寝ている/.test(src), '家の上に「寝ている」の札');
 });
+t('テント：家のない人は大きいテントの中（1 つに perTent 人、maxTents まで）。ベッドはテントか家の中だけ。入れない人はたき火のそば', () => {
+  const TN = require('../js/tents.js'), BD = require('../js/beds.js');
+  const cfg = liveCfg();
+  const { perTent, maxTents } = TN.tentCfg(cfg);
+  assert.ok(perTent >= 3 && maxTents >= 1, 'config の tent');
+  const vs = Array.from({ length: perTent * maxTents + 3 }, (_, i) => ({ key: 'v' + i }));
+  const life = Object.fromEntries(vs.map((v, i) => [v.key, { home: i === 0 ? 'h1' : null, bed: i === 5 ? 1 : 0 }]));
+  const one = TN.tentPlan(vs.slice(1, 3), life, cfg);
+  assert.strictEqual(one.tents, 1, '人が少なければテントは 1 つ');
+  const pl = TN.tentPlan(vs, life, cfg);
+  assert.strictEqual(pl.tents, maxTents);
+  assert.ok(!pl.slot.v0 && !pl.outside.includes('v0'), '家のある人はテントに入らない');
+  assert.deepStrictEqual(pl.slot.v5, { tent: 0, i: 0 }, 'ベッドを持っている人が先');
+  assert.strictEqual(pl.outside.length, vs.length - 1 - perTent * maxTents, 'いっぱいの人はたき火のそば');
+  // 寝床（ベッド・敷物）と寝ている人は、テントの壁の中（両はし・奥の壁・口にかからない）
+  for (const sq of [{ x: 0, z: -1 }, { x: 14, z: -28 }]) for (const t of TN.tentCandidates(sq, perTent)) {
+    for (let i = 0; i < perTent; i++) {
+      const bd = TN.tentBed(t, i, perTent);
+      for (const c of BD.bedCorners(bd)) assert.ok(TN.inTent(t, c.x, c.z, -0.08), 'ベッドの角がテントの中');
+      for (const chibi of [false, true]) {
+        const f = BD.sleeperOnBed(bd, chibi), L = chibi ? BD.BODY_LEN.chibi : BD.BODY_LEN.normal;
+        assert.ok(TN.inTent(t, f.x, f.z, -0.08) && TN.inTent(t, f.x - Math.sin(f.yaw) * L, f.z - Math.cos(f.yaw) * L, -0.08), '寝ている人の足と頭がテントの中');
+      }
+      if (i) { const b0 = TN.tentBed(t, i - 1, perTent); assert.ok(Math.hypot(bd.cx - b0.cx, bd.cz - b0.cz) >= BD.BED.w + 0.2, 'となりの寝床と重ならない'); }
+    }
+  }
+  // 形：三角屋根で入口は村人の背より高い。ベッドは奥の壁にかからず、足の先と前の壁の間を体の横はば（1.9）で通れる
+  const T = TN.TENT;
+  assert.ok(T.ridgeH > T.doorH && T.doorH >= 4 && T.door >= 2.2, '入口・てっぺんの高さ');
+  assert.ok(TN.BED_U - BD.BED.l / 2 >= -T.depth / 2 + T.wall + 0.2, 'ベッドが奥の壁にかからない');
+  assert.ok(TN.AISLE_U - 0.95 >= TN.BED_U + BD.BED.l / 2 + 0.2 && TN.AISLE_U + 0.95 <= T.depth / 2 - T.wall, '通り道のはば');
+  { const t = TN.tentCandidates({ x: 0, z: 0 }, perTent)[0], bd = TN.tentBed(t, 0, perTent), ex = TN.tentExit(t, { x: bd.cx, z: bd.cz });
+    assert.ok(TN.inTent(t, ex[1].x, ex[1].z) && !TN.inTent(t, ex[2].x, ex[2].z, 0.5), '出る道は入口の内がわ → 外'); }
+  // テントどうしも重ならない
+  const cs = TN.tentCandidates({ x: 0, z: 0 }, perTent);
+  for (let a = 0; a < cs.length; a++) for (let b = 0; b < cs.length; b++) if (a !== b) for (const u of [-1, 0, 1]) for (const v of [-1, 0, 1]) {
+    const q = TN.tentPoint(cs[a], u * cs[a].depth / 2, v * cs[a].len / 2);
+    assert.ok(!TN.inTent(cs[b], q.x, q.z, -0.05), `テント ${a} と ${b} が重なる`);
+  }
+  const src = fs.readFileSync(path.join(ROOT, 'js/town.js'), 'utf8');
+  assert.ok(/tentBed\(s\.t, s\.i, tentP\.perTent\)/.test(src) && !/ConeGeometry\(1, 1\.4, 4\)/.test(src), '町の画面：ベッドはテントの寝床の所（1 人 1 つの小さいテントはやめた）');
+  const sim = fs.readFileSync(path.join(ROOT, 'tools/sim.js'), 'utf8');
+  assert.ok(/tentNow\(\)\.slot/.test(sim) && /テントの中で敷物にくるまって眠った/.test(sim), 'sim：テントの中で寝る');
+});
+t('拠点の候補：A 浜辺・B 池・C 森 は島の陸の上で、たがいに 40 以上はなれ、それぞれの場所らしい', () => {
+  const cfg = liveCfg();
+  const IL = require('../tools/island_layout.js'), ISX2 = require('../js/island.js');
+  const [A, B, C] = cfg.baseVote.candidates;
+  const w = IL.buildIslandWorld({ seed: 'town', ores: {}, gather: null, debris: [], candidates: [A, B, C] });
+  const m = w.islands[0];
+  for (const c of [A, B, C]) assert.ok(ISX2.shoreDist(m, c.x, c.z) >= 15, '岸から 15 以上 ' + c.name);
+  for (const [a, b] of [[A, B], [B, C], [A, C]]) assert.ok(Math.hypot(a.x - b.x, a.z - b.z) >= 40, `${a.name} と ${b.name} がはなれている`);
+  assert.ok(ISX2.shoreDist(m, A.x, A.z) < 20 && A.z > 25, 'A は南の砂浜のそば');
+  assert.ok(Math.hypot(B.x - w.pond.x, B.z - w.pond.z) < 17, 'B は池のそば');
+  assert.ok(C.z < -20 && ISX2.bridgeDist(w.bridges[0], C.x, C.z) < 30, 'C は北（森と橋のほう）');
+  for (const c of [A, B, C]) assert.ok(IL.basePlots(w, c).filter((p) => !p.island).length >= 16, '家を建てる区画が足りる ' + c.name);
+  assert.ok(!cfg.baseVote.candidates.some((c) => /港/.test(c.desc)), '島に港はない');
+});
 
-console.log(`\nぜんぶ通りました（${ok} 件）`);
+// ---------- 釣った魚の大きさ・釣りランキング ----------
+t('釣り：魚の大きさは魚ごとの範囲の中。大きいのはめったに出ない（大物はまれ）', () => {
+  const FZ = require('../tools/fishsize');
+  const { makeRng } = require('../tools/rand');
+  const cfg = liveCfg();
+  const sizes = cfg.fishing.sizes;
+  const fishKinds = cfg.fishing.fish.map(([k]) => k).concat(cfg.hours.nightFish.map(([k]) => k));
+  for (const k of fishKinds) assert.ok(sizes[k], '大きさの範囲がある ' + k);
+  for (const [k, s] of Object.entries(sizes)) {
+    assert.ok(cfg.items[k], '魚がある ' + k);
+    assert.ok(s.min < s.max && s.max < s.bigMax, '範囲 ' + k);
+    const R = makeRng('fishtest:' + k), N = 20000;
+    let hi = 0, big = 0;
+    for (let i = 0; i < N; i++) {
+      const cm = FZ.rollSize(s, R);
+      assert.ok(cm >= s.min && cm <= s.bigMax, `${k} ${cm}cm が範囲の外`);
+      if (cm > s.max) big++;
+      else if (cm > s.min + (s.max - s.min) * 0.75) hi++;
+    }
+    assert.ok(hi / N < 0.2, `${k}：大きい方の 1/4 は少ない ${hi / N}`);
+    assert.ok(big / N > s.bigP * 0.5 && big / N < s.bigP * 1.6, `${k}：大物は bigP くらい ${big / N}`);
+  }
+  // 同じ種なら同じ大きさ
+  assert.strictEqual(FZ.rollSize(sizes.fish_koi, makeRng('x')), FZ.rollSize(sizes.fish_koi, makeRng('x')));
+});
+t('釣り：ランキングは魚ごとに上位だけ。前の記録をこえた時だけ「島の新記録」。村人ごとの一番は魚ごとに 1 つ', () => {
+  const FZ = require('../tools/fishsize');
+  const st = {}, L = {};
+  assert.strictEqual(FZ.addCatch(st, L, 'a', 'fish_funa', 20, 1, 3).record, false, 'はじめの 1 匹は記録あつかいにしない');
+  let r = FZ.addCatch(st, L, 'b', 'fish_funa', 25, 2, 3);
+  assert.ok(r.record && r.prev === 20, '大きいのが釣れたら新記録');
+  assert.strictEqual(FZ.addCatch(st, L, 'c', 'fish_funa', 25, 3, 3).record, false, '同じ大きさは新記録ではない');
+  FZ.addCatch(st, L, 'd', 'fish_funa', 10, 3, 3);
+  FZ.addCatch(st, L, 'e', 'fish_funa', 22, 4, 3);
+  assert.deepStrictEqual(st.fishing.top.fish_funa, [[25, 'b', 2], [25, 'c', 3], [22, 'e', 4]], '大きい順・同じなら先の人・3 匹まで');
+  assert.strictEqual(st.fishing.catches, 5);
+  const Lv = {};
+  FZ.addCatch(st, Lv, 'a', 'fish_koi', 30, 5);
+  assert.strictEqual(FZ.addCatch(st, Lv, 'a', 'fish_koi', 28, 6).best, false);
+  FZ.addCatch(st, Lv, 'a', 'fish_koi', 41, 7);
+  assert.deepStrictEqual(Lv.fishBest, { fish_koi: [41, 7] });
+});
+t('釣り：町を進めると大きさつきで記録され、データは小さいまま（ページ・歴史・日記・町の画面）', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-fish-'));
+  fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+  const env = { ...process.env, TOWN_DATA: dir };
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js'), '--demo'], { env });
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/sim.js'), '--demo', '--days', '20'], { env });
+  const rd = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+  const cfg = rd('config.json'), st = rd('state.json'), hist = rd('history.json'), life = STORE.readLife(dir);
+  const sizes = cfg.fishing.sizes, keep = cfg.fishing.rankKeep;
+  assert.ok(st.fishing && st.fishing.catches > 0, '魚が釣れて数えられている');
+  for (const [k, list] of Object.entries(st.fishing.top)) {
+    assert.ok(list.length <= keep, '上位だけ');
+    for (let i = 0; i < list.length; i++) {
+      const [cm, key, day] = list[i];
+      assert.ok(cm >= sizes[k].min && cm <= sizes[k].bigMax && typeof key === 'string' && day >= 1 && day <= 20);
+      if (i) assert.ok(list[i - 1][0] >= cm, '大きい順');
+    }
+  }
+  assert.ok(JSON.stringify(st.fishing).length < 6000, '記録は小さい ' + JSON.stringify(st.fishing).length);
+  const nk = Object.keys(sizes).length;
+  let withBest = 0;
+  for (const L of Object.values(life)) if (L.fishBest) { withBest++; assert.ok(Object.keys(L.fishBest).length <= nk); }
+  assert.ok(withBest > 0, '村人ごとの一番');
+  const recs = hist.filter((h) => h.type === 'fish');
+  for (const h of recs) {
+    assert.ok(/^.+が \d+(\.\d)?cm の.+を釣った！ 島の新記録$/.test(h.text), h.text);
+    const top = st.fishing.top[h.item];
+    assert.ok(top && top[0][0] >= h.cm, '記録は今の一番以下');
+  }
+  // 同じ日・同じ魚の新記録は 1 行
+  assert.strictEqual(new Set(recs.map((h) => h.day + h.item)).size, recs.length);
+  // ページ：ナビに釣り、fish.html、村人ページ、町の画面の「+1 フナ 23cm」
+  assert.ok(/\['fish\.html', '釣り'\]/.test(fs.readFileSync(path.join(ROOT, 'js/common.js'), 'utf8')));
+  const page = fs.readFileSync(path.join(ROOT, 'fish.html'), 'utf8');
+  assert.ok(/state\.fishing/.test(page) && /v\.display/.test(page), 'ランキングは表示名（かくしている人はあだ名）');
+  assert.ok(/fishBest/.test(fs.readFileSync(path.join(ROOT, 'js/villager.js'), 'utf8')));
+  const town = fs.readFileSync(path.join(ROOT, 'js/town.js'), 'utf8'), chr = fs.readFileSync(path.join(ROOT, 'js/character.js'), 'utf8');
+  assert.ok(/today \|\| \{\}\)\.fish/.test(town));
+  // 釣ったあと魚を持ち上げて見せる（大きさは cm で決める）・頭の上の札と新記録・村人カードのいちばんの大物
+  assert.ok(/pose = 'showfish'/.test(town) && /pose === 'showfish'/.test(chr), '持ち上げて見せる動き');
+  assert.ok(/'新記録！'/.test(town) && /bestFishText\(L, config\)/.test(town), '新記録の札・村人カード');
+  assert.ok(/fishLenPx = \(cm\) =>/.test(chr), '魚の模型の長さは cm から');
+  // 今日の魚に新記録の印（3 つ目が 1）がある時は、町の画面の「新記録！」に使う
+  for (const L of Object.values(life)) for (const e of ((L.today || {}).fish || [])) assert.ok(typeof e[0] === 'string' && e[1] > 0 && (e.length === 2 || e[2] === 1));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+t('釣り：魚は池・海べ・夜で 16 種。どの魚にも名前・食べ物の値・大きさ・絵・持ち上げる模型の色がある', () => {
+  const cfg = liveCfg(), FC = cfg.fishing;
+  const chr = fs.readFileSync(path.join(ROOT, 'js/character.js'), 'utf8');
+  const keys = (l) => (l || []).map(([k]) => k);
+  const pond = keys(FC.fish), sea = keys(FC.seaFish), all = new Set([...pond, ...sea, ...keys(FC.seaNightFish), ...keys(cfg.hours.nightFish)]);
+  assert.ok(all.size >= 14, '魚の種類 ' + all.size);
+  assert.ok(['fish_dojou', 'fish_bluegill', 'fish_ugui'].every((k) => pond.includes(k)), '池の魚');
+  assert.ok(['fish_aji', 'fish_saba', 'fish_tai', 'fish_mebaru', 'fish_kasago', 'fish_maguro'].every((k) => sea.includes(k)), '海の魚');
+  assert.ok(!sea.some((k) => pond.includes(k)), '池と海べで、昼の魚は分かれている');
+  for (const k of all) {
+    const it = cfg.items[k];
+    assert.ok(it && /^[ァ-ヶー]+$/.test(it.name) && it.value.food > 0 && it.value.food <= 2, k + ' の名前と食べ物の値');
+    const s = FC.sizes[k]; assert.ok(s && s.min < s.max && s.max < s.bigMax && s.bigP > 0 && s.bigP <= 0.02, k + ' の大きさ');
+    assert.ok(cfg.spendOrder.food.includes(k), k + ' は食べ物として使う');
+    assert.ok(new RegExp(k + ': \\[0x').test(chr), k + ' の模型の色');
+    const png = fs.readFileSync(path.join(ROOT, 'icons', k + '.png'));
+    assert.ok(png.readUInt32BE(16) === 16 && png.readUInt32BE(20) === 16, k + ' の絵は 16x16');
+  }
+  // マグロはごくまれな大物：海の中でいちばん出にくく、いちばん大きい
+  const w = Object.fromEntries(FC.seaFish), maxBig = Math.max(...Object.values(FC.sizes).map((s) => s.bigMax));
+  assert.ok(w.fish_maguro / Object.values(w).reduce((a, b) => a + b, 0) < 0.01 && FC.sizes.fish_maguro.bigMax === maxBig);
+  // 夜だけの魚（昼の表にない）が海べに 1 種
+  assert.ok(keys(FC.seaNightFish).some((k) => !sea.includes(k) && !pond.includes(k)), '夜の海べだけの魚');
+});
+t('釣り：島の町は日ごとに海べか池で釣る。海べでは海の魚、池では池の魚（日記・今していること・町の画面）', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-sea-'));
+  fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+  const env = { ...process.env, TOWN_DATA: dir };
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js'), '--demo'], { env });
+  const rd = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+  const wd = rd('world.json'); if (!wd.islands || !wd.pond) return; // 前の形の町・池のない町は片方だけ
+  const cfg = rd('config.json'), FC = cfg.fishing;
+  const pondK = new Set([...FC.fish, ...cfg.hours.nightFish].map(([k]) => k)), seaK = new Set([...FC.seaFish, ...FC.seaNightFish].map(([k]) => k));
+  const seen = { sea: 0, pond: 0 };
+  for (let d = 0; d < 4; d++) { // 5 日ずつ進めて、その日の釣りを見る
+    execFileSync(process.execPath, [path.join(ROOT, 'tools/sim.js'), '--demo', '--days', '5'], { env });
+    const life = STORE.readLife(dir), today = rd('state.json').day;
+    for (const L of Object.values(life)) {
+      const fh = (Array.isArray(L.hours) ? L.hours : String(L.hours || '').split(',')).map((c) => c.replace(/\*\d+$/, '')).filter((c) => /^f(:|$)/.test(c));
+      const fish = ((L.today || {}).fish || []).map((e) => e[0]);
+      if (!fh.length) continue;
+      const atSea = fh.includes('f:sea');
+      assert.ok(fh.every((c) => (c === 'f:sea') === atSea), '1 日の釣り場は 1 つ');
+      for (const k of fish) assert.ok(atSea ? seaK.has(k) : pondK.has(k), (atSea ? '海べ' : '池') + 'で ' + k);
+      seen[atSea ? 'sea' : 'pond']++;
+      const dl = (L.diary || []).find((x) => x.day === today);
+      if (dl && /で釣りを/.test(dl.text)) assert.ok(atSea ? !/池で釣り/.test(dl.text) : !/海べで釣り/.test(dl.text), dl.text);
+    }
+  }
+  // 20 日の間に、海の魚も池の魚も記録に入る
+  const tops = Object.keys(rd('state.json').fishing.top);
+  assert.ok(tops.some((k) => seaK.has(k)) && tops.some((k) => pondK.has(k) && !seaK.has(k)), '海の魚と池の魚 ' + tops.join(' ') + ' ' + JSON.stringify(seen));
+  // 今していること・町の画面
+  const HRm = fs.readFileSync(path.join(ROOT, 'js/hours.js'), 'utf8'), town = fs.readFileSync(path.join(ROOT, 'js/town.js'), 'utf8');
+  assert.ok(/海べで釣りをしている/.test(HRm) && /seaSpotOf\(p\.v\.key\)/.test(town) && /a\.target === 'sea'/.test(town));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// ---------- 鍛冶屋と鍛冶職人・防具 ----------
+const SMT = require('../js/smithing.js');
+const smithRun = (() => {
+  let cache = null;
+  return () => {
+    if (cache) return cache;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-smith-'));
+    fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+    const env = { ...process.env, TOWN_DATA: dir };
+    const node = (...a) => execFileSync(process.execPath, a.map((x, i) => (i === 0 ? path.join(ROOT, x) : x)), { env, encoding: 'utf8' });
+    node('tools/init.js', '--demo');
+    node('tools/sim.js', '--demo', '--days', '4');
+    const before = { life: STORE.readLife(dir), st: JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')), w: STORE.readWorld(dir) };
+    // 鍛冶屋を建てたことにして（前の日に建った）、チェストに羊毛・鉄・石炭・丸石を足す
+    const w = before.w, st = before.st;
+    w.buildings.push({ id: 'smithy_t', type: 'smithy', x: w.square.x + 14, z: w.square.z + 3, rot: 0, day: st.day, builders: [], variant: 0 });
+    w.buildings.push({ id: 'workbench_t', type: 'workbench', x: w.square.x - 14, z: w.square.z + 3, rot: 0, day: st.day, builders: [], variant: 0 });
+    STORE.writeWorld(dir, w);
+    Object.assign(st.store, { wool: 20, iron: 12, coal: 6, cobble: 40, log: 30 });
+    fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify(st));
+    const store0 = { ...st.store };
+    node('tools/sim.js', '--demo', '--days', '2');
+    const after = { life: STORE.readLife(dir), st: JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')), hist: JSON.parse(fs.readFileSync(path.join(dir, 'history.json'), 'utf8')) };
+    fs.rmSync(dir, { recursive: true, force: true });
+    return (cache = { before, after, store0 });
+  };
+})();
+t('鍛冶：鍛冶屋ができるまでは、だれも鍛冶職人にならない（sm の時間も防具もない）', () => {
+  const { before } = smithRun();
+  assert.ok(!before.st.smiths, 'state.smiths はまだない');
+  for (const L of Object.values(before.life)) {
+    assert.ok(!L.smith && !L.gear, '鍛冶職人の印も防具もない');
+    assert.ok(!HR.decodeHours(L.hours).some((c) => c.startsWith('sm')), 'sm の時間はない');
+  }
+  assert.ok(!before.st.pool.includes('smithy') || before.st.day >= RCFG.smithing.unlock.minDay, '作業台と倉庫が建つ前は候補に入らない');
+});
+t('鍛冶：鍛冶屋が建つと 1 人が鍛冶職人になり、チェストの材料で防具・道具を作る（材料が減る・装備は life.json に残る）', () => {
+  const { after, store0 } = smithRun();
+  assert.strictEqual((after.st.smiths || []).length, 1, '鍛冶職人は 1 人');
+  const sk = after.st.smiths[0], SL = after.life[sk];
+  assert.ok(SL.smith, '鍛冶職人の印');
+  assert.ok(HR.decodeHours(SL.hours).some((c) => c === 'sm:smithy_t') || after.hist.some((h) => h.smith), '鍛冶屋で打った時間がある');
+  const made = after.hist.filter((h) => h.smith);
+  assert.ok(made.length >= 1 && made.length <= 2 * RCFG.smithing.perDay, `作った数 ${made.length}（1 日 perDay まで）`);
+  assert.ok(after.hist.some((h) => /鍛冶職人になった/.test(h.text)), '歴史に「鍛冶職人になった」');
+  assert.ok(made.every((h) => /鍛冶職人の.+(に|、自分の).+を作った/.test(h.text)), made.map((h) => h.text).join('\n'));
+  const geared = Object.values(after.life).filter((L) => L.gear && Object.keys(L.gear).length);
+  assert.ok(geared.length >= 1, '防具を身につけた人がいる（life.json の gear）');
+  for (const L of geared) for (const [slot, it] of Object.entries(L.gear)) assert.strictEqual(RCFG.smithing.armor[it].slot, slot);
+  // 材料が減った（羊毛か鉄）
+  assert.ok((after.st.store.wool || 0) < store0.wool || (after.st.store.iron || 0) < store0.iron, '羊毛か鉄鉱石が使われた');
+  assert.ok((after.st.store.wool || 0) >= RCFG.smithing.keep.wool || store0.wool < RCFG.smithing.keep.wool, '羊毛は keep の分を残す');
+  // 日記に作った物が出る
+  const diaryHit = Object.values(after.life).some((L) => (L.diary || []).some((d) => /作ってくれた|鍛冶屋で/.test(d.text)));
+  assert.ok(diaryHit, '日記に「鍛冶屋で〜を作った」「作ってくれた」');
+});
+t('鍛冶：pickJob は見張り（剣）を先に、材料が足りない物は作らない。革の防具（革がない）は作れない', () => {
+  const cfg = RCFG, CR = require('../tools/craft');
+  const people = [
+    { key: 'a', L: { inv: [{ item: 'stone_pickaxe', dur: 50 }], slots: 3, gear: {} }, guard: false },
+    { key: 'g', L: { inv: [{ item: 'wood_sword', dur: 20 }], slots: 3, gear: {} }, guard: true },
+  ];
+  const r = SMT.pickJob({ store: { wool: 10 }, people, config: cfg, built: ['workbench', 'smithy'], CR });
+  assert.ok(r.job && r.job.to === 'g' && r.job.type === 'armor', '見張りの防具が先');
+  assert.ok(r.job.store.wool < 10 && r.job.store.wool >= cfg.smithing.keep.wool);
+  const none = SMT.pickJob({ store: { leather: 0, wool: 2 }, people, config: cfg, built: ['workbench'], CR });
+  assert.ok(!none.job, '羊毛は keep を残すので作れない・ほかの材料もない');
+  const lea = SMT.pickJob({ store: { leather: 9 }, people: [{ key: 'x', L: { inv: [], slots: 3, gear: { head: 'iron_cap', body: 'iron_mail', feet: 'iron_boots' } } }], config: cfg, built: [], CR });
+  assert.ok(!lea.job, '鉄の防具より弱い革は作らない');
+  assert.ok(!cfg.items.leather.value.wood && /まだ手に入らない/.test(cfg.items.leather.note), '革はまだ手に入らない');
+  assert.strictEqual(SMT.smithyUnlocked(cfg.smithing, ['workbench'], 99), false);
+  assert.strictEqual(SMT.smithyUnlocked(cfg.smithing, ['workbench', 'storehouse'], cfg.smithing.unlock.minDay), true);
+});
+t('鍛冶：防具は夜の敵の攻撃を少しへらす。防具のない人は前と同じ戦い', () => {
+  const CBm = require('../js/combat.js'), C = RCFG.combat;
+  const run = (armor, seed) => CBm.fightNight({ mobs: [{ type: 'zombie' }, { type: 'zombie' }, { type: 'skeleton' }], guards: [{ key: 'g', weapon: null, shield: false, ...(armor ? { armor } : {}) }], C, rng: CBm.seededRng('arm' + seed) });
+  let plain = 0, armored = 0;
+  for (let s = 0; s < 60; s++) {
+    const a = run(0, s), b = run(0, s);
+    assert.deepStrictEqual(a, b, '同じ種なら同じ');
+    const per = (F) => (F.taken.g || 0) / Math.max(1, F.log.filter((e) => e.to).length);
+    plain += per(a); armored += per(run(6, s));
+  }
+  assert.ok(armored < plain * 0.9, `1 回のダメージの平均が減る ${(plain / 60).toFixed(2)} → ${(armored / 60).toFixed(2)}`);
+  assert.strictEqual(SMT.armorDef({ head: 'wool_cap', body: 'iron_mail' }, RCFG.smithing), 3);
+  assert.ok(SMT.armorBlockP(100, C) <= C.armorMax);
+});
+t('鍛冶：前のデータ（gear も smith もない life）も読める。装備の名前・見た目は空', () => {
+  const L = { inv: [{ item: 'wood_axe', dur: 10 }], slots: 3 };
+  assert.deepStrictEqual(SMT.gearNames(L, RCFG.items), ['木の斧']);
+  assert.strictEqual(SMT.armorDef(undefined, RCFG.smithing), 0);
+  assert.deepStrictEqual(SMT.armorLook(undefined, RCFG.smithing), {});
+  assert.deepStrictEqual(SMT.gearNames({ inv: [], gear: { body: 'wool_shirt' } }, RCFG.items), ['羊毛の服']);
+  assert.strictEqual(HR.parseCode('sm:smithy_3').action, 'smith');
+  assert.ok(/鍛冶/.test(HR.hourText(HR.parseCode('sm:smithy_3'))));
+});
+
+// ---------- 投稿の URL → 投稿の ID（Graph API はにせ物で） ----------
+const asyncTests = [];
+const at = (name, fn) => asyncTests.push([name, fn]);
+const IG = require('../tools/instagram');
+t('投稿の URL：形がちがっても同じ投稿とわかる・インスタ以外は弾く', () => {
+  const same = ['https://www.instagram.com/p/DAbc_12-x/', 'https://instagram.com/p/DAbc_12-x', 'instagram.com/reel/DAbc_12-x/?igsh=abc123', 'https://www.instagram.com/someone/p/DAbc_12-x/?img_index=1', 'https://m.instagram.com/reels/DAbc_12-x/'];
+  for (const u of same) assert.strictEqual(IG.normPostUrl(u), 'instagram.com/p/DAbc_12-x', u);
+  assert.ok(IG.sameMedia(same[0], same[2]));
+  assert.ok(!IG.sameMedia('https://www.instagram.com/p/AAA/', 'https://www.instagram.com/p/AAB/'));
+  for (const u of ['', 'https://example.com/p/AAA/', 'https://www.instagram.com/hajimari/', 'https://instagram.com.evil.example/p/AAA/', 'ふつうの文字']) assert.strictEqual(IG.postCode(u), null, u);
+  assert.deepStrictEqual(IG.urlList(' a '), ['a']);
+  assert.deepStrictEqual(IG.urlList(['a', '', null, 'b']), ['a', 'b']);
+});
+// にせの Graph API：/media は 2 ページ、/comments などは呼ばれたら記録
+function fakeGraph(pages) {
+  const calls = [];
+  IG._setFetch(async (url) => {
+    calls.push(url);
+    const u = new URL(url);
+    if (/\/media$/.test(u.pathname)) {
+      const p = Number(u.searchParams.get('page') || 0);
+      const body = { data: pages[p] || [] };
+      if (p + 1 < pages.length) body.paging = { next: url.replace(/&page=\d+|$/, '') + '&page=' + (p + 1) };
+      return { ok: true, json: async () => body, text: async () => '' };
+    }
+    return { ok: false, status: 404, text: async () => 'nope' };
+  });
+  return calls;
+}
+const PAGES = [
+  [{ id: '111', permalink: 'https://www.instagram.com/p/NEWEST/', timestamp: '2026-11-26T00:00:00+0000' }, { id: '222', permalink: 'https://www.instagram.com/reel/VOTE1/', timestamp: '2026-11-25T00:00:00+0000' }],
+  [{ id: '333', permalink: 'https://www.instagram.com/p/JOIN_OLD/', timestamp: '2026-11-01T00:00:00+0000' }],
+];
+at('投稿の URL から ID を探す：次のページもたどる・/reel/ と /p/ は同じ・住みたいはいくつでも', async () => {
+  const calls = fakeGraph(PAGES);
+  const logs = [];
+  const r = await IG.resolveMedia({ votePostUrl: 'https://instagram.com/p/VOTE1?igsh=x', joinPostUrl: ['https://www.instagram.com/p/NEWEST/', 'instagram.com/p/JOIN_OLD/'] }, { IG_VOTE_MEDIA: '999', IG_JOIN_MEDIA: '998' }, 'U1', 'TOKEN_SECRET', (s) => logs.push(s));
+  assert.strictEqual(r.vote, '222');
+  assert.deepStrictEqual(r.join, ['111', '333']);
+  assert.deepStrictEqual(r.source, { vote: 'url', join: 'url' });
+  assert.ok(calls.every((c) => /fields=id,permalink,timestamp/.test(c)), '一覧だけ読む');
+  assert.ok(logs.some((s) => /votePostUrl/.test(s)) && logs.some((s) => /joinPostUrl/.test(s)), 'どこから決めたか書く');
+  assert.ok(!logs.join('\n').includes('TOKEN_SECRET'), '鍵は出さない');
+});
+at('投稿の URL が見つからない・空の時は Secrets の ID を使う（Secrets もなければ最近の投稿）', async () => {
+  fakeGraph(PAGES);
+  const logs = [];
+  let r = await IG.resolveMedia({ votePostUrl: 'https://www.instagram.com/p/GONE/', joinPostUrl: '' }, { IG_VOTE_MEDIA: '999', IG_JOIN_MEDIA: '998, 997' }, 'U1', 'T', (s) => logs.push(s));
+  assert.strictEqual(r.vote, '999');
+  assert.deepStrictEqual(r.join, ['998', '997']);
+  assert.deepStrictEqual(r.source, { vote: 'secret', join: 'secret' });
+  assert.ok(logs.some((s) => /見つかりません/.test(s)));
+  r = await IG.resolveMedia({}, {}, 'U1', 'T', () => {});
+  assert.strictEqual(r.vote, '111', 'いちばん新しい投稿');
+  assert.deepStrictEqual(r.source, { vote: 'recent', join: 'recent' });
+  r = await IG.resolveMedia({ votePostUrl: 'https://example.com/x' }, { IG_VOTE_MEDIA: '999' }, 'U1', 'T', () => {});
+  assert.strictEqual(r.vote, '999', 'インスタ以外の URL は使わない');
+  IG._setFetch(null);
+});
+t('投稿の URL を変える（set_post.js）：その値だけ書きかえ・住みたいは足していく・悪い URL は止める', () => {
+  const SP = require('../tools/set_post');
+  const src = fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8');
+  let r = SP.applyPostUrls(src, 'https://instagram.com/reel/ABC123/?igsh=zz', 'https://www.instagram.com/p/J1/');
+  let c = JSON.parse(r.text);
+  assert.strictEqual(c.votePostUrl, 'https://www.instagram.com/reel/ABC123/');
+  assert.ok(IG.urlList(c.joinPostUrl).includes('https://www.instagram.com/p/J1/'));
+  const before = JSON.parse(src);
+  assert.deepStrictEqual({ ...c, votePostUrl: 0, joinPostUrl: 0 }, { ...before, votePostUrl: 0, joinPostUrl: 0 }, 'ほかは変えない');
+  assert.strictEqual(r.text.split('\n').length, src.split('\n').length, '行の形はそのまま');
+  r = SP.applyPostUrls(r.text, '', 'instagram.com/p/J2');
+  c = JSON.parse(r.text);
+  assert.strictEqual(c.votePostUrl, 'https://www.instagram.com/reel/ABC123/', '空なら変えない');
+  assert.ok(IG.urlList(c.joinPostUrl).length >= 2 && IG.urlList(c.joinPostUrl).includes('https://www.instagram.com/p/J2/'), '足す');
+  const n = IG.urlList(c.joinPostUrl).length;
+  r = SP.applyPostUrls(r.text, '', 'https://www.instagram.com/p/J2/?x=1');
+  assert.strictEqual(IG.urlList(JSON.parse(r.text).joinPostUrl).length, n, '同じ投稿は足さない');
+  r = SP.applyPostUrls(r.text, '消す', '消す');
+  c = JSON.parse(r.text);
+  assert.strictEqual(c.votePostUrl, ''); assert.strictEqual(c.joinPostUrl, '');
+  assert.throws(() => SP.applyPostUrls(src, 'https://example.com/p/AAA/', ''), /インスタの投稿に見えません/);
+  // まだ joinPostUrl が無い config にも足せる
+  const old = '{\n  "account": "@a",\n  "votePostUrl": "",\n  "votePostUrlNote": "x",\n  "list": [1, 2]\n}\n';
+  r = SP.applyPostUrls(old, '', 'https://www.instagram.com/p/Q/');
+  assert.strictEqual(JSON.parse(r.text).joinPostUrl, 'https://www.instagram.com/p/Q/');
+  assert.ok(r.text.includes('"list": [1, 2]'));
+  const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'set-post.yml'), 'utf8');
+  assert.ok(/VOTE_URL: \$\{\{ inputs\.vote_url \}\}/.test(wf) && !/run:.*\$\{\{ inputs/.test(wf), '貼った文字は env で渡す（run に直接入れない）');
+});
+
+(async () => {
+  for (const [name, fn] of asyncTests) { await fn(); ok++; console.log('OK  ' + name); }
+  console.log(`\nぜんぶ通りました（${ok} 件）`);
+})().catch((e) => { console.error(e); process.exit(1); });

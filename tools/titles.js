@@ -1,7 +1,15 @@
 'use strict';
-// 村人の称号（config.titles）。村人の titles に称号の id を入れる。
-// auto: "first" の称号は、いちばん最初に島に住んだ 1 人だけに自動でおくる（町の歴史と本人の日記に 1 回だけ書く）。
-// join.js（15 分ごとの受付）と sim.js（毎朝）から呼ぶ。S = { config, villagers, life, history }
+// 村人の称号バッジ（config.titles）。村人の titles に称号の id を入れる。1 人 1 回だけで、なくならない。
+// auto の種類（くわしくは config.json の titles.note）：
+//   first … いちばん最初に島に住んだ 1 人だけ
+//   count … 村人の記録 stat の数が n に届いた（items.apple、items.fish_* のように * で終わると前が同じ物を全部足す）
+//   days … 住んで n 日 / friends … 友だち・親友・家族が n 人 / fishRecord … 釣りランキングで島の 1 位
+//   bridge … 橋づくりの係になった / home … 自分の家ができた
+// おくった時は町の歴史と本人の日記に 1 回だけ書く。
+// join.js（15 分ごとの受付）と sim.js（毎日）から呼ぶ。S = { config, villagers, life, history, state?, social? }
+// state・social がない時（受付の時など）は、それを使う称号は飛ばす（次の日の sim でおくる）
+let SO = null;
+const social = () => SO || (SO = require('./social'));
 
 // いちばん最初に住んだ人：住み始めた日 → 参加した日付 → villagers.json の並び（来た順）
 function firstVillager(villagers, life, day) {
@@ -10,24 +18,114 @@ function firstVillager(villagers, life, day) {
   return c.length ? c[0].v : null;
 }
 
+// 村人の記録の数。'items.apple' → L.items.apple。'items.fish_*' → fish_ で始まる物の合計。配列は数
+function statCount(L, stat) {
+  let v = L;
+  const parts = String(stat || '').split('.');
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (v == null) return 0;
+    if (i === parts.length - 1 && p.endsWith('*')) {
+      const pre = p.slice(0, -1);
+      return Math.floor(Object.keys(v).filter((k) => k.startsWith(pre)).reduce((s, k) => s + (Number(v[k]) || 0), 0));
+    }
+    v = v[p];
+  }
+  if (Array.isArray(v)) return v.length;
+  if (v && typeof v === 'object') v = v.total;
+  return Math.floor(Number(v) || 0);
+}
+
+// 友だち・親友・家族の数（social.json の pairs）
+function friendCount(soc, key) {
+  if (!soc || !soc.pairs) return 0;
+  const SOC = social();
+  let n = 0;
+  for (const [pk, p] of Object.entries(soc.pairs)) {
+    const [a, b] = pk.split('|');
+    if (a !== key && b !== key) continue;
+    const k = SOC.viewOf(p, key);
+    if (k === 'friend' || k === 'best' || k === 'family') n++;
+  }
+  return n;
+}
+
+// 釣りランキング（state.fishing.top）で 1 位を持っている人の key
+function fishLeaders(state) {
+  const out = new Set();
+  const top = state && state.fishing && state.fishing.top;
+  if (top) for (const list of Object.values(top)) if (list && list[0]) out.add(list[0][1]);
+  return out;
+}
+
+// 橋づくりの係になった人の key（state.expansion の crew）
+function bridgeCrew(state) {
+  const out = new Set();
+  for (const ex of Object.values((state && state.expansion) || {})) for (const k of (ex && ex.crew) || []) out.add(k);
+  return out;
+}
+
+// その村人が、いま称号 t の条件に届いているか。調べられない時（state がない等）は null
+function meets(t, v, L, S, day, cache) {
+  switch (t.auto) {
+    case 'count': return statCount(L, t.stat) >= (t.n || 1);
+    case 'days': return day - (v.joinedDay || 0) >= (t.n || 1);
+    case 'home': return !!L.home;
+    case 'friends': return S.social ? friendCount(S.social, v.key) >= (t.n || 1) : null;
+    case 'fishRecord': if (!S.state) return null; return (cache.fish || (cache.fish = fishLeaders(S.state))).has(v.key);
+    case 'bridge': if (!S.state) return null; return (cache.bridge || (cache.bridge = bridgeCrew(S.state))).has(v.key);
+    default: return null;
+  }
+}
+
+// 町の歴史は称号ごとに 1 行（同じ日に何人ももらった時は「A、B、C ほか 4 人」とまとめる）
+function historyLine(S, t, vs, { day, date }) {
+  if (!vs.length) return;
+  const MAX = 5, nm = vs.slice(0, MAX).map((v) => v.display).join('、') + (vs.length > MAX ? ` ほか ${vs.length - MAX} 人` : '');
+  S.history.push({ day, date, type: 'title', text: `${nm} に称号『${t.name}』がおくられた。`, who: vs.map((v) => v.key), title: t.id });
+}
+
+function give(S, v, t, { day, date }) {
+  v.titles = [...(v.titles || []), t.id];
+  const L = S.life[v.key];
+  if (L) {
+    const note = `称号「${t.name}」をもらった（${t.desc || ''}）。`;
+    L.diary = L.diary || [];
+    const d = L.diary[L.diary.length - 1];
+    if (d && d.day === day) d.text += note; else L.diary.push({ day, date, text: note });
+  }
+}
+
 // 自動の称号をおくる。おくった { v, title } の一覧を返す
 function awardTitles(S, { day, date }) {
   const list = (S.config.titles && S.config.titles.list) || [];
   const out = [];
+  const cache = {};
   for (const t of list) {
-    if (t.auto !== 'first') continue;
-    if (S.villagers.some((v) => (v.titles || []).includes(t.id))) continue; // もうだれかが持っている（1 人だけ）
-    if ((S.history || []).some((h) => h.type === 'title' && h.title === t.id)) continue; // 前におくった（持っていた人が町を出ても、ほかの人にはおくらない）
-    const v = firstVillager(S.villagers, S.life, day);
-    if (!v) continue;
-    v.titles = [...(v.titles || []), t.id];
-    S.history.push({ day, date, type: 'title', text: `${v.display} に称号『${t.name}』がおくられた。`, who: [v.key], title: t.id });
-    const L = S.life[v.key], note = `称号「${t.name}」をもらった（${t.desc || ''}）。`;
-    const d = L.diary[L.diary.length - 1];
-    if (d && d.day === day) d.text += note; else L.diary.push({ day, date, text: note });
-    out.push({ v, title: t });
+    if (!t || !t.id || !t.auto) continue;
+    if (t.auto === 'first') {
+      if (S.villagers.some((v) => (v.titles || []).includes(t.id))) continue; // もうだれかが持っている（1 人だけ）
+      if ((S.history || []).some((h) => h.type === 'title' && h.title === t.id)) continue; // 前におくった（持っていた人が町を出ても、ほかの人にはおくらない）
+      const v = firstVillager(S.villagers, S.life, day);
+      if (!v) continue;
+      give(S, v, t, { day, date });
+      historyLine(S, t, [v], { day, date });
+      out.push({ v, title: t });
+      continue;
+    }
+    const now = [];
+    for (const v of S.villagers) {
+      const L = S.life[v.key];
+      if (!L || v.joinedDay > day || v.left) continue;
+      if ((v.titles || []).includes(t.id)) continue; // 1 人 1 回だけ
+      if (meets(t, v, L, S, day, cache) !== true) continue;
+      give(S, v, t, { day, date });
+      now.push(v);
+      out.push({ v, title: t });
+    }
+    historyLine(S, t, now, { day, date });
   }
   return out;
 }
 
-module.exports = { firstVillager, awardTitles };
+module.exports = { firstVillager, awardTitles, statCount, friendCount, fishLeaders, bridgeCrew };

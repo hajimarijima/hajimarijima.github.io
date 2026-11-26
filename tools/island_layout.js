@@ -8,6 +8,7 @@ const { makeRng } = require('./rand');
 const { genBlocks } = require('./ores');
 const TM = require('../js/tilemap.js');
 const IS = require('../js/island.js');
+const TN = require('../js/tents.js');
 
 const MAIN = { id: 'main', name: 'はじまり島', x: 0, z: 0, r: 50, wob: [[0.05, 3, 0.7], [0.035, 5, 2.1], [0.02, 7, 4.0]] };
 const NORTH = { id: 'north', name: '北の島', x: 6, z: -104, r: 32, wob: [[0.06, 3, 1.9], [0.04, 4, 0.3]], open: 0 };
@@ -26,6 +27,7 @@ function buildIslandWorld({ seed, ores, gather, debris, candidates = null }) {
   const ends = IS.bridgeEnds(main, north, 2.5);
   const bridge = { id: 'north', to: 'north', name: '北の島への橋', a: r2p(ends.a), b: r2p(ends.b), w: 3.4, built: 0 };
   const SQUARE = { x: 0, z: -1, r: 8 };
+  const TENTS = TN.tentCandidates(SQUARE, TN.tentCfg(null).perTent); // 0 日目のテントは島のまん中のたき火のそば
   const POND = { x: -20, z: 15, r: 4.2 };
   const MEADOW = { x0: -42, x1: -29, z0: -10, z1: 10 }; // 木を置かない野原（西）
   const inMeadow = (x, z) => x > MEADOW.x0 && x < MEADOW.x1 && z > MEADOW.z0 && z < MEADOW.z1;
@@ -59,6 +61,7 @@ function buildIslandWorld({ seed, ores, gather, debris, candidates = null }) {
       if (Math.hypot(x - SQUARE.x, z - SQUARE.z) < SQUARE.r + 2.5 || inMeadow(x, z) || nearBridge(x, z, 6)) continue;
       if (Math.hypot(x - POND.x, z - POND.z) < POND.r + 3) continue;
       if (near(bushes, x, z, 2.6) || nearCand(x, z, 6)) continue;
+      if (TENTS.some((t) => TN.inTent(t, x, z, 1.6))) continue; // テントを置く所（js/tents.js）
       if (roll < pRock) { if (!near(rocks, x, z, 4)) addRock(x, z); }
       else if (roll < pTree) trees.push(TM.treeAt(x, z));
     }

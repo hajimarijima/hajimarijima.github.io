@@ -37,7 +37,7 @@ function applyProfiles(villagers, pubDocs, privDocs, fields, { day = null, start
     const prof = {};
     for (const f of fields.filter((x) => x.public)) {
       if (ok[f.id] === undefined) continue;
-      if (f.id === 'mbti') v.mbti = ok.mbti;
+      if (f.id === 'mbti') { if (v.mbti !== ok.mbti) delete v.mbtiAT; v.mbti = ok.mbti; } // A/T（コメントの「INFP-T」）は同じタイプの時だけ残す
       else if (f.id === 'birthday') v.birthday = ok.birthday;
       else if (f.type === 'skin') {
         // 見た目：体の種類はいつでも変えられる。シードが変わる（引き直し）のは、体の種類を変えた時に 1 回だけ。回数は v.lookRerolls に残す

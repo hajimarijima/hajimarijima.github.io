@@ -67,14 +67,25 @@ loadAll().then(({ state, config }) => {
   const votes = state.votes || (state.vote ? [state.vote] : []);
   const what = { what: '何を建てる？', where: 'どこに建てる？', tool: 'どの道具を作る？' };
   cur.innerHTML = votes.length ? votes.map((v) => {
+    // 拠点の投票は、投票の投稿の URL を貼るまで始めない（baseVote.needPost）
+    if (v.kind === 'base' && (config.baseVote || {}).needPost && !/instagram\.com\//.test(String(config.votePostUrl || ''))) {
+      return `<h2>拠点の投票は、もうすぐ始まります</h2><p class="muted">A ${esc(v.options[0].name)}・B ${esc(v.options[1].name)}・C ${esc(v.options[2].name)} のどこに町を作るか、インスタの投稿のコメントで決めます。投票の動画が出たら、ここにボタンが出ます。</p>`;
+    }
     const total = v.votes.A + v.votes.B + v.votes.C;
     const op = JST(v.opensAt), close = v.closesAt ? JST(v.closesAt) : null;
     const until = close ? `${close.m}月${close.d}日 ${close.h}時` : '町が始まる時（1日目の朝）';
     const how = v.kind === 'base'
       ? `町のチェストとたき火を置く「拠点」の場所を決めます。家や建物は拠点のまわりに建ちます。投票の投稿に、<b>A・B・C</b> のどれか 1 つ（「${v.options.map((o) => esc(o.name)).join('」「')}」のように場所の名前でも）をコメントしてください。1 人 1 票で、何度か書いたら最後のコメントを数えます。受け付けは <b>${op.m}月${op.d}日〜${until}</b>（日本時間）です。`
       : `投票の投稿に、<b>A・B・C</b> のどれか 1 つをコメントしてください。1 人 1 票で、何度か書いたら最後のコメントを数えます。受け付けは <b>${op.m}月${op.d}日 ${op.h}時〜${until}</b>（日本時間）です。`;
+    // 投票の投稿の URL（config.votePostUrl。インスタの投稿の URL を貼る）。あればコメントへ行く大きいボタンを出す
+    // 投稿の URL が空の時は、インスタのプロフィール（config.profileUrl）へ
+    const IG = /^https:\/\/(www\.)?instagram\.com\//;
+    const post = IG.test(config.votePostUrl || '') ? config.votePostUrl : '';
+    const prof = !post && IG.test(config.profileUrl || '') ? config.profileUrl : '';
+    const go = post ? `<a class="btn igpost" href="${esc(post)}" target="_blank" rel="noopener">インスタの投稿にコメントして投票する</a>`
+      : prof ? `<a class="btn igpost" href="${esc(prof)}" target="_blank" rel="noopener">インスタで投票の投稿にコメントする</a>` : '';
     return `<h2>投票中：${esc(v.question || what[v.kind] || '')}</h2>
-      <div class="howto">${how}</div>
+      ${go}<div class="howto">${how}</div>
       <div class="card" style="margin-top:12px">${options(v)}
       <p class="muted" style="margin-bottom:0">${v.voters} 人が投票・合計 ${total} 票</p></div>
       <h2>時間ごとの票の伸び</h2><div class="card">${chart(v.timeline)}</div>`;

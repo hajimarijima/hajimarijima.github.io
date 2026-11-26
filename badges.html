@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>バッジ | はじまり島</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#7cb342">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="はじまり島">
+<script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js"));</script>
+</head>
+<body>
+<main class="wrap">
+  <h1>バッジ</h1>
+  <p class="muted">村人は、島でがんばるとバッジをもらえます。色がついているのは、だれかが持っているバッジ。灰色はまだだれも持っていないバッジで、もらい方が書いてあります。</p>
+  <div id="empty"></div>
+  <h2>称号バッジ</h2>
+  <p class="muted">1 人 1 回だけもらえて、なくなりません。</p>
+  <ul class="bdglist" id="titles"></ul>
+  <h2>技能バッジ</h2>
+  <p class="muted">数がふえると 銅 → 銀 → 金 → ダイヤ に変わります。</p>
+  <ul class="bdglist" id="skills"></ul>
+</main>
+<script type="module">
+import { loadAll, nav, esc, villagerUrl, showError, emptyNote } from './js/common.js';
+nav('badges.html');
+const MAXW = 12; // 名前を出すのは 12 人まで（ほかは「ほか ◯ 人」）
+loadAll().then((D) => {
+  if (!D.active.length) document.getElementById('empty').innerHTML = emptyNote(D.config);
+  const link = (v) => `<a href="${villagerUrl(v)}">${esc(v.display)}</a>`;
+  const names = (vs) => vs.slice(0, MAXW).map(link).join('') + (vs.length > MAXW ? `<span class="muted">ほか ${vs.length - MAXW} 人</span>` : '');
+  const img = (src, alt, size) => src ? `<img class="bdgimg pixel" src="${esc(src)}" alt="${esc(alt)}" width="${size}" height="${size}" decoding="async">` : '';
+
+  // ---- 称号バッジ（config.titles.list） ----
+  const TL = (D.config.titles && D.config.titles.list) || [];
+  document.getElementById('titles').innerHTML = TL.map((t) => {
+    const own = D.active.filter((v) => (v.titles || []).includes(t.id));
+    const has = own.length > 0;
+    return `<li class="bdgcard${has ? '' : ' none'}">${t.img ? img(t.img, t.name, 96) : `<span class="bdgtxt">${esc(t.icon || '★')}</span>`}<div>` +
+      `<h3>${esc(t.name)}</h3><p>${esc(t.desc || '')}</p>` +
+      (has ? `<p class="who">持っている人（${own.length} 人）：${names(own)}</p>`
+        : `<p class="muted">まだだれも持っていません。もらい方：${esc(t.how || t.desc || '')}</p>`) +
+      '</div></li>';
+  }).join('') || '<li class="muted">称号はまだありません。</li>';
+
+  // ---- 技能バッジ（config.badges。段つき） ----
+  const BG = D.config.badges;
+  const SL = BG && BG.list ? Object.entries(BG.list) : [];
+  const tierOf = (v, id) => { const L = D.life[v.key]; const t = L && L.badges ? L.badges[id] : undefined; return t == null ? -1 : t; };
+  document.getElementById('skills').innerHTML = SL.map(([id, B]) => {
+    if (B.founder) {
+      // 称号バッジを持っている人は、はじまりの住人を重ねて出さない（町のカード・村人ページと同じ）
+      const own = D.active.filter((v) => tierOf(v, id) >= 0 && !(v.titles || []).some((t) => TL.some((x) => x.id === t)));
+      return `<li class="bdgcard${own.length ? '' : ' none'}">${img(`icons/badge_${id}.png`, B.name, 96)}<div><h3>${esc(B.name)}</h3><p>${esc(B.note || '')}</p>` +
+        (own.length ? `<p class="who">持っている人（${own.length} 人）：${names(own)}</p>` : '<p class="muted">まだだれも持っていません。</p>') +
+        '<p class="muted">称号バッジを持っている人は、そちらの絵だけを出します。</p></div></li>';
+    }
+    const unit = B.unit || '';
+    const tiers = B.tiers.map((n, i) => {
+      const k = D.active.filter((v) => tierOf(v, id) === i).length;
+      const any = D.active.some((v) => tierOf(v, id) >= i);
+      return `<figure class="${any ? '' : 'none'}">${img(`icons/badge_${id}_${i}.png`, `${B.name}（${BG.tierNames[i]}）`, 48)}<figcaption>${esc(BG.tierNames[i])}<br>${n}${esc(unit.trim())}${k ? `<br><b>${k} 人</b>` : ''}</figcaption></figure>`;
+    }).join('');
+    // 持っている人は段の高い順
+    const own = D.active.filter((v) => tierOf(v, id) >= 0).sort((a, b) => tierOf(b, id) - tierOf(a, id));
+    return `<li class="bdgcard${own.length ? '' : ' none'}"><div><h3>${esc(B.name)}</h3><p>${esc(B.note || '')}が ふえると もらえます。</p><div class="tiers">${tiers}</div>` +
+      (own.length ? `<p class="who">持っている人（${own.length} 人）：${names(own)}</p>` : `<p class="muted">まだだれも持っていません。もらい方：${esc(B.note || '')}が ${B.tiers[0]}${esc(unit.trim())} になると銅。</p>`) +
+      '</div></li>';
+  }).join('') || '<li class="muted">技能バッジはまだありません。</li>';
+}).catch(showError);
+</script>
+</body>
+</html>

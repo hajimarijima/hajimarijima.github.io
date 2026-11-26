@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { makeCharacter, animate, setTool as setTool0, setCarry as setCarry0, setAccent, setShield as setShield0, fishCycle, chibiOf } from './character.js';
+import { makeCharacter, animate, setTool as setTool0, setCarry as setCarry0, setAccent, setShield as setShield0, setArmor, fishCycle, chibiOf } from './character.js';
+import { armorLook, gearNames } from './smithing.js'; // 鍛冶職人が作った防具と、カードの「装備」
 // 姿をまだ作っていない人（遠くの人）には、道具や荷物を持たせない（作った時に、その時の物を持たせる）
 // ?chibi=1：2 頭身の見本の体型で試す（採用前。ふだんは今の体型）
 const setTool = (ch, k) => { if (ch.userData.parts) setTool0(ch, k); };
@@ -10,7 +11,7 @@ const setCarry = (ch, k) => { if (ch.userData.parts) setCarry0(ch, k); };
 const setShield = (ch, on) => { if (ch.userData.parts) setShield0(ch, on); };
 import { mat, box, hash, rnd, makeTree, makeRock, makeBush, makeBuilding, makeHouse, obstaclesFor, routeAround as routeAround0, declutter, makeRoads, setTownCenter } from './world3d.js';
 import { makeField, makePond, animatePond, makeBobber, makeAnimal, animateAnimal, animalPos } from './farm3d.js';
-import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote, startNote, joinText, titleBadges } from './common.js';
+import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote, startNote, joinText, titleBadges, bestFishText, mbtiText } from './common.js';
 import { makeSky, jstHour, parseTime, phaseName } from './daynight.js';
 import { hourOf, hourText, isNight } from './hours.js';
 import { tagName, igUrl } from './search.js';
@@ -21,12 +22,14 @@ import { makeTerrain, BLOCK } from './terrain_gen.js';
 import { makeTerrainView } from './terrain.js';
 import { SpatialHash, TILE } from './tilemap.js';
 import { BED, bedParts, sleeperOnBed, bedInHouse } from './beds.js';
+import { TENT, MAT, tentExit, tentPlan, tentSites, tentBed, tentFront, tentPoint, inTent } from './tents.js';
 import { islandAt, isOpen, randomLand, radiusAt, onLand, MAIN } from './island.js';
 import { makeClouds } from './clouds.js';
 import { seededRng, fightNight, roundsOf } from './combat.js';
 import { makeFloatText } from './floattext.js';
+import { closeOf, greetOf, moreLines } from './chat.js'; // 立ち話のあいさつと言葉
 import { makeMob, animateMob, makeArrow, arrowAt, flashMob, fadeMob, makeHitFx, hitFxAt, MOB_SCALE } from './mobs.js';
-import { makeChunkObjects, makeFx, setRock, rockScale, setTreeState, setTreeFall, setTreeCrack, makeDebris, makeChest, setChestOpen, makeMarker, strikeAt, breakTime, dropPos, chipList, DIG, CHOP, FALL_END } from './blocks.js';
+import { makeChunkObjects, makeFx, setRock, rockScale, setTreeState, setTreeFall, setTreeCrack, makeDebris, makeChest, setChestOpen, makeMarker, strikeAt, breakTime, dropPos, chipList, DIG, CHOP, FALL_END, pixelTex, px, pixelRng } from './blocks.js';
 
 // 時刻：ふだんは日本時間の今。?time=morning / day / evening / night や ?time=21:30 で切りかえて確かめられる。
 // ?hour=7 は、その時刻の空と、村人のその時間の行動（L.hours）を出す（動画用）
@@ -74,7 +77,16 @@ async function main() {
   setTownCenter(CTR, ISLANDS ? (x, z) => onLand(world, x, z, 1.2) : null);
   // 拠点の場所の投票中（0 日目）：チェスト・たき火・広場はまだ無く、地図に A/B/C の候補が出る
   const baseVote = (state.votes || []).find((v) => v.kind === 'base') || null;
-  if (baseVote) document.querySelector('.map').insertAdjacentHTML('beforeend', baseBanner(baseVote));
+  if (baseVote) {
+    // 旗の場所・名前は config.json の候補に合わせる（sim の tools/base.js と同じ）。旗のまわりの木と岩は描かない（古いデータでも旗が木にうまらない）
+    const cands = (config.baseVote || {}).candidates || [];
+    baseVote.options.forEach((o, i) => { const c = cands[i]; if (c) Object.assign(o, { x: c.x, z: c.z, name: c.name, desc: c.desc || '' }); });
+    const nearFlag = (o) => baseVote.options.some((f) => Math.hypot(o.x - f.x, o.z - f.z) < 5.2); // 旗の輪（3.5 × 1.35）の中
+    world.trees = world.trees.filter((t) => !nearFlag(t)); world.rocks = world.rocks.filter((r) => !nearFlag(r));
+    // baseVote.needPost の時は、投票の投稿の URL を貼るまで「投票中」の帯を出さない（旗だけ出す）
+    const postReady = /instagram\.com\//.test(String(config.votePostUrl || ''));
+    if (!(config.baseVote || {}).needPost || postReady) document.querySelector('.map').insertAdjacentHTML('beforeend', baseBanner(baseVote, config));
+  }
   if (!active.length) document.querySelector('.map').insertAdjacentHTML('beforeend', emptyNote(config));
   renderPanel(D);
 
@@ -184,13 +196,14 @@ async function main() {
   for (let i = 0; i < (LITE ? 10 : 40) && terrain.pending; i++) terrain.update(controls.target); // 近くは開いた時に作っておく（スマホは少しだけ。残りは動き出してから少しずつ）
   const VIEW_UNITS = VIEW_R * 16 * BLOCK;
   window.TOWN.terrain = terrain;
-  // 草花（見た目だけ）
+  // 草花（見た目だけ）。テントの床にかかる物は、テントを置いたあとで隠す（decoInst）
+  const decoInst = [];
   {
     const R = rnd('flowers');
     const geo = new THREE.BoxGeometry(0.18, 0.25, 0.18);
     const cols = [0xf2f2f2, 0xf2d24a, 0xe2507a, 0x6a9cd8];
     cols.forEach((c, ci) => {
-      const inst = new THREE.InstancedMesh(geo, mat(c), 60);
+      const inst = new THREE.InstancedMesh(geo, mat(c), 60); decoInst.push(inst);
       const m4 = new THREE.Matrix4();
       for (let i = 0; i < 60; i++) {
         let x = (R() - 0.5) * 140, z = (R() - 0.5) * 120 - 10, hide = 0;
@@ -206,7 +219,7 @@ async function main() {
       if (ISLANDS) { const p = randomLand(world, R, 5, 12) || { x: 0, z: 0, y: -60 }; x = p.x; z = p.z; hide = p.y || 0; }
       m4.makeTranslation(x, 0.07 + hide, z); tufts.setMatrixAt(i, m4);
     }
-    scene.add(tufts);
+    scene.add(tufts); decoInst.push(tufts);
   }
   // 道（広場があれば石畳、なければ土）
   const hasPlaza = world.buildings.some((b) => b.type === 'plaza');
@@ -337,7 +350,7 @@ async function main() {
   }
   // 立てたたいまつ（作業台で 棒＋石炭 から作る。チェストのたいまつの数だけ、posts 本まで村のまわりに立てる）。作るまでは夜はたき火だけで暗い
   const nTorch = Math.min((config.guardGear && config.guardGear.posts) || 0, (state.store && state.store.torch) || 0);
-  const torchFlames = [];
+  const torchFlames = [], torchObjs = []; // torchObjs：テントにかかったら、輪にそって外へずらす
   if (active.length && nTorch > 0) {
     const cx = camp ? camp.x : 0, cz = camp ? camp.z : 0, R0 = hasPlaza ? 14 : 9;
     for (let i = 0; i < nTorch; i++) {
@@ -348,12 +361,13 @@ async function main() {
       const f1 = box(0.2, 0.3, 0.2, 0xffb03a, 0, 1.86, 0, t), f2 = box(0.11, 0.16, 0.11, 0xfff0a0, 0, 2.06, 0, t);
       for (const f of [f1, f2]) { f.castShadow = false; f.material = new THREE.MeshBasicMaterial({ color: f.material.color }); }
       torchFlames.push(f1, f2); scene.add(t);
-      lightAnchors.push({ x: q.x, y: 2.1, z: q.z });
+      const la = { x: q.x, y: 2.1, z: q.z }; lightAnchors.push(la); torchObjs.push({ g: t, la, a, cx, cz, R0 });
     }
   }
   anim.torches = torchFlames;
   // 整地する前の村のまん中（草と小石）
-  if (!world.square || !world.square.leveled) scene.add(makeDebris(world.debris || []));
+  const debrisObj = !world.square || !world.square.leveled ? makeDebris(world.debris || []) : null;
+  if (debrisObj) scene.add(debrisObj);
   // チェスト（集めた物が入る）
   let chestObj = null;
   if (world.chest && world.chest.day) {
@@ -423,18 +437,129 @@ async function main() {
   const cloudDay = new THREE.Color(0xffffff), cloudNight = new THREE.Color(0x4a5570), cloudCol = new THREE.Color();
   sky.set(hourNow(), { x: 0, z: 0 });
   const homeless = active.filter((v) => !(life[v.key] || {}).home);
-  const tentPos = [], tentAt = {};
-  homeless.forEach((v, i) => {
-    const a = (i / Math.max(6, homeless.length)) * Math.PI * 2 + 0.4;
-    const r = 4 + (i % 2) * 1.6;
-    const x = camp.x + Math.cos(a) * r, z = camp.z + Math.sin(a) * r;
-    const t = new THREE.Group();
-    const m = new THREE.Mesh(new THREE.ConeGeometry(1, 1.4, 4), mat([0xe0c89a, 0xc9a777, 0xb8c9a0][i % 3]));
-    m.rotation.y = Math.PI / 4; m.position.y = 0.7; m.castShadow = true; t.add(m);
-    t.position.set(x, 0, z); t.rotation.y = -a; scene.add(t);
-    tentPos[v.key] = { x: x + Math.cos(a) * -2.2, z: z + Math.sin(a) * -2.2 }; // テントの入口の前（テントに体がかからない所）
-    tentAt[v.key] = { x, z, a };
-  });
+  // テント（家のない人の寝床。js/tents.js・config.json の tent）：たき火のうしろに大きいテントを 1 つ。人が多いと 2 つ目・3 つ目。
+  //   中に 1 人 1 つの寝床（敷物。ベッドを作った人はベッド）を並べる。入れない人は、たき火のそばで横になる
+  const tentP = tentPlan(active, life, config);
+  const sqC = world.square ? { x: world.square.x, z: world.square.z } : { x: camp.x - 2.5, z: camp.z - 4 };
+  const tObst = obstaclesFor(world, config).filter((o) => Math.hypot(o.x - sqC.x, o.z - sqC.z) < 30);
+  const planSite = state.plan && state.plan.site && state.plan.site.plot !== 'ring' ? state.plan.site : null;
+  const tentBlocked = (x, z) => (ISLANDS && !onLand(world, x, z, 1)) || tObst.some((o) => Math.hypot(x - o.x, z - o.z) < o.r + 0.2)
+    || (world.pond && Math.hypot(x - world.pond.x, z - world.pond.z) < world.pond.r + 1)
+    || (world.chest && world.chest.day && Math.hypot(x - world.chest.x, z - world.chest.z) < 1.3)
+    || Math.hypot(x - camp.x, z - camp.z) < 2.3 || (planSite && Math.hypot(x - planSite.x, z - planSite.z) < 4.5);
+  const tents = tentP.tents ? tentSites(sqC, tentP.tents, tentP.perTent, tentBlocked) : [];
+  const tentOf = {}; // 村人 → { t: テント, i: 何番目の寝床 }
+  for (const [k, s] of Object.entries(tentP.slot)) if (tents[s.tent]) tentOf[k] = { t: tents[s.tent], i: s.i };
+  const tentPos = {}, tentAt = {}; // tentPos：休む所（テントの口の前。入れない人は たき火のそば）
+  for (const [k, s] of Object.entries(tentOf)) tentPos[k] = tentFront(s.t, s.i, tentP.perTent);
+  homeless.filter((v) => !tentOf[v.key]).forEach((v, i) => { const a = 0.6 + i * 0.9; tentPos[v.key] = { x: camp.x + Math.cos(a) * 3.2, z: camp.z + Math.sin(a) * 3.2 }; });
+  // テントの形：ブロックを組んだ作り。羊毛ブロック（ドット絵の織り目、赤と白）と、原木の柱。
+  //   横の低い壁 → 両がわから段々に上がる三角屋根（4 段）→ てっぺんの原木の棟木。奥と前の三角の壁も段々で閉じる。
+  //   前の壁のまん中に入口（はば TENT.door・高さ TENT.doorH。村人の背より高い）。寝床は奥に寄せて並べ、足の先と前の壁の間が通り道。
+  //   壁の厚みは内がわへ TENT.wall だけ（寝床は ±len/2 - pad - 0.9 の内側なので、壁にかからない）
+  //   屋根の部品には userData.tentRoof（屋根をはずして中を見る時に使う）
+  const tentMats = (() => {
+    let M = null;
+    const wool = (key, pal, line) => pixelTex(key, (g, R) => {
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px(g, x, y, pal[Math.floor(R() * pal.length)]);
+      for (let y = 1; y < 15; y += 3) for (let x = (y % 2) + 1; x < 15; x += 4) { px(g, x, y, line); px(g, x + 1, y + 1, line); } // 織り目
+      for (let i = 0; i < 16; i++) { px(g, i, 0, pal[0]); px(g, 0, i, pal[0]); px(g, i, 15, line); px(g, 15, i, line); } // ブロックのふち
+    });
+    const log = (key) => pixelTex(key, (g, R) => {
+      const pal = ['#6b4a2b', '#5a3d22', '#7a5532', '#4e341c'];
+      for (let x = 0; x < 16; x++) { const c = pal[Math.floor(R() * pal.length)]; for (let y = 0; y < 16; y++) px(g, x, y, R() < 0.18 ? pal[Math.floor(R() * pal.length)] : c); }
+      for (let i = 0; i < 16; i++) { px(g, 0, i, '#3e2a16'); px(g, 15, i, '#3e2a16'); }
+    });
+    const lam = (tex) => { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.needsUpdate = true; return new THREE.MeshLambertMaterial({ map: tex }); };
+    return () => M || (M = {
+      cream: lam(wool('tentwool', ['#efe6cf', '#e6dcc2', '#ddd2b6', '#f4ecd8'], '#c9bc9c')),
+      red: lam(wool('tentwoolred', ['#c8443a', '#b93b32', '#d24e42', '#a9342c'], '#8a2a24')),
+      rug: lam(wool('tentrug', ['#8a6a44', '#7f603c', '#94734b'], '#6a4f30')),
+      log: lam(log('tentlog')),
+    });
+  })();
+  // 箱の 6 面の UV を、1 ブロック（unit）で 1 回くり返すようにする（長い箱でも模様が伸びない）
+  const blockGeo = (w, h, d, unit) => {
+    const geo = new THREE.BoxGeometry(w, h, d), uv = geo.attributes.uv, dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
+    for (let f = 0; f < 6; f++) for (let i = 0; i < 4; i++) { const j = f * 4 + i; uv.setXY(j, uv.getX(j) * dims[f][0] / unit, uv.getY(j) * dims[f][1] / unit); }
+    return geo;
+  };
+  const LAMP_GLASS = new THREE.MeshBasicMaterial({ color: 0xffd27a }); // ランタンのガラス（いつも明るい）
+  function makeTent(t, perTent) {
+    const g = new THREE.Group(), { depth: D, len: Lt } = t, { wallH: WH, ridgeH: RH, wall: TW, door: DW, doorH: DH } = TENT, M = tentMats();
+    const hw = Lt / 2, N = 4, sh = (RH - WH) / N, top = Math.max(DW / 2 + 0.4, hw - (N - 1) * 1.1), sw = (hw - top) / (N - 1), BU = 1.1;
+    const roofMats = { red: M.red.clone(), cream: M.cream.clone(), log: M.log.clone() }; // 屋根だけ自分の材質（近くから見る時に半透明にする）
+    const blk = (w, h, d, m, x, y, z, roof) => {
+      const o = new THREE.Mesh(blockGeo(w, h, d, BU), m); o.position.set(x, y, z);
+      o.castShadow = !LITE; o.receiveShadow = true; if (roof) o.userData.tentRoof = true; g.add(o); return o;
+    };
+    // 段 k（0 が軒、N-1 がてっぺん）の横の範囲と、てっぺんの高さ
+    const stepX = (k) => (k < N - 1 ? [hw - (k + 1) * sw, hw - k * sw] : [0, top]);
+    const stepTop = (k) => WH + (k + 1) * sh;
+    blk(Lt - 0.1, 0.06, D - 0.1, M.rug, 0, 0.03, 0);                                     // 床の敷物
+    for (const s of [-1, 1]) blk(TW, WH, D, M.cream, s * (hw - TW / 2), WH / 2, 0);        // 横の低い壁
+    for (let k = 0; k < N; k++) {                                                         // 段々の三角屋根（赤と白を交互に）
+      const [a, b] = stepX(k), m = k % 2 ? roofMats.cream : roofMats.red, y = WH + k * sh + sh / 2;
+      if (k < N - 1) for (const s of [-1, 1]) blk(b - a + 0.02, sh + 0.04, D + 0.6, m, s * (a + b) / 2, y, 0, true);
+      else blk(2 * top, sh + 0.04, D + 0.6, m, 0, y, 0, true);
+    }
+    blk(0.4, 0.4, D + 0.9, roofMats.log, 0, RH + 0.18, 0, true);                                // てっぺんの棟木（原木）
+    for (const zs of [-1, 1]) {                                                           // 奥と前の三角の壁（段々）
+      const z = zs * (D / 2 - TW / 2);
+      for (let k = 0; k < N - 1; k++) { const [a, b] = stepX(k), h = stepTop(k); for (const s of [-1, 1]) blk(b - a, h, TW, M.cream, s * (a + b) / 2, h / 2, z); }
+      const h = stepTop(N - 1);
+      if (zs < 0) blk(2 * top, h, TW, M.cream, 0, h / 2, z);
+      else {                                                                              // 前のまん中は入口（はば DW・高さ DH）
+        for (const s of [-1, 1]) blk(top - DW / 2, h, TW, M.cream, s * (top + DW / 2) / 2, h / 2, z);
+        blk(DW, h - DH, TW, M.cream, 0, (h + DH) / 2, z);
+        for (const s of [-1, 1]) blk(0.3, DH, 0.4, M.log, s * (DW / 2 + 0.15), DH / 2, z + 0.06); // 入口の原木の柱
+        blk(DW + 0.6, 0.3, 0.4, M.log, 0, DH + 0.15, z + 0.06);                                  // 入口の上の横木
+        blk(DW + 0.6, 0.1, 0.24, M.red, 0, DH + 0.35, z + 0.08);                                 // 巻き上げた入口の幕
+      }
+    }
+    for (const s of [-1, 1]) for (const zs of [-1, 1]) blk(0.36, WH + 0.25, 0.36, M.log, s * (hw + 0.02), (WH + 0.25) / 2, zs * (D / 2 + 0.02)); // 角の原木の柱
+    // 夜の明かり：中の棟木からつるしたランタンと、入口からもれる暖かい光
+    const lamp = new THREE.Group();
+    box(0.06, 0.6, 0.06, 0x2d2d2d, 0, 0.3, 0, lamp);
+    for (const y of [0.04, -0.44]) box(0.44, 0.08, 0.44, 0x2d2d2d, 0, y, 0, lamp); // ランタンの上下のふた
+    box(0.32, 0.4, 0.32, LAMP_GLASS, 0, -0.2, 0, lamp);
+    lamp.position.set(0, RH - sh - 0.65, 0.4); g.add(lamp);
+    const light = new THREE.PointLight(0xffb45a, 0, 9, 1.6); light.position.set(0, RH - sh - 1.2, 0.6); g.add(light);
+    g.userData.roofMats = [roofMats.red, roofMats.cream, roofMats.log]; g.userData.light = light; g.userData.fade = 1;
+    g.position.set(t.x, 0, t.z); g.rotation.y = t.yaw;
+    return g;
+  }
+  const tentGroups = tents.map((t) => { const m = makeTent(t, tentP.perTent); scene.add(m); return m; });
+  // テントの中にかかる草花・小石は隠し、たいまつは輪にそって外へずらす（床やベッドを突きぬけない）
+  if (tents.length) {
+    const inAny = (x, z, pad) => tents.some((t) => inTent(t, x, z, pad));
+    const m4 = new THREE.Matrix4(), v3 = new THREE.Vector3();
+    for (const inst of decoInst) {
+      let ch = false;
+      for (let i = 0; i < inst.count; i++) { inst.getMatrixAt(i, m4); v3.setFromMatrixPosition(m4); if (inAny(v3.x, v3.z, 0.4)) { m4.makeTranslation(v3.x, -60, v3.z); inst.setMatrixAt(i, m4); ch = true; } }
+      if (ch) inst.instanceMatrix.needsUpdate = true;
+    }
+    if (debrisObj) debrisObj.traverse((o) => { if (o !== debrisObj && o.parent === debrisObj) { o.getWorldPosition(v3); if (inAny(v3.x, v3.z, 0.4)) o.visible = false; } });
+    for (const T of torchObjs) for (let k = 1; k < 60 && inAny(T.g.position.x, T.g.position.z, 0.8); k++) {
+      const a = T.a + Math.ceil(k / 2) * 0.12 * (k % 2 ? 1 : -1);
+      T.g.position.set(T.cx + Math.cos(a) * T.R0, 0, T.cz + Math.sin(a) * T.R0); T.la.x = T.g.position.x; T.la.z = T.g.position.z;
+    }
+  }
+  // 夜：テントの中の明かりをつける。カメラが近くて上から見ている時だけ、屋根を半透明にして中の寝床を見せる（昼はいつも屋根あり）
+  function updateTents(n, dt) {
+    const night = Math.min(1, Math.max(0, (n - 0.3) / 0.4));
+    for (const g of tentGroups) {
+      g.userData.light.intensity = night * 14;
+      const d = Math.hypot(camera.position.x - g.position.x, camera.position.z - g.position.z);
+      const want = night > 0.5 && d < 26 && camera.position.y > 8 && camera.position.y > d * 0.55 ? 0.22 : 1;
+      const f = g.userData.fade + (want - g.userData.fade) * Math.min(1, dt * 4);
+      if (Math.abs(f - g.userData.fade) < 1e-4 && f === want) continue;
+      g.userData.fade = Math.abs(f - want) < 0.01 ? want : f;
+      const solid = g.userData.fade > 0.99;
+      for (const m of g.userData.roofMats) { if (m.transparent === solid) m.needsUpdate = true; m.opacity = g.userData.fade; m.transparent = !solid; m.depthWrite = solid; }
+      g.traverse((o) => { if (o.userData.tentRoof) o.castShadow = solid && !LITE; });
+    }
+  }
   // 月あかり：夜だけ、青白い弱い光を上から当てる（寝ている人や見張りの形が分かるくらい。昼のようには明るくしない）
   const moon = new THREE.DirectionalLight(0xa9bcff, 0);
   scene.add(moon, moon.target);
@@ -450,7 +575,7 @@ async function main() {
     const r = {};
     for (const [k, [a, b]] of Object.entries(pairs)) {
       let v = null;
-      Object.defineProperty(r, k, { enumerable: true, configurable: true, get: () => v || (v = routeAround(a, b, walls)), set: (x) => { v = x; } });
+      Object.defineProperty(r, k, { enumerable: true, configurable: true, get: () => v || (v = safeRoute(a, b)), set: (x) => { v = x; } });
     }
     return r;
   };
@@ -460,15 +585,162 @@ async function main() {
   // 入れない物（円）：建物・岩・木の幹（四角い幹の角まで）・テント・たき火・チェスト・畑・ベッド（2 マス）
   // 村人の体は、前後 0.45・左右 0.95（はば 1 ブロック）の だ円。人どうしも、この形で重ならない
   const BODY_F = 0.45, BODY_S = 0.95;
-  const solids = obstaclesFor(world, config, { trees: false }).map((o) => ({ x: o.x, z: o.z, r: o.r }));
+  // 金床（world3d.js の anvil：建物の右前）の場所と、鍛冶職人が立つ所（金床の円 0.8＋体の前 0.45 より外）
+  const anvilOf = (b) => {
+    const Lk = (config.buildings[b.type] || {}).look || {};
+    if (Lk.props !== 'anvil') return null;
+    const r = b.rot || 0, cs = Math.cos(r), sn = Math.sin(r), lx = (Lk.w || 4) / 2 + 0.75, lz = (Lk.d || 4) / 2;
+    const at = (z) => ({ x: b.x + lx * cs + z * sn, z: b.z - lx * sn + z * cs });
+    return { ...at(lz + 0.2), stand: at(lz + 1.5) };
+  };
+  const solids =obstaclesFor(world, config, { trees: false }).map((o) => ({ x: o.x, z: o.z, r: o.r }));
   for (const t of world.trees) if (t.state === 'tree' && !t.far && !t.gone) solids.push({ x: t.x, z: t.z, r: 0.95 * (t.size || 1), tree: t });
   for (const t of world.trees) if (t.state === 'stump' && !t.far && !t.gone) solids.push({ x: t.x, z: t.z, r: 0.75 * (t.size || 1) }); // 切り株にも乗らない
-  for (const t of Object.values(tentAt)) solids.push({ x: t.x, z: t.z, r: 1.05 });
+  for (const t of tents) { // テントの奥の壁・両はしの壁・前の壁（入口のところはあける。中は歩ける）
+    for (let v = -t.len / 2; v <= t.len / 2 + 1e-6; v += 0.8) if (Math.abs(v) > TENT.door / 2 + 0.3) { const q = tentPoint(t, t.depth / 2 - 0.15, v); solids.push({ x: q.x, z: q.z, r: 0.4 }); }
+    for (let v = -t.len / 2; v <= t.len / 2 + 1e-6; v += 0.8) { const q = tentPoint(t, -t.depth / 2 + 0.15, v); solids.push({ x: q.x, z: q.z, r: 0.4 }); }
+    for (const s of [-1, 1]) for (let u = -t.depth / 2; u <= t.depth / 2 + 1e-6; u += 0.8) { const q = tentPoint(t, u, s * (t.len / 2 - 0.05)); solids.push({ x: q.x, z: q.z, r: 0.4 }); }
+  }
   if (!baseVote) solids.push({ x: camp.x, z: camp.z, r: 1.3 });
   if (world.chest && world.chest.day) solids.push({ x: world.chest.x, z: world.chest.z, r: 0.95 });
   for (const f of world.fields || []) solids.push({ x: f.x, z: f.z, r: 1.9 });
+  // 鍛冶屋の金床（world3d.js の anvil）：だれも通りぬけない。鍛冶職人は anvilOf の stand に立って打つ
+  for (const b of world.buildings) { const an = anvilOf(b); if (an) solids.push({ x: an.x, z: an.z, r: 0.8, anvil: b.id }); }
   // 歩く道は、体の分だけ広げた円をよける
   const walls = solids.map((o) => ({ x: o.x, z: o.z, r: o.r + 0.8 }));
+  if (world.pond) walls.push({ x: world.pond.x, z: world.pond.z, r: world.pond.r + 0.6 }); // 池の中は歩かない（ふちに立つ人の所は外）
+  // 道の折れ目が別の木・岩にかかった時は、近くの空いたマスへずらす（行き先はそのまま）
+  // 道：まず折れ線（routeAround）。ふさがった所を通る時（出だしが物のそば・テントや木が混んでいる所）は、マス目で道をさがす。
+  // 体の横はば分あけた道がなければ（せまいすき間は体が通らない）、折れ線のまま（blocked の印。散歩なら別の行き先にする）
+  // テントの中から・中への道は、入口を通る（通り道 → 入口の内がわ → 入口の外。tents.js の tentExit）
+  const tentHas = (p) => tents.find((t) => inTent(t, p.x, p.z, -0.05));
+  const safeRoute = (a, b) => {
+    const ta = tentHas(a), tb = tentHas(b);
+    if (!ta && !tb) return safeRoute1(a, b);
+    if (ta && ta === tb) return [tentExit(ta, a)[0], tentExit(tb, b)[0], b];
+    const pre = ta ? tentExit(ta, a) : [], post = tb ? tentExit(tb, b).reverse() : [];
+    const mid = safeRoute1(ta ? pre[2] : a, tb ? post[0] : b);
+    const r = [...pre, ...mid, ...post.slice(1), ...(tb ? [b] : [])];
+    if (mid.blocked) r.blocked = true;
+    return r;
+  };
+  const safeRoute1 = (a, b) => {
+    const r0 = routeAround(a, b, walls);
+    if (lineOk(a, r0)) return r0;
+    const g = gridRoute(a, b, CLR);
+    if (g) return g;
+    r0.blocked = true;
+    return r0;
+  };
+  // 歩ける所：陸の上で、池にも、木・岩・切り株・建物・テントにも体（横はば 0.95）がかからない
+  const CLR = 1.0;
+  const walkable = (x, z, clr = CLR) => onLand(world, x, z, 0.8) && !(world.pond && Math.hypot(x - world.pond.x, z - world.pond.z) < world.pond.r + clr) && isFree(x, z, clr);
+  // 海べの釣り場（島の町だけ）：いちばん大きな島のふちを 24 の向きに見て、岸の少し内側に立てる所。橋のたもとはよける。
+  //   fx/fz は海の上（うきを投げる向き）。村人ごとに名前で 1 つ選ぶ。isFree などが用意できてから、初めて使う時に作る
+  let seaSpots0 = null;
+  const seaSpots = () => {
+    if (seaSpots0) return seaSpots0;
+    seaSpots0 = [];
+    const isl = (world.islands || []).find((i) => i.id === MAIN);
+    if (isl) for (let k = 0; k < 24; k++) {
+      const ang = (k / 24) * Math.PI * 2, r = radiusAt(isl, ang), cx = Math.cos(ang), cz = Math.sin(ang);
+      const x = isl.x + cx * (r - 1.5), z = isl.z + cz * (r - 1.5);
+      if (!walkable(x, z) || (world.bridges || []).some((b) => Math.hypot(x - b.a.x, z - b.a.z) < 6)) continue;
+      seaSpots0.push({ x, z, fx: isl.x + cx * (r + 3), fz: isl.z + cz * (r + 3), sea: true });
+    }
+    return seaSpots0;
+  };
+  const seaSpotOf = (key) => { const l = seaSpots(); return l[hash(key + 'sea') % l.length]; };
+  // 物のふちまでのすきま
+  const clearAt = (x, z) => { let c = 9; for (const o of solidNear(x, z)) c = Math.min(c, Math.hypot(x - o.x, z - o.z) - o.r); return c; };
+  // 折れ線の上をたどって、ふさがった所がないか（出だし・行き先のそばでは、そこより物に近づかなければよい＝物のそばに立っている所から出られるように）
+  function lineOk(a, pts, clr = CLR) {
+    let p = a;
+    const end = pts[pts.length - 1];
+    // 出だしのそばで物に近い所は、物から離れていく（すきまがせまくならない）向きだけよい（2 つの物のあいだのせまいすき間には入らない）
+    const ce = Math.max(0.2, Math.min(clr, clearAt(end.x, end.z) - 0.03));
+    let prevA = clearAt(a.x, a.z), leaving = true;
+    for (const q of pts) {
+      const d = Math.hypot(q.x - p.x, q.z - p.z), n = Math.ceil(d / 0.25);
+      for (let k = 1; k <= n; k++) {
+        const x = p.x + ((q.x - p.x) * k) / n, z = p.z + ((q.z - p.z) * k) / n;
+        const nearE = Math.hypot(x - end.x, z - end.z) < 1.5;
+        if (leaving && !walkable(x, z, clr)) {
+          const c = clearAt(x, z);
+          if (Math.hypot(x - a.x, z - a.z) < 1.5 && c >= prevA - 0.02 && onLand(world, x, z, 0.8)) { prevA = c; continue; }
+          return false;
+        }
+        leaving = false;
+        if (nearE) { if (!isFree(x, z, ce)) return false; continue; }
+        if (!walkable(x, z, clr)) return false;
+      }
+      p = q;
+    }
+    return true;
+  }
+  // マス目（はば 0.95）の A*（clr：物からあけるすきま）。見つかったら、まっすぐ行ける所はまとめて折れ目を少なくする
+  function gridRoute(a, b, clr = CLR) {
+    // 物のそばに立っている時は、まず物から離れる向きに、歩ける所まで出る（そこからマス目で）
+    let pre = [];
+    if (!walkable(a.x, a.z, clr)) {
+      let e = null;
+      for (let r = 0.5; r <= 3 && !e; r += 0.5) for (let k = 0; k < 16 && !e; k++) {
+        const q = { x: a.x + Math.cos(k * Math.PI / 8) * r, z: a.z + Math.sin(k * Math.PI / 8) * r };
+        if (walkable(q.x, q.z, clr) && lineOk(a, [q], clr)) e = q;
+      }
+      if (!e) return null;
+      pre = [e]; a = e;
+    }
+    const C = 0.95, M = 12;
+    const x0 = Math.min(a.x, b.x) - M, z0 = Math.min(a.z, b.z) - M;
+    const W = Math.min(100, Math.ceil((Math.max(a.x, b.x) + M - x0) / C)), H = Math.min(100, Math.ceil((Math.max(a.z, b.z) + M - z0) / C));
+    const cell = (x, z) => [Math.max(0, Math.min(W - 1, Math.floor((x - x0) / C))), Math.max(0, Math.min(H - 1, Math.floor((z - z0) / C)))];
+    const [si, sj] = cell(a.x, a.z), [gi, gj] = cell(b.x, b.z), S0 = sj * W + si, G = gj * W + gi;
+    if (S0 === G) return [...pre, { x: b.x, z: b.z }];
+    const cb = Math.max(0.3, Math.min(clr, clearAt(b.x, b.z) - 0.03)); // 行き先のそばは、行き先より物に近づかなければよい
+    const N = W * H, ok = new Int8Array(N).fill(-1), g = new Float32Array(N).fill(Infinity), from = new Int32Array(N).fill(-1), done = new Uint8Array(N);
+    const free = (k) => {
+      if (k === S0 || k === G) return true;
+      if (ok[k] < 0) {
+        const x = x0 + ((k % W) + 0.5) * C, z = z0 + (Math.floor(k / W) + 0.5) * C;
+        ok[k] = (Math.hypot(x - b.x, z - b.z) < 1.5 ? onLand(world, x, z, 0.8) && isFree(x, z, cb) : walkable(x, z, clr)) ? 1 : 0;
+      }
+      return ok[k] === 1;
+    };
+    // 小さい順に取り出す山（f = g + 残りの見こみ）
+    const hk = [], hf = [];
+    const push = (k, f) => { let i = hk.length; hk.push(k); hf.push(f); while (i > 0) { const pa = (i - 1) >> 1; if (hf[pa] <= f) break; hk[i] = hk[pa]; hf[i] = hf[pa]; i = pa; } hk[i] = k; hf[i] = f; };
+    const pop = () => { const k = hk[0], lk = hk.pop(), lf = hf.pop(); if (hk.length) { let i = 0; for (;;) { let c = 2 * i + 1; if (c >= hk.length) break; if (c + 1 < hk.length && hf[c + 1] < hf[c]) c++; if (hf[c] >= lf) break; hk[i] = hk[c]; hf[i] = hf[c]; i = c; } hk[i] = lk; hf[i] = lf; } return k; };
+    const hh = (k) => Math.hypot((k % W) - gi, Math.floor(k / W) - gj);
+    g[S0] = 0; push(S0, hh(S0));
+    let found = false;
+    for (let it = 0; hk.length && it < 5000; it++) {
+      const k = pop();
+      if (done[k]) continue; done[k] = 1;
+      if (k === G) { found = true; break; }
+      const i = k % W, j = Math.floor(k / W);
+      for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+        if (!di && !dj) continue;
+        const ni = i + di, nj = j + dj; if (ni < 0 || nj < 0 || ni >= W || nj >= H) continue;
+        const nk = nj * W + ni; if (done[nk] || !free(nk)) continue;
+        if (di && dj && (!free(j * W + ni) || !free(nj * W + i))) continue; // 角をかすめない
+        const ng = g[k] + (di && dj ? 1.414 : 1);
+        if (ng < g[nk]) { g[nk] = ng; from[nk] = k; push(nk, ng + hh(nk)); }
+      }
+    }
+    if (!found) return null;
+    const pts = [];
+    for (let k = from[G]; k >= 0 && k !== S0; k = from[k]) pts.unshift({ x: x0 + ((k % W) + 0.5) * C, z: z0 + (Math.floor(k / W) + 0.5) * C });
+    pts.push({ x: b.x, z: b.z });
+    // まっすぐ見通せる所までとばす（遠くまで見るのは 24 マス先まで）
+    const out = []; let cur = a;
+    for (let m = 0; m < pts.length;) {
+      let far = m;
+      for (let n = Math.min(pts.length - 1, m + 24); n > m; n--) if (lineOk(cur, [pts[n]], clr)) { far = n; break; }
+      out.push(pts[far]); cur = pts[far]; m = far + 1;
+    }
+    return [...pre, ...out];
+  }
   let solidIx = null;
   const solidNear = (x, z) => { if (!solidIx) solidIx = SpatialHash.of(solids, 4); return solidIx.near(x, z, 9); };
   // 広場をかこむ道（だ円、中心 (0,-1)・半径 12-3.7）からの距離。道の上には寝ない・ベッドを置かない
@@ -478,7 +750,8 @@ async function main() {
   // 横になって寝ている人（足もと → 頭の線）。歩く人も、ほかの寝る人も、ここに重ならない
   const lying = [];
   const segD = (x, z, s) => { const vx = s.hx - s.x, vz = s.hz - s.z, L2 = vx * vx + vz * vz || 1, u = Math.max(0, Math.min(1, ((x - s.x) * vx + (z - s.z) * vz) / L2)); return Math.hypot(x - (s.x + vx * u), z - (s.z + vz * u)); };
-  const isFree = (x, z, rad, self) => !solidNear(x, z).some((o) => o.owner !== self && Math.hypot(x - o.x, z - o.z) < o.r + rad) && !lying.some((s) => s.key !== self && segD(x, z, s) < 0.5 + rad);
+  // 自分の物（自分のベッド）だけは見ない。持ち主のない物（木・岩・テント）は、self がない時も必ず見る
+  const isFree = (x, z, rad, self) => !solidNear(x, z).some((o) => !(self && o.owner === self) && Math.hypot(x - o.x, z - o.z) < o.r + rad) && !lying.some((s) => s.key !== self && segD(x, z, s) < 0.5 + rad);
   // 空いていなければ、いちばん近い空いたマス（1 ブロック）のまん中へずらす
   function freePt(pt, rad = BODY_S, self) {
     if (!pt || isFree(pt.x, pt.z, rad, self)) return pt;
@@ -501,7 +774,7 @@ async function main() {
     if (!x) return nightAt(h) ? { action: 'sleep', place: 'ground' } : { action: L.action, target: L.target };
     const a = { action: x.action, target: x.target, place: x.place };
     if (a.action === 'stump') { a.action = 'chop'; a.stump = true; }
-    if (a.action === 'fish') a.target = 'pond';
+    if (a.action === 'fish') a.target = a.target === 'sea' && seaSpots().length ? 'sea' : 'pond'; // 海べ（f:sea）か池
     if (a.action === 'ranch') a.target = penB ? penB.id : null;
     // 遠くの木・岩まで歩く 1 時間：その仕事場へ向かって歩く（着いたらそのまま仕事の形）。寝る前に村へ帰る 1 時間：家・テントへ
     if (a.action === 'walkout') { const o = objById[a.target]; a.action = o && o.hp !== undefined ? 'dig' : 'chop'; a.walking = true; }
@@ -544,10 +817,31 @@ async function main() {
         }
       }
     }
-    // 地面・床：家があれば家の中の床（外からは見えない）、なければテントのそばで横になる
+    // 地面・床：家があれば家の中の床（外からは見えない）。なければテントの中の自分の敷物（ベッドがあればベッド）。
+    //   テントに入れない人は、たき火のそばで横になる
     if (p.homeB) return { x: p.home.x, z: p.home.z, yaw: 0, inside: true };
-    if (!p.groundAt) p.groundAt = groundSpot(p);
+    if (!p.groundAt) p.groundAt = tentOf[p.v.key] ? (p.bedAt ? { ...p.bedAt, inside: false, bed: true } : matSpot(p)) : campSpot(p);
     return p.groundAt;
+  }
+  // テントの中の敷物の上（頭は奥の壁の側、足はテントの口の側）
+  function matSpot(p) {
+    const s = tentOf[p.v.key], f = sleeperOnBed(tentBed(s.t, s.i, tentP.perTent), chibiOf(p.v));
+    return { x: f.x, z: f.z, yaw: f.yaw, inside: false, mat: true };
+  }
+  // たき火のそば：足をたき火に向けて、まわりに輪になって寝る。テント・物・ほかの寝ている人にかからない所。1 回決めたら同じ所
+  function campSpot(p) {
+    const a0 = (hash(p.v.key + 'cf') % 24) * Math.PI / 12;
+    for (const r of [2.5, 3.1, 3.8]) for (let k = 0; k < 24; k++) {
+      const a = a0 + k * Math.PI / 12, x = camp.x + Math.cos(a) * r, z = camp.z + Math.sin(a) * r;
+      const yaw = Math.atan2(camp.x - x, camp.z - z), hx = x - Math.sin(yaw) * 3.6, hz = z - Math.cos(yaw) * 3.6;
+      let ok = true;
+      for (let j = 0; j <= 6 && ok; j++) {
+        const px = x + (hx - x) * j / 6, pz = z + (hz - z) * j / 6;
+        if (!isFree(px, pz, 0.5, p.v.key) || tents.some((t) => inTent(t, px, pz, 0.5)) || (ISLANDS && !onLand(world, px, pz, 1))) ok = false;
+      }
+      if (ok) { lying.push({ x, z, hx, hz, key: p.v.key }); return { x, z, yaw, inside: false }; }
+    }
+    return groundSpot(p);
   }
   // テントのそばの、体（足もと→頭 3.6）がテント・たき火・木・ほかの寝ている人にかからない所。1 回決めたら同じ所
   function groundSpot(p) {
@@ -575,8 +869,16 @@ async function main() {
   }
   // ベッドはマイクラのベッドの形（はば 1 マス・長さ 2 マス）を少し小さくしたもの（大きさは js/beds.js の BED）
   const placedBeds = [], bedTiles = new Set();
+  // 寝床（ベッド・敷物）の上は、持ち主のほかは入れない（テントの中の寝床どうしの間は、ほかの人が通れるくらい r を小さく）
+  function bedBlock(cx, cz, yaw, owner, r) {
+    for (const s of [-0.5, 0.5]) {
+      const x = cx + Math.sin(yaw) * TILE * s, z = cz + Math.cos(yaw) * TILE * s;
+      bedTiles.add(Math.floor(x / TILE) + ',' + Math.floor(z / TILE));
+      const o = { x, z, r, owner }; solids.push(o); walls.push({ x, z, r: o.r + 0.8 }); if (solidIx) solidIx.set(o, x, z, o);
+    }
+  }
   // ベッドの置き場所：家があれば家の中（住む順に横に並べる。家は外から中が見えないので描かない）。
-  // なければ自分のテントのすぐ横の、たき火・広場と反対の側。広場をかこむ道・たき火・ほかのテントやベッド・建物にかからない所を、近い順に探す
+  // なければテントの中の自分の寝床の所（敷物のかわりにベッド）。外には置かない
   function bedSpot(p, slot = 0) {
     let cx, cz, yaw;
     if (p.homeB) {
@@ -585,37 +887,13 @@ async function main() {
       placedBeds.push({ x: bd.cx, z: bd.cz });
       return { ...sleeperOnBed(bd, chibiOf(p.v)), cx: bd.cx, cz: bd.cz, inside: true };
     } else {
-      // マス目にそって置く：まくらのマスと足のマスの 2 マス。向きは 4 つ（東西南北）だけ
-      const t = tentAt[p.v.key] || { x: p.home.x, z: p.home.z };
-      const sq = world.square, tc = Math.hypot(t.x - camp.x, t.z - camp.z), i0 = Math.floor(t.x / TILE), j0 = Math.floor(t.z / TILE);
-      const tileOk = (x, z) => {
-        if (bedTiles.has(Math.floor(x / TILE) + ',' + Math.floor(z / TILE))) return false;
-        if (ringD(x, z) < 1.6 + 1.0) return false; // 広場をかこむ道
-        if (Math.hypot(x - camp.x, z - camp.z) < 3 + 1.0) return false;                      // たき火のまわり
-        if (Object.values(tentPos).some((o) => Math.hypot(x - o.x, z - o.z) < 1.6)) return false; // テントの入口の前はあける
-        return !solidNear(x, z).some((o) => Math.hypot(x - o.x, z - o.z) < o.r + 1.0);
-      };
-      let best = null;
-      for (let di = -4; di <= 4; di++) for (let dj = -4; dj <= 4; dj++) for (let k = 0; k < 4; k++) {
-        const y = k * Math.PI / 2, ux = Math.round(Math.sin(y)), uz = Math.round(Math.cos(y));
-        const px = (i0 + di + 0.5) * TILE, pz = (j0 + dj + 0.5) * TILE, fx = px + ux * TILE, fz = pz + uz * TILE; // まくら・足のマス
-        const dP = Math.hypot(px - t.x, pz - t.z), dF = Math.hypot(fx - t.x, fz - t.z);
-        if (dP >= dF) continue; // まくらがテントの側
-        const mx = (px + fx) / 2, mz = (pz + fz) / 2;
-        if (Math.hypot(mx - camp.x, mz - camp.z) < tc + 0.5) continue; // たき火・広場と反対の側
-        if (!tileOk(px, pz) || !tileOk(fx, fz)) continue;
-        const sc = dP + Math.abs(dF - dP - TILE) * 0.5;
-        if (!best || sc < best.sc) best = { sc, cx: mx, cz: mz, yaw: y };
-      }
-      if (!best) return null; // 置ける所がない（地面で寝る形のまま）
-      ({ cx, cz, yaw } = best);
+      // 家がなければ、テントの中の自分の寝床（js/tents.js）。テントに入れない人（いっぱい）のベッドは置かない（ベッドは外に置かない）
+      const s = tentOf[p.v.key];
+      if (!s) return null;
+      ({ cx, cz, yaw } = tentBed(s.t, s.i, tentP.perTent));
     }
     // ベッドの 2 マスは、ほかの人が入れない所になる（持ち主だけ入って寝る）
-    for (const s of [-0.5, 0.5]) {
-      const x = cx + Math.sin(yaw) * TILE * s, z = cz + Math.cos(yaw) * TILE * s;
-      bedTiles.add(Math.floor(x / TILE) + ',' + Math.floor(z / TILE));
-      const o = { x, z, r: 0.95, owner: p.v.key }; solids.push(o); walls.push({ x, z, r: o.r + 0.8 }); if (solidIx) solidIx.set(o, x, z, o);
-    }
+    bedBlock(cx, cz, yaw, p.v.key, 0.6);
     placedBeds.push({ x: cx, z: cz });
     // 村人の足の位置。頭はまくらの側（向きの反対）で、まくら側の板のすぐ内側
     return { ...sleeperOnBed({ cx, cz, yaw }, chibiOf(p.v)), cx, cz };
@@ -651,10 +929,19 @@ async function main() {
   }
   // 仕事のあとの時間の場所（人と時刻から決まる。おしゃべりは 2 人で同じ場所を出して向かい合う）
   const FREE_ACT = new Set(['walk', 'chat', 'view', 'water', 'pet', 'help']);
-  const plaza = world.square || camp;
+  const plaza = world.square || camp || CTR; // 拠点が決まる前（0 日目）も島のまん中
+  // 散歩の行き先：陸の上で、池・木・岩・建物にかからない所（だめなら別の向きを試す。最後は近くの空いたマス）
   function wanderPt(p, i) {
-    const a = ((hash(p.v.key + 'w' + curHour + ':' + i) % 628) / 100), r = 8 + (hash(p.v.key + 'wr' + i) % 120) / 10;
-    return { x: plaza.x + Math.cos(a) * r, z: plaza.z + Math.sin(a) * r };
+    let c = null;
+    for (let k = 0; k < 8; k++) {
+      const s = i + ':' + k, a = ((hash(p.v.key + 'w' + curHour + ':' + s) % 628) / 100), r = 8 + (hash(p.v.key + 'wr' + s) % 120) / 10;
+      c = { x: plaza.x + Math.cos(a) * r, z: plaza.z + Math.sin(a) * r };
+      if (!onLand(world, c.x, c.z, 2)) continue;
+      if (world.pond && Math.hypot(c.x - world.pond.x, c.z - world.pond.z) < world.pond.r + 2) continue;
+      if (walls.some((o) => Math.hypot(c.x - o.x, c.z - o.z) < o.r)) continue;
+      return freePt(c);
+    }
+    return freePt({ x: plaza.x + (c.x - plaza.x) * 0.5, z: plaza.z + (c.z - plaza.z) * 0.5 });
   }
   // おしゃべりの場所の候補（開いた時に 1 回だけ作る）：家の入口の前・村に近い木の下（葉の下で幹の外）・池のふち
   let chatSpots = null;
@@ -668,14 +955,14 @@ async function main() {
       if (!chatSpots.length) chatSpots.push({ x: plaza.x + 9, z: plaza.z + 9 });
     }
     const c = chatSpots[hk % chatSpots.length];
-    return c.ok ? c : Object.assign(c, freePt({ x: c.x, z: c.z }, 0.7 + BODY_S), { ok: true }); // 2 人が並べる広さがある所
+    return c.ok ? c : Object.assign(c, freePt({ x: c.x, z: c.z }, 1.05 + BODY_S), { ok: true }); // 2 人が並べる広さがある所
   }
   function freeSpot(p, a, ang) {
     const act = a.action;
     if (act === 'chat' && a.target) {
-      // 広場のまん中ではなく、家の前・木の下・池のそば のどれか（2 人で同じ所を選ぶ）。2 人のあいだは 1.4
+      // 広場のまん中ではなく、家の前・木の下・池のそば のどれか（2 人で同じ所を選ぶ）。2 人のあいだは 2.1（お辞儀しても頭が当たらない）
       const [k1, k2] = [p.v.key, a.target].sort(), hk = hash(k1 + '|' + k2 + curHour), c = chatPlace(hk);
-      const da = ((hk >> 3) % 628) / 100, s = p.v.key === k1 ? 1 : -1, hw = 0.7;
+      const da = ((hk >> 3) % 628) / 100, s = p.v.key === k1 ? 1 : -1, hw = 1.05;
       return { x: c.x + Math.cos(da) * hw * s, z: c.z + Math.sin(da) * hw * s, fx: c.x - Math.cos(da) * hw * s, fz: c.z - Math.sin(da) * hw * s };
     }
     if (act === 'view' && world.pond) {
@@ -718,21 +1005,27 @@ async function main() {
       // 畑に水・動物をなでる（その前でしゃがむ）・荷物運びの手伝い（運ぶ人と同じ動き）
       p.stay = act !== 'help';
       work = freeSpot(p, a, ang);
+    } else if (act === 'smith' && tg && tg.type) {
+      // 鍛冶：鍛冶屋の金床（world3d.js の anvil）の前に立って、金床を向いて打つ
+      const an = anvilOf(tg);
+      if (an) { p.stay = true; work = { x: an.stand.x, z: an.stand.z, fx: an.x, fz: an.z }; }
+    } else if (act === 'fish' && a.target === 'sea') {
+      work = { ...seaSpotOf(p.v.key) }; // 海べの釣り場：岸に立って海を向く
     } else if (act === 'rest' || act === 'eat' || act === 'craft' || act === 'guard') {
       // 休む・食べる：家（テント）の前。道具を作る：チェストのそば。見張り：村のはずれ
       p.stay = true;
       work = act === 'rest' ? { ...p.home, fx: null } : act === 'guard' ? { x: Math.cos(ang) * 22, z: Math.sin(ang) * 20 - 1, fx: null } : { x: p.drop.x, z: p.drop.z, fx: drop.x, fz: drop.z };
     } else {
       // 木を切る人は葉の外に立つ（頭が葉に入らないように）、掘る人は岩の外に立つ
-      const off = act === 'fish' ? world.pond.r + 0.9 : act === 'ranch' ? 3.4 : act === 'level' ? 2 + (hash(p.v.key + 'lv') % 40) / 10 : act && act.startsWith('dig') ? 2.6 : act === 'apple' ? 1.25 * ((tg && tg.size) || 1) + 0.6 : act === 'chop' ? (a.stump ? 1.6 : 1.25 * ((tg && tg.size) || 1) + 0.6) : 1.2;
+      const off = act === 'fish' ? (world.pond ? world.pond.r + 0.9 : 1.2) : act === 'ranch' ? 3.4 : act === 'level' ? 2 + (hash(p.v.key + 'lv') % 40) / 10 : act && act.startsWith('dig') ? 2.6 : act === 'apple' ? 1.25 * ((tg && tg.size) || 1) + 0.6 : act === 'chop' ? (a.stump ? 1.6 : 1.25 * ((tg && tg.size) || 1) + 0.6) : 1.2;
       work = tg ? { x: tg.x + Math.cos(ang) * off, z: tg.z + Math.sin(ang) * off, fx: tg.x, fz: tg.z } : { x: -12 + (hash(p.v.key) % 9), z: 12 + (hash(p.v.key) % 5), fx: null };
       if (act === 'carry' && p.work && !init) work = p.work; // 運んだら、さっきの仕事場へもどる
     }
     // 立つ所は、物にも寝ている人にもかからない所（かかる時は近くの空いたマスへ）
-    if (a.action !== 'chat') work = freePt(work, BODY_S, p.v.key);
+    if (a.action !== 'chat' && a.action !== 'smith') work = freePt(work, BODY_S, p.v.key); // 鍛冶は金床の前から動かさない
     p.work = work;
-    p.pose = { level: 'dig', chop: 'chop', dig: 'dig', dig_last: 'dig', berry: 'gather', apple: 'gather', harvest: 'gather', tend: 'gather', till: 'dig', forage: 'gather', fish: 'fish', ranch: 'gather', craft: 'gather', walk: 'walk', chat: 'talk', view: 'sit', water: 'water', pet: 'gather' }[act] || (p.stay ? 'idle' : 'gather');
-    let tool = { level: 'hoe', chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', berry: 'basket', apple: 'basket', harvest: 'basket', tend: 'hoe', forage: 'basket', fish: 'rod', ranch: 'basket', guard: 'torch', water: 'basket' }[act] || null;
+    p.pose = { level: 'dig', chop: 'chop', dig: 'dig', dig_last: 'dig', berry: 'gather', apple: 'gather', harvest: 'gather', tend: 'gather', till: 'dig', forage: 'gather', fish: 'fish', ranch: 'gather', craft: 'gather', smith: 'smith', walk: 'walk', chat: 'talk', view: 'sit', water: 'water', pet: 'gather' }[act] || (p.stay ? 'idle' : 'gather');
+    let tool = { level: 'hoe', chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', berry: 'basket', apple: 'basket', harvest: 'basket', tend: 'hoe', forage: 'basket', fish: 'rod', ranch: 'basket', guard: 'torch', water: 'basket', smith: 'hammer' }[act] || null;
     if (act === 'walk') { p.wander = true; p.wi = 0; p.routes.w = null; }
     // 持っている道具の素材（木・石・鉄・金・ダイヤ）で色と形を変える。素手で切る・掘る人は何も持たない
     const tier = L.toolTier || 'hand';
@@ -751,6 +1044,15 @@ async function main() {
     const homeB = L.home && objById[L.home];
     const slot = homeB ? (bedSlot[homeB.id] = (bedSlot[homeB.id] ?? -1) + 1) : 0; // 同じ家の人は横に並べる
     bedFor[v.key] = bedSpot({ v, homeB, home: tentPos[v.key] || { x: camp.x, z: camp.z + 2 } }, slot);
+  }
+  // 敷物：テントの中の、ベッドのない人の寝床（昼もしいたまま）。毛布とまくら（まくらは奥の壁の側）
+  for (const [k, s] of Object.entries(tentOf)) {
+    if (bedFor[k]) continue;
+    const bd = tentBed(s.t, s.i, tentP.perTent), g = new THREE.Group();
+    box(MAT.w, MAT.h, MAT.l, [0x5f7f9e, 0x8a5a4a, 0x6a8a5a, 0x9a8a5a][s.i % 4], 0, MAT.h / 2 + 0.04, 0, g);
+    box(MAT.w * 0.7, 0.12, 0.55, 0xf0ece2, 0, MAT.h + 0.1, -MAT.l / 2 + 0.4, g);
+    g.position.set(bd.cx, 0, bd.cz); g.rotation.y = bd.yaw; scene.add(g);
+    bedBlock(bd.cx, bd.cz, bd.yaw, k, 0.6);
   }
   active.forEach((v, i) => {
     const L = life[v.key] || {};
@@ -783,7 +1085,7 @@ async function main() {
     people.push(p);
   });
   makeBeds(people.filter((p) => p.bedAt));
-  window.TOWN.people = people; window.TOWN.solids = solids; // 確かめ用（人の位置・行動を見て、その人へカメラを寄せて撮る）
+  window.TOWN.people = people; window.TOWN.solids = solids; window.TOWN.tents = tents; window.TOWN.tentGroups = tentGroups; // 確かめ用（人の位置・行動を見て、その人へカメラを寄せて撮る）
 
   TM0.people = performance.now();
   // ---------- 人が多い時の軽量化 ----------
@@ -851,6 +1153,7 @@ async function main() {
   function buildModel(p) {
     const v = p.v, m = makeCharacter(skinSrc(v), { scale: 1, slim: skinSlim(v), chibi: chibiOf(v) });
     if (v.profile && v.profile.color) setAccent(m, v.profile.color);
+    setArmor(m, armorLook((life[v.key] || {}).gear, config.smithing)); // 鍛冶職人が作った防具（帽子・服・くつ。顔と髪は見える）
     Object.assign(p.ch.userData, m.userData);
     p.ch.userData.smooth = true; // 動きの切りかわりをなめらかに（character.js の animate）
     p.ch.add(m); p.model = m;
@@ -1244,6 +1547,7 @@ async function main() {
   function switchMode(night) {
     for (const p of people) { if (p.talk) { p.talk = null; p.bubble.hidden = true; if (p.mode === 'day' && (p.phase === 5 || p.phase === 6 || p.phase === 7)) { p.phase = 0; p.ri = 0; p.routes[0] = routeAround(p.pos, p.work, walls); } } }
     for (const tk of talks) tk.on = false;
+    for (const p of people) endChat(p);
     void night;
   }
   function changeHour(h) {
@@ -1252,6 +1556,7 @@ async function main() {
       const wasGuard = p.mode === 'guard' || p.mode === 'toguard';
       if (sameAct(p.act, a) && !(p.guard && wasGuard !== (ENEMIES_ON && nightAt(h) && a.action !== 'sleep'))) continue;
       if (p.talk) { p.talk.on = false; p.talk = null; p.bubble.hidden = true; }
+      endChat(p);
       if (wasGuard) { setShield(p.ch, false); p.ch.userData.block = false; }
       p.ch.visible = true;
       setAct(p, a, false);
@@ -1269,22 +1574,65 @@ async function main() {
   function startTalk(tk, time) {
     const m = pushOut({ x: (tk.A.pos.x + tk.B.pos.x) / 2, z: (tk.A.pos.z + tk.B.pos.z) / 2 });
     const dx = tk.B.pos.x - tk.A.pos.x, dz = tk.B.pos.z - tk.A.pos.z, d = Math.hypot(dx, dz) || 1;
-    const spotA = pushOut({ x: m.x - (dx / d) * 0.85, z: m.z - (dz / d) * 0.85 }), spotB = pushOut({ x: m.x + (dx / d) * 0.85, z: m.z + (dz / d) * 0.85 });
+    const spotA = pushOut({ x: m.x - (dx / d) * 1.05, z: m.z - (dz / d) * 1.05 }), spotB = pushOut({ x: m.x + (dx / d) * 1.05, z: m.z + (dz / d) * 1.05 }); // 2.1 はなれる（お辞儀で頭が当たらない）
     for (const [p, s, other] of [[tk.A, spotA, tk.B], [tk.B, spotB, tk.A]]) { p.w0 = null; p.phase = 5; p.ri = 0; p.routes.talk = routeAround(p.pos, s, walls); p.talk = tk; p.other = other; }
     tk.on = true; tk.t0 = null;
   }
-  const free = (p) => p.mode === 'day' && (p.phase === 1 || p.phase === 3 || p.phase === 4);
+  const free = (p) => p.mode === 'day' && !p.chat && (p.phase === 1 || p.phase === 3 || p.phase === 4);
+  // 会話の中身：あいさつ（はじめて会った時）＋ sim.js の言葉＋ js/chat.js の続き（A と B が交互に）。同じ組・同じ時間なら同じ
+  function fillConvo(c, base, greet) {
+    const a = c.A.v.key, b = c.B.v.key, close = closeOf(D.social.pairs, a, b, base && base.kind);
+    c.g = greet ? greetOf(close, curHour, hash([a, b].sort().join('|') + ':' + curHour)) : null;
+    if (c.g) c.A.greetKind = c.B.greetKind = c.g.kind;
+    const extra = moreLines({ a, b, jobA: (life[a] || {}).job, jobB: (life[b] || {}).job, foodA: (c.A.v.profile || {}).food, foodB: (c.B.v.profile || {}).food,
+      hour: curHour, weather: state.weather, today: state.today, close, round: c.round || 0, last: base && base.lines.length ? (base.lines[base.lines.length - 1][0] === a ? 0 : 1) : null }, base ? 2 : 3);
+    c.all = [...(base ? base.lines.filter(([w]) => byKey[w]).map(([w, s]) => [byKey[w], s]) : []), ...extra.map(([w, s]) => [w ? c.B : c.A, s])];
+  }
+  // 進める：向き合う（0.45 秒）→ A があいさつ → B が返す → 交互に話す。終わったら true
+  const G_AT = 0.45, G_LEN = 1.5, L_AT = G_AT + 2.6, L_LEN = 2.6;
+  const say = (p, s) => { if (p.bubble.textContent !== s) p.bubble.textContent = s; p.bubble.hidden = false; };
+  function runConvo(c, time) {
+    const e = time - c.t0;
+    for (const p of [c.A, c.B]) p.bubble.hidden = true;
+    c.A.greetU = c.g ? (e - G_AT) / G_LEN : -1; c.B.greetU = c.g ? (e - G_AT - 1.0) / G_LEN : -1; // B は A の言葉を聞いてから返す
+    if (c.g && e >= G_AT && e < G_AT + 1.25) say(c.A, c.g.a);
+    else if (c.g && e >= G_AT + 1.25 && e < L_AT - 0.15) say(c.B, c.g.b);
+    const k = Math.floor((e - (c.g ? L_AT : 0)) / L_LEN);
+    if (k >= 0 && k < c.all.length) say(c.all[k][0], c.all[k][1]);
+    return k >= c.all.length;
+  }
   function updateTalks(time) {
     for (const tk of talks) {
       if (!tk.on) { if (time > tk.next && free(tk.A) && free(tk.B)) startTalk(tk, time); continue; }
-      if (tk.t0 === null) { if (tk.A.phase === 6 && tk.B.phase === 6) tk.t0 = time; else continue; }
-      const k = Math.floor((time - tk.t0) / 2.6);
-      for (const p of [tk.A, tk.B]) p.bubble.hidden = true;
-      if (k < tk.lines.length) { const [w, s] = tk.lines[k]; const p = byKey[w]; p.bubble.textContent = s; p.bubble.hidden = false; }
-      else {
-        for (const p of [tk.A, tk.B]) { p.phase = 7; p.ri = 0; p.routes.back = routeAround(p.pos, p.work, walls); p.talk = null; }
+      if (tk.t0 === null) { if (tk.A.phase === 6 && tk.B.phase === 6) { tk.t0 = time; tk.round = (tk.round || 0) + 1; fillConvo(tk, tk, true); } else continue; }
+      if (runConvo(tk, time)) {
+        for (const p of [tk.A, tk.B]) { p.phase = 7; p.ri = 0; p.routes.back = routeAround(p.pos, p.work, walls); p.talk = null; p.greetU = -1; }
         tk.on = false; tk.next = time + 30 + (hash(tk.a + tk.b) % 20);
       }
+    }
+    updateChats(time);
+  }
+  // 「おしゃべり」の時間（life の tk）：2 人とも場所に着いて向き合ったら、あいさつしてから話す。話が終わると少し休んで、また話す
+  const chats = new Set();
+  function endChat(p) {
+    const c = p.chat; if (!c) return;
+    chats.delete(c);
+    for (const q of [c.A, c.B]) { q.chat = null; q.greetU = -1; q.bubble.hidden = true; }
+  }
+  function updateChats(time) {
+    for (const p of people) {
+      if (p.chat || p.talk || p.mode !== 'day' || p.phase !== 1 || !p.act || p.act.action !== 'chat') continue;
+      const o = byKey[p.act.target];
+      if (!o || o.chat || o.talk || o.mode !== 'day' || o.phase !== 1 || !o.act || o.act.action !== 'chat' || o.act.target !== p.v.key) continue;
+      if (Math.hypot(o.pos.x - p.pos.x, o.pos.z - p.pos.z) > 3) continue;
+      const [A, B] = p.v.key < o.v.key ? [p, o] : [o, p];
+      const c = { A, B, t0: time, round: 0 };
+      fillConvo(c, null, true);
+      A.chat = B.chat = c; chats.add(c);
+    }
+    for (const c of chats) {
+      if (time < c.t0) continue;
+      if (runConvo(c, time)) { c.round++; c.t0 = time + 8 + (hash(c.A.v.key + c.round) % 8); fillConvo(c, null, false); }
     }
   }
   // 誕生日の人：名札に印、家の前にケーキと旗
@@ -1324,7 +1672,27 @@ async function main() {
       p.pos.x += (dx / d) * s; p.pos.z += (dz / d) * s; left -= s;
       if (s >= d) p.ri++;
     }
-    if (p.ri >= route.length) { p.ri = 0; return true; }
+    if (p.ri >= route.length) { p.ri = 0; p.stk = null; return true; }
+    // 引っかかり：歩いているのに 2 秒、次の折れ目に近づけない時は、今いる所から マス目で道を作り直す（なければ少し下がって横へ）。
+    // 3 回だめなら そこで着いたことにする（散歩なら次の行き先へ）
+    const tg = route[p.ri], dNow = Math.hypot(tg.x - p.pos.x, tg.z - p.pos.z);
+    const sk = p.stk && p.stk.r === route ? p.stk : (p.stk = { r: route, t: 0, ri: p.ri, d: dNow, n: 0 });
+    if (sk.ri !== p.ri || dNow < sk.d - 0.5) { sk.ri = p.ri; sk.d = dNow; sk.t = 0; }
+    else if ((sk.t += dt) >= 2) {
+      if (++sk.n >= 3) { p.ri = 0; p.stk = null; return true; }
+      // 途中の折れ目のすぐそばまで来ているなら（物が近くて その点に立てない）、その点はとばす
+      if (dNow < 1.2 && p.ri >= route.length - 1) { p.ri = 0; p.stk = null; return true; } // 行き先のすぐ手前：ここで着いたことにする
+      if (dNow < 1.2) { p.ri++; sk.ri = p.ri; sk.t = 0; sk.d = Math.hypot(route[p.ri].x - p.pos.x, route[p.ri].z - p.pos.z); return false; }
+      const end = route[route.length - 1];
+      let nr = gridRoute(p.pos, end);
+      if (!nr) {
+        const dx = tg.x - p.pos.x, dz = tg.z - p.pos.z, l = dNow || 1, sd = sk.n % 2 ? 1 : -1;
+        const side = freePt({ x: p.pos.x - (dx / l) * 0.8 - (dz / l) * 1.8 * sd, z: p.pos.z - (dz / l) * 0.8 + (dx / l) * 1.8 * sd });
+        nr = [side, ...safeRoute(side, end)];
+      }
+      route.splice(0, route.length, ...nr);
+      p.ri = 0; sk.ri = 0; sk.t = 0; sk.d = Math.hypot(route[0].x - p.pos.x, route[0].z - p.pos.z);
+    }
     return false;
   }
   // 重ならない：体（だ円）が、物の円・ほかの人の体・横になっている人に入っていたら外へ出す（ちゃんと描いている人だけ、毎こま）
@@ -1361,8 +1729,8 @@ async function main() {
       const sp = p.sleepAt || { ...p.home, yaw: 0 };
       if (p.mode === 'gohome') { pose = 'walk'; if (walkTo(p, p.routes.night, dt)) { p.mode = 'sleep'; p.t = 0; } else if (Math.hypot(p.pos.x - sp.x, p.pos.z - sp.z) > 2.4) keepApart(p); }
       else if (turnTo(p.ch, sp.yaw, dt) > 0.05) pose = 'idle'; // 寝る場所に着いたら、向きを変えてから
-      else pose = p.sleepPlace === 'tree' ? 'sit' : 'lie'; // ベッド・地面は横になる、木は幹にもたれて座る
-      p.ch.userData.lieY = sp.bed ? BED.h / 1.9 : 0;
+      else pose = sp.tree ? 'sit' : 'lie'; // ベッド・敷物・地面は横になる、木は幹にもたれて座る
+      p.ch.userData.lieY = sp.bed ? BED.h / 1.9 : sp.mat ? (MAT.h + 0.04) / 1.9 : 0;
       p.ch.visible = !(p.mode === 'sleep' && sp.inside); // 家の中の床で寝ている人は外から見えない
       p.ch.position.set(p.pos.x, 0, p.pos.z);
       if (p.lod === 'full') animate(p.ch,pose, time + (hash(p.v.key) % 100) / 10);
@@ -1412,11 +1780,12 @@ async function main() {
     } else if (p.phase === 1 && p.wander) {
       // 散歩：村のまわりの点を順に歩く（前を向いて歩く。着いたら次の点）
       setTool(p.ch, null); setCarry(p.ch, null); pose = 'walk';
-      if (!p.routes.w) { p.ri = 0; p.routes.w = routeAround(p.pos, freePt(wanderPt(p, ++p.wi)), walls); }
+      if (!p.routes.w) { p.ri = 0; for (let k = 0; k < 4 && !(p.routes.w && !p.routes.w.blocked); k++) p.routes.w = safeRoute(p.pos, wanderPt(p, ++p.wi)); } // 行けない所なら別の行き先
       if (walkTo(p, p.routes.w, dt)) p.routes.w = null;
     } else if (p.phase === 1) {
       setTool(p.ch, p.toolKey); setCarry(p.ch, null);
-      pose = p.pose;
+      pose = p.chat ? talkPose(p) : p.pose;
+      if (pose === 'fish') { const sf = fishShowOf(p, time); p.ch.userData.showFish = sf; if (sf) pose = 'showfish'; } // 釣った魚を持ち上げて見せる
       if (p.work.fx !== null) turnTo(p.ch, Math.atan2(p.work.fx - p.pos.x, p.work.fz - p.pos.z), dt); // 作業中だけ、木や岩の方を向く
       if (p.stay) setCarry(p.ch, null); // 休む・食べる・作る・見張りは、その時間のあいだその場で
       else if (p.mine ? workU(p, time) > workLen(p) : p.t > workLen(p)) { p.phase = 2; p.t = 0; p.w0 = null; }
@@ -1431,7 +1800,7 @@ async function main() {
       setTool(p.ch, null); setCarry(p.ch, null); pose = 'walk';
       if (walkTo(p, p.routes.talk, dt)) { p.phase = 6; p.t = 0; }
     } else if (p.phase === 6) {
-      pose = p.bubble.hidden ? 'idle' : 'talk';
+      pose = talkPose(p);
       turnTo(p.ch, Math.atan2(p.other.pos.x - p.pos.x, p.other.pos.z - p.pos.z), dt);
     } else if (p.phase === 7) {
       setTool(p.ch, p.toolKey); pose = 'walk';
@@ -1439,23 +1808,57 @@ async function main() {
     }
     keepApart(p);
     p.ch.position.set(p.pos.x, 0, p.pos.z);
-    if (p.lod === 'full') animate(p.ch,pose, time + (hash(p.v.key) % 100) / 10);
+    p.ch.userData.nod = pose === 'walk' && p.lod === 'full' ? passNod(p, time) : 0;
+    p.lastPose = pose;
+    if (p.lod === 'full') animate(p.ch,pose, time + (hash(p.v.key) % 100) / 10, GREET_POSE.has(pose) ? p.greetU : null);
+  }
+  // 立ち話の形：あいさつの間はお辞儀・手をふる・会釈、話している間は身ぶり
+  const GREET_POSE = new Set(['bow', 'wave', 'nod']);
+  function talkPose(p) { return p.greetU > 0 && p.greetU < 1 ? p.greetKind : p.bubble.hidden ? 'idle' : 'talk'; }
+  // すれちがう時の会釈：前から歩いてくる人が近くにいたら、1 回だけ小さくうなずく（0.5 秒ごとに見る）
+  function passNod(p, time) {
+    if (p.nodT !== undefined) { const u = (time - p.nodT) / 1.1; if (u < 1) return u < 0 ? 0 : Math.sin(u * Math.PI); if (u > 14) p.nodWho = null; }
+    if (time < (p.nodChk || 0)) return 0;
+    p.nodChk = time + 0.5;
+    const fx = Math.sin(p.ch.rotation.y), fz = Math.cos(p.ch.rotation.y);
+    for (const o of pgrid.near(p.pos.x, p.pos.z, 2.8)) {
+      if (o === p || o.lastPose !== 'walk' || !o.ch.visible || p.nodWho === o.v.key) continue;
+      const dx = o.pos.x - p.pos.x, dz = o.pos.z - p.pos.z, d = Math.hypot(dx, dz) || 1;
+      if ((fx * dx + fz * dz) / d < 0.55 || Math.sin(o.ch.rotation.y) * fx + Math.cos(o.ch.rotation.y) * fz > -0.3) continue; // 前にいて、こちらへ向かってくる人
+      p.nodT = time; p.nodWho = o.v.key; return 0;
+    }
+    return 0;
   }
 
   // ---------- 釣り：うき・糸・釣れた魚 ----------
   // 釣りをする人は時間で変わるので、うきと糸は初めて釣る時に作る
   const lineMat = new THREE.LineBasicMaterial({ color: 0xf4f4f4 });
-  const _tip = new THREE.Vector3();
+  const _tip = new THREE.Vector3(), _fishBox = new THREE.Box3();
   function updateFishing(time) {
-    if (!world.pond) return;
     for (const p of people) {
       const on = p.pose === 'fish' && p.phase === 1 && p.mode === 'day' && p.ch.visible;
       if (!on) { if (p.bob) { p.bob.visible = false; p.line.visible = false; } continue; }
       if (!p.bob) { p.bob = makeBobber(); scene.add(p.bob); p.line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), lineMat); scene.add(p.line); }
-      if (!p.bobAt) { const dx = world.pond.x - p.work.x, dz = world.pond.z - p.work.z, l = Math.hypot(dx, dz) || 1; p.bobAt = { x: p.work.x + (dx / l) * 2.4, z: p.work.z + (dz / l) * 2.4 }; }
+      if (!p.bobAt || p.bobFor !== p.work) { // うきは向いている方（池のまん中・海べなら沖）へ。海の面は池より低い
+        const sea = !!p.work.sea, tx = p.work.fx ?? (world.pond ? world.pond.x : p.work.x), tz = p.work.fz ?? (world.pond ? world.pond.z : p.work.z + 1);
+        const dx = tx - p.work.x, dz = tz - p.work.z, l = Math.hypot(dx, dz) || 1, d = sea ? 3.6 : 2.4;
+        p.bobAt = { x: p.work.x + (dx / l) * d, z: p.work.z + (dz / l) * d, y: sea ? -0.2 : 0 }; p.bobFor = p.work;
+      }
+      const sf = p.ch.userData.showFish;
+      if (sf) { // 魚を持ち上げて見せている間：うきと糸はしまい、頭の上に「フナ 23cm」（島の新記録は「新記録！」ときらきら）
+        p.bob.visible = false; p.line.visible = false;
+        const fo = p.ch.userData.parts && p.ch.userData.parts.fish, top = fo && fo.visible ? _fishBox.setFromObject(fo).max.y : 0; // 大きい魚は頭より上まで来るので、札はその上
+        const a = sf.k < 0.1 ? sf.k / 0.1 : sf.k > 0.85 ? (1 - sf.k) / 0.15 : 1, hy = Math.max(4.4, top + 0.45) + Math.min(sf.k, 0.15) * 2;
+        fx.plus(`${((config.items || {})[sf.key] || {}).name || ''} ${sf.cm}cm`, p.pos.x, hy, p.pos.z, a, sf.rec ? '#ffe27a' : '#ffffff', 1.4);
+        if (sf.rec) {
+          fx.plus('新記録！', p.pos.x, hy + 0.75 + Math.sin(time * 6) * 0.05, p.pos.z, a, '#ffcf3a', 1.5 + Math.sin(time * 8) * 0.06);
+          fx.glow('gold', p.pos.x, hy + 0.4, p.pos.z, a * 0.9, time, 1.5);
+        }
+        continue;
+      }
       p.bob.visible = true; p.line.visible = true;
       const f = fishCycle(time + (hash(p.v.key) % 100) / 10);
-      const y = 0.1 + Math.sin(time * 2.2) * 0.02 - f.sink * 0.16 + f.reel * 0.5;
+      const y = 0.1 + p.bobAt.y + Math.sin(time * 2.2) * (p.work.sea ? 0.05 : 0.02) - f.sink * 0.16 + f.reel * 0.5;
       const k = f.reel; // 釣り上げる時は、うきが手前へ
       p.bob.position.set(p.bobAt.x + (p.pos.x - p.bobAt.x) * k * 0.5, y, p.bobAt.z + (p.pos.z - p.bobAt.z) * k * 0.5);
       p.bob.userData.ring.scale.setScalar(1 + f.sink * 1.4);
@@ -1463,6 +1866,15 @@ async function main() {
       if (tool && tool.userData.tip) { tool.userData.tip.getWorldPosition(_tip); p.line.geometry.setFromPoints([_tip.clone(), p.bob.position.clone().setY(y + 0.25)]); }
       if (f.caught) fx.item('fish', p.bob.position.x, y + 0.2 + f.reel * 0.4, p.bob.position.z, time * 4, 1.3);
     }
+  }
+  // 釣り上げたあと約 2.8 秒（釣りの 1 回 7 秒のうち c が 0.9〜1.3）、その日に釣った魚（life の today.fish：[魚, cm, 新記録なら 1]）を順に持ち上げて見せる
+  function fishShowOf(p, time) {
+    const fl = ((life[p.v.key] || {}).today || {}).fish;
+    if (!fl || !fl.length || p.mode !== 'day') return null;
+    const tf = time + (hash(p.v.key) % 100) / 10, c = fishCycle(tf).c;
+    if (!(c >= 0.9 || c < 0.3)) return null;
+    const n = Math.floor((tf - 0.9 * 7) / 7), e = fl[((n % fl.length) + fl.length) % fl.length];
+    return { key: e[0], cm: e[1], rec: !!e[2], k: ((c - 0.9 + 1) % 1) / 0.4 };
   }
 
   // ---------- 動物：種や作物を持っている村人（life の lure）には、近くの野の動物がついてくる ----------
@@ -1652,6 +2064,7 @@ async function main() {
     placeProxies();
     if (mobs.length) { const R0 = stage.getBoundingClientRect(); ft.end(camera, R0.width, R0.height, R0.left, R0.top); }
     const undoShake = mobs.length ? ft.shake(camera, time) : null; // クリティカルの直後だけ少し画面をゆらす
+    updateTents(sky.n, dt);
     renderer.render(scene, camera);
     if (undoShake) undoShake();
     labels.render(scene, camera);
@@ -1686,8 +2099,8 @@ async function main() {
     const who = document.createElement('div');
     who.className = 'who';
     const now = hourOf(L, curHour);
-    const tb = titleBadges(v, config);
-    who.innerHTML = `<b>${esc(v.display)}</b>${tb ? `<span class="cardtitles">${tb}</span>` : ''}<span class="muted">${esc((now && `${curHour}時・${hourText(now)}`) || ACTION[L.action] || JOB[L.job] || '')}・${esc(homeName(L, world, config))}</span><span class="lvline">Lv${L.level || 1}・枠 ${L.slots || config.inventory.base}/${config.inventory.max}</span><span class="gauges">${gaugeHtml('heart', L.hp, (config.needs || {}).max || 20)}${gaugeHtml('food', L.hunger, (config.needs || {}).max || 20)}</span>`;
+    const tb = titleBadges(v, config, L);
+    who.innerHTML = `<b>${esc(v.display)}</b>${tb ? `<span class="cardtitles">${tb}</span>` : ''}<span class="muted">${esc((now && `${curHour}時・${hourText(now)}`) || ACTION[L.action] || JOB[L.job] || '')}・${esc(homeName(L, world, config, state))}</span><span class="lvline">Lv${L.level || 1}・枠 ${L.slots || config.inventory.base}/${config.inventory.max}</span>${gearNames(L, config.items).length ? `<span class="gearline">装備：${esc(gearNames(L, config.items).join('・'))}</span>` : ''}${bestFishText(L, config) ? `<span class="lvline">${esc(bestFishText(L, config))}</span>` : ''}${mbtiText(v, config) ? `<span class="lvline">${esc(mbtiText(v, config))}</span>` : ''}<span class="gauges">${gaugeHtml('heart', L.hp, (config.needs || {}).max || 20)}${gaugeHtml('food', L.hunger, (config.needs || {}).max || 20)}</span>`;
     const a = document.createElement('a');
     a.className = 'btn'; a.href = villagerUrl(v); a.textContent = 'くわしく';
     const x = document.createElement('button');
@@ -1714,10 +2127,14 @@ async function main() {
 }
 
 // 拠点の場所の投票中の帯（地図の上）。票はコメントを数えた数（15 分ごとの受付で数え直す）
-function baseBanner(v) {
+function baseBanner(v, cfg) {
   const n = v.votes || {};
   const tally = v.options.map((o) => `<span class="bv-opt"><i class="bv-k bv-${o.key}">${esc(o.key)}</i>${esc(o.name)} <b>${n[o.key] || 0}</b>票</span>`).join('');
-  return `<a class="basevote" href="vote.html"><span class="bv-title">拠点の場所を投票中！ コメントに A・B・C のどれかを書いてね</span><span class="bv-tally">${tally}</span></a>`;
+  // 投票の投稿の URL があれば、帯を押すとインスタの投稿（コメント欄）へ。なければ投票のページへ
+  // 投稿の URL が空なら、インスタのプロフィール（cfg.profileUrl）へ
+  const IG = /^https:\/\/(www\.)?instagram\.com\//;
+  const post = !cfg ? '' : IG.test(cfg.votePostUrl || '') ? cfg.votePostUrl : IG.test(cfg.profileUrl || '') ? cfg.profileUrl : '';
+  return `<a class="basevote" href="${post ? esc(post) + '" target="_blank" rel="noopener' : 'vote.html'}"><span class="bv-title">拠点の場所を投票中！ コメントに A・B・C のどれかを書いてね</span><span class="bv-tally">${tally}</span></a>`;
 }
 
 function renderPanel(D) {

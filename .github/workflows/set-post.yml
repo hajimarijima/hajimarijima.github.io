@@ -1,0 +1,46 @@
+# 町が読むインスタの投稿を、URL を貼るだけで変える（スマホの GitHub アプリ・サイトからでも）。
+# Actions →「投稿の URL を変える」→ Run workflow → URL を貼る → Run workflow。
+# data/config.json の votePostUrl（投票）／joinPostUrl（住みたい。足していく）を書きかえてコミットする。
+# 投稿の ID は tools/instagram.js が URL から自動で探す（次の join／daily から効く。ページのボタンもこの URL になる）。
+name: 投稿の URL を変える
+
+on:
+  workflow_dispatch:
+    inputs:
+      vote_url:
+        description: "投票の投稿の URL（変えない時は空。「消す」で消す）"
+        required: false
+        default: ""
+      join_url:
+        description: "住みたいの投稿の URL（足す。前の投稿も受け付けつづける。変えない時は空。「消す」で全部消す）"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: town
+  cancel-in-progress: false
+
+jobs:
+  set-post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: config.json を書きかえる
+        run: node tools/set_post.js
+        env:
+          VOTE_URL: ${{ inputs.vote_url }}
+          JOIN_URL: ${{ inputs.join_url }}
+      - name: コミット
+        run: |
+          git config user.name "town-bot"
+          git config user.email "town-bot@users.noreply.github.com"
+          git add data/config.json
+          if git diff --cached --quiet; then echo "変わっていないので、コミットしません"; exit 0; fi
+          git commit -m "投稿の URL を変えた"
+          git push || (git pull --rebase && git push)

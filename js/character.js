@@ -211,12 +211,17 @@ function makeTool(kind0) {
     const f = box(0.14, 0.2, 0.14, toolMats.flame, 0, 0.64, 0); f.castShadow = false; g.add(f);
     const f2 = box(0.08, 0.12, 0.08, toolMats.flameCore, 0, 0.78, 0); f2.castShadow = false; g.add(f2);
     g.userData.flame = [f, f2];
+  } else if (kind === 'hammer') {
+    // 鍛冶の金づち：木の柄に、鉄の四角い頭（打つ面は明るく）
+    g.add(box(0.06, 0.56, 0.06, toolMats.wood, 0, 0.18, 0));
+    g.add(box(0.13, 0.13, 0.26, toolMats.ironDark, 0, 0.47, 0.02));
+    g.add(box(0.135, 0.135, 0.04, toolMats.ironTip, 0, 0.47, 0.16));
   } else if (kind === 'basket') {
     g.add(box(0.28, 0.18, 0.22, toolMats.basket, 0, -0.05, 0.12));
     g.add(box(0.08, 0.06, 0.08, toolMats.berry, 0.05, 0.06, 0.1));
   }
   // 手に持つ道具は少し大きめにして、遠くからでも形が分かるようにする
-  g.userData.base = ['axe', 'pick', 'hoe', 'shovel', 'sword'].includes(kind) ? 1.35 : 1;
+  g.userData.base = ['axe', 'pick', 'hoe', 'shovel', 'sword', 'hammer'].includes(kind) ? 1.35 : 1;
   g.scale.setScalar(g.userData.base);
   return g;
 }
@@ -300,9 +305,95 @@ export function setAccent(ch, color) {
   const m = new THREE.MeshLambertMaterial({ color });
   const g = new THREE.Group();
   const scarf = box(8.8 * PX, 1.6 * PX, 4.8 * PX, m, 0, 5.4 * PX, 0); g.add(scarf);
-  const tail = box(1.6 * PX, 3 * PX, 0.8 * PX, m, 2 * PX, 3.4 * PX, 2.6 * PX); g.add(tail);
+  const tail = box(1.6 * PX, 3 * PX, 0.8 * PX, m, 2 * PX, 3.4 * PX, 2.6 * PX); g.add(tail); tail.visible = !P.armorBody; // 胴の防具を着ている時は、スカーフの先は防具の中
   const belt = box(8.7 * PX, 1.2 * PX, 4.7 * PX, m, 0, -5.2 * PX, 0); g.add(belt);
   P.torso.add(g); P.accent = g;
+}
+// 防具（鍛冶職人が作る）を体に重ねる。look = { head, body, feet }：'素材#色'（js/smithing.js の armorLook。例 'wool#f2eee4'）。
+//   体の部位を少しだけ大きくした外側の層（胴・腕の上・すねの下と足）で、体の形にぴったり沿う。
+//   板やボタンは貼らず、層のドット絵の模様で素材を見せる（羊毛＝白っぽい毛のまだら、革＝茶の濃淡とふちどり、鉄＝銀の明暗と鋲）。
+//   帽子は頭を包まず、てっぺん側だけの小さな帽子（顔と前髪・横の髪は見える）。胴の層は首のスカーフと腰の帯が見える高さまで
+const armorTexCache = {};
+const hashN = (a, b, c) => { let h = (a * 374761393 + b * 668265263 + c * 2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+// 1 面ぶんの絵（1px＝1 マス）。w×h マス、face で模様をずらす
+function armorFaceTex(tier, color, w, h, face) {
+  const key = [tier, color, w, h, face].join('|');
+  if (armorTexCache[key]) return armorTexCache[key];
+  if (typeof document === 'undefined') return null;
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const g = cv.getContext('2d'), base = new THREE.Color(color);
+  const put = (x, y, k) => { const c = base.clone().multiplyScalar(k); g.fillStyle = '#' + new THREE.Color(Math.min(1, c.r), Math.min(1, c.g), Math.min(1, c.b)).getHexString(); g.fillRect(x, y, 1, 1); };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const r = hashN(x + face * 31, y, w * 7 + h), edge = x === 0 || y === 0 || x === w - 1 || y === h - 1;
+    let k = 1;
+    if (tier === 'wool') {
+      // 白っぽい毛のまだら：明るい粒・少し暗い粒、下のふちは影
+      k = r < 0.28 ? 1.06 : r < 0.5 ? 0.9 : r < 0.56 ? 0.82 : 1;
+      if (y === h - 1) k *= 0.84;
+    } else if (tier === 'leather') {
+      // 茶の濃淡：ふちは濃くふちどり、その内側に明るい縫い目、面の中はまだら
+      k = 0.94 + r * 0.14;
+      if (edge) k = 0.62;
+      else if ((x === 1 || x === w - 2 || y === 1 || y === h - 2) && (x + y) % 2 === 0) k = 1.22;
+    } else {
+      // 鉄の明暗：上と左は光、下と右は影、すじ、四すみに鋲
+      k = 0.97 + r * 0.06 + (x % 3 === 0 ? -0.05 : 0);
+      if (y === 0 || x === 0) k = 1.16;
+      if (y === h - 1 || x === w - 1) k = 0.7;
+      if (w > 3 && h > 3 && (x === 1 || x === w - 2) && (y === 1 || y === h - 2)) k = 0.6;
+    }
+    put(x, y, k);
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.colorSpace = THREE.SRGBColorSpace;
+  return (armorTexCache[key] = t);
+}
+const armorMatCache = {};
+// 箱の 6 面（+x -x +y -y +z -z）それぞれに、面の大きさ（px）に合わせた模様
+function armorMats(tier, color, w, h, d) {
+  const key = [tier, color, w, h, d].join('|');
+  if (armorMatCache[key]) return armorMatCache[key];
+  const R = (n) => Math.max(1, Math.round(n));
+  const dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
+  const mats = dims.map(([a, b], i) => { const map = armorFaceTex(tier, color, R(a), R(b), i); return map ? new THREE.MeshLambertMaterial({ map }) : new THREE.MeshLambertMaterial({ color }); });
+  return (armorMatCache[key] = mats);
+}
+const armorPart = (look) => { const [tier, c] = String(look).split('#'); return { tier: tier || 'wool', color: '#' + (c || 'e6dcc4') }; };
+export function setArmor(ch, look) {
+  const P = ch.userData.parts;
+  const key = look ? ['head', 'body', 'feet'].map((k) => look[k] || '').join('|') : '';
+  if (P.armorKey === key) return;
+  for (const m of P.armor || []) m.parent && m.parent.remove(m);
+  P.armor = []; P.armorKey = key; P.armorBody = !!(look && look.body);
+  if (P.accent && P.accent.children[1]) P.accent.children[1].visible = !P.armorBody; // スカーフの先は胴の層の中
+  if (!look) return;
+  const add = (parent, A, w, h, d, x, y, z) => { const m = box(w * PX, h * PX, d * PX, armorMats(A.tier, A.color, w, h, d), x * PX, y * PX, z * PX); parent.add(m); P.armor.push(m); };
+  if (look.head) {
+    // 頭（0〜8px、スキンの帽子の層は 8.5 まで）のてっぺん側だけ：上 1.5px と、前に少し出たつば
+    const A = armorPart(look.head);
+    add(P.head, A, 9.4, 1.5, 9.4, 0, 8.55, 0);
+    add(P.head, A, 9.4, 0.6, 1.8, 0, 7.9, 5.4);
+  }
+  if (look.body) {
+    // 胴（8×12×4、上着の層は +0.5）を 0.75 ふくらませた層。高さは -4.5〜4.5（首のスカーフと腰の帯は見える）
+    const A = armorPart(look.body);
+    add(P.torso, A, 9.5, 9, 5.5, 0, 0, 0);
+    // 両腕の上側（肩から 5px）を 0.75 ふくらませた層。細い腕（3px）は細く
+    for (const arm of [P.rarm, P.larm]) {
+      const g0 = arm.children[0] && arm.children[0].geometry;
+      if (g0 && !g0.boundingBox) g0.computeBoundingBox();
+      const aw = g0 ? Math.round((g0.boundingBox.max.x - g0.boundingBox.min.x) / PX) : 4;
+      // 内側（胴の側）へはふくらませない（肩の上で頭の角に入らない）。外・前後・上へ 0.6〜0.9。奥行きは胴の層より少し大きく（前の面が重なってちらつかない）
+      const out = Math.sign(arm.position.x) || 1;
+      add(arm, A, aw + 0.75, 5.6, 5.8, out * 0.375, -2.2, 0);
+    }
+  }
+  if (look.feet) {
+    // 足とすねの下（脚 4×12×4 の下 5.4px）を 0.6 ふくらませた層。底は地面の高さ
+    const A = armorPart(look.feet);
+    // 左右のくつは内側で少し重なるので、左を わずかに大きくして同じ面が重ならない（ちらつかない）ようにする
+    [P.rleg, P.lleg].forEach((leg, i) => add(leg, A, 5.2 + i * 0.1, 5.45 + i * 0.1, 5.2 + i * 0.1, 0, -9.325 + i * 0.05, 0));
+  }
 }
 export function setCarry(ch, kind) {
   const P = ch.userData.parts;
@@ -329,7 +420,7 @@ export function setShield(ch, on) {
 }
 
 // 打った時に飛ぶかけら（石・木くず）
-const chipMats = { stone: new THREE.MeshLambertMaterial({ color: 0x8d9298 }), wood: new THREE.MeshLambertMaterial({ color: 0xc89a5e }) };
+const chipMats = { stone: new THREE.MeshLambertMaterial({ color: 0x8d9298 }), wood: new THREE.MeshLambertMaterial({ color: 0xc89a5e }), spark: new THREE.MeshBasicMaterial({ color: 0xffb030 }) };
 const chipGeo = new THREE.BoxGeometry(1.4 * PX, 1.4 * PX, 1.4 * PX);
 function chips(P, kind, p, hx, hy, hz) {
   if (!P.chips) {
@@ -368,9 +459,12 @@ export function animate(ch, pose, t, phase = null) {
   const B0 = ch.userData.base || { head: 24 * PX, torso: 18 * PX, arm: 24 * PX };
   P.head.position.y = B0.head; P.torso.position.y = B0.torso;
   P.rarm.position.y = B0.arm; P.larm.position.y = B0.arm;
+  P.head.position.z = 0; P.torso.position.z = 0; P.rarm.position.z = 0; P.larm.position.z = 0; P.torso.rotation.set(0, 0, 0); // お辞儀で前へ出した・倒した分をもどす
   for (const k of ['rarm', 'larm', 'rleg', 'lleg']) P[k].rotation.set(0, 0, 0);
   if (P.chips) P.chips.visible = false;
   if (P.tool) P.tool.rotation.x = Math.PI / 2;
+  if (P.hand) { P.hand.rotation.set(0, 0, 0); P.hand.position.x = 0; }
+  if (P.fish && pose !== 'showfish') { P.fish.visible = false; if (P.tool) P.tool.visible = true; }
   // 呼吸：上半身だけが小さく上下する（人ごとに周期をずらす）
   const breathe = (amp) => {
     const b = Math.sin((t / (3.2 + seed * 1.6) + seed) * Math.PI * 2) * amp * PX;
@@ -383,6 +477,20 @@ export function animate(ch, pose, t, phase = null) {
     if (pose === 'carry') { P.rarm.rotation.x = -1.2; P.larm.rotation.x = -1.2; P.rarm.rotation.z = 0.12; P.larm.rotation.z = -0.12; }
     else { P.rarm.rotation.x = -s * 0.9; P.larm.rotation.x = s * 0.9; }
     P.body.position.y = Math.abs(Math.cos(t * 6.2)) * 0.03;
+  } else if (pose === 'smith') {
+    // 金床で金づちをふるう：右手で小さく振りかぶって打ち下ろす（片手）。左手は金床の上の品を押さえる。打つと火花
+    const c = ((t + seed) * 1.7) % 1, up = -2.2, hit = -0.62, H0 = 0.5, H1 = 0.66;
+    let a;
+    if (c < H0) { const k = c / H0, e = k * k * (3 - 2 * k); a = hit + (up - hit) * e; }
+    else if (c < H1) { const k = (c - H0) / (H1 - H0); a = up + (hit - up) * k * k; }
+    else { const k = (c - H1) / (1 - H1); a = hit - Math.sin(Math.min(1, k * 3) * Math.PI) * 0.1; }
+    P.rarm.rotation.set(a, 0, 0.12);
+    if (P.tool) P.tool.rotation.x = Math.PI / 2 + (c < H0 ? -0.35 : 0.3);
+    P.larm.rotation.set(-0.72, 0, -0.22);
+    P.body.rotation.x = 0.16; P.head.rotation.x = 0.35;
+    P.rleg.rotation.x = 0.14; P.lleg.rotation.x = -0.14;
+    breathe(0.2);
+    chips(P, 'spark', c >= H1 ? (c - H1) / 0.25 : -1, -1 * PX, 12.5 * PX, 11 * PX);
   } else if (pose === 'dig' || pose === 'chop' || pose === 'strike') {
     // 振りかぶる → 振り下ろす → 当たって小さく止まる → もどす
     const dig = pose === 'dig';
@@ -422,6 +530,8 @@ export function animate(ch, pose, t, phase = null) {
     if (P.tool) P.tool.rotation.x = Math.PI / 2 + 0.4 - f.reel * 0.5; // さおは前へ 35 度ほど上向き。釣り上げる時に立てる
     P.body.rotation.x = 0.06 - f.reel * 0.12; P.head.rotation.x = 0.25 - f.reel * 0.2;
     P.rleg.rotation.x = 0.12; P.lleg.rotation.x = -0.12;
+  } else if (pose === 'showfish') {
+    showFishPose(ch, P, B0, t);
   } else if (pose === 'gather') {
     // （下の共通処理で盾を上げる）
     const c = Math.sin(t * 3);
@@ -469,6 +579,8 @@ export function animate(ch, pose, t, phase = null) {
       // 腕は肩から離さず、ひじ下を少し前に出す小さな手ぶり（z は外向きにして胸へめりこませない）
       P.rarm.rotation.x = -0.3 - g * 0.3; P.rarm.rotation.y = 0; P.rarm.rotation.z = -0.08;
       P.head.rotation.y = Math.sin(t * 0.7 + seed) * 0.1;
+    } else if (pose === 'bow' || pose === 'nod' || pose === 'wave') {
+      greetPose(ch, P, pose, phase ?? 0, t); // あいさつ（phase：0..1 の 1 回分）
     } else if (u < 0.22) {
       // 首を回して周りを見る
       const k = u / 0.22;
@@ -497,6 +609,10 @@ export function animate(ch, pose, t, phase = null) {
     if (pose === 'talk' && !P.tool) { P.rarm.rotation.x *= 0.35; P.rarm.rotation.z = -0.04; }
     // 振る時も、手を体のまん中へ寄せて、道具が体の前を通るようにする
     if (P.tool && (pose === 'dig' || pose === 'chop' || pose === 'strike') && (ch.userData.oneHand || pose === 'strike')) P.rarm.rotation.z = 0.5;
+  } else if (P.tool && (pose === 'idle' || pose === 'walk' || pose === 'talk') && P.toolKind !== 'basket' && !String(P.toolKind).startsWith('torch')) {
+    // 道具を下げて持つ時は、握った手から少し外・少し下へ向ける（斜め前から見て、柄が腰や服に入っているように見えない）
+    // 柄の後ろの端が胴（ベストの厚み）へ寄らないよう、握る所を腕の外寄りにして、外へ向ける角度は小さめ
+    P.hand.rotation.set(0.3, -0.28, 0); P.hand.position.x = -0.7 * PX;
   }
   // 盾を持っていて矢が来ている時は、左腕を前に上げて盾で受ける（少し身をかがめる）
   if (P.shield) {
@@ -505,8 +621,102 @@ export function animate(ch, pose, t, phase = null) {
     P.larm.rotation.set(up ? -1.3 : -0.55, 0, up ? -0.55 : -0.42);
     if (up) { P.body.rotation.x = Math.max(P.body.rotation.x, 0.1); P.head.rotation.x = -0.05; }
   }
+  if (ch.userData.nod && pose === 'walk') P.head.rotation.x += 0.32 * ch.userData.nod; // すれちがう時の会釈（town.js が 0..1 を入れる）
   if (ch.userData.smooth) smoothPose(ch, P, t);
   if (P.shield) placeShield(P);
+}
+// ---------- あいさつ：お辞儀（腰から曲げる）・会釈（首と少しだけ腰）・手をふる ----------
+// u：0..1 の 1 回分。a まで曲げる → b まで止める → もどす
+const easeIO = (k) => k * k * (3 - 2 * k);
+const bell = (u, a, b) => (u <= 0 || u >= 1 ? 0 : u < a ? easeIO(u / a) : u < b ? 1 : easeIO((1 - u) / (1 - b)));
+// 腰（脚の付け根）を軸に、胴・頭・両腕を前へ th だけ回す。脚と足は地面に立ったまま。
+// 軸は胴の下の「後ろの角」：後ろは脚の上とつながったまま、前の角は脚の中へ下がる（すき間ができない）
+function bendWaist(P, th) {
+  const hip = P.rleg.position.y, bz = -2 * PX * P.torso.scale.z, c = Math.cos(th), s = Math.sin(th);
+  for (const k of ['torso', 'head', 'rarm', 'larm']) {
+    const o = P[k], dy = o.position.y - hip, dz = o.position.z - bz;
+    o.position.y = hip + dy * c - dz * s; o.position.z = bz + dy * s + dz * c; o.rotation.x += th;
+  }
+}
+function greetPose(ch, P, pose, u, t) {
+  const C = ch.userData.chibi;
+  if (pose === 'wave') {
+    // 右手を顔の横へ上げて、左右に小さくふる。腕は胴の横にあるので、真上へ回すと付け根が肩の上に浮く。
+    // 回す点を肩の角の 2.5px 下（腕の太さの まん中あたり）へ下げ、上げた腕の根元が胴の横に重なってつながって見えるようにする
+    const k = bell(u, 0.2, 0.8), w = Math.sin(t * 11) * bell(u, 0.3, 0.72);
+    P.rarm.position.y -= 3.5 * PX * P.rarm.scale.y * k;
+    P.rarm.rotation.set(-2.95 * k, 0, -(C ? 1.0 : 0.24 + 0.1 * w) * k); // 外へ 8〜20 度だけ開く（開きすぎると根元がはなれる）
+    P.larm.rotation.set(0, 0, 0.06);
+    P.head.rotation.z = 0.07 * k; P.head.rotation.y = 0;
+    return;
+  }
+  const bow = pose === 'bow', k = bell(u, bow ? 0.32 : 0.3, bow ? 0.62 : 0.48);
+  // 腰から 24 度ほど（会釈より深いお辞儀）。向かい合う 2 人のあいだ（town.js の 2.1）で、頭が相手に当たらない深さ
+  const th = (bow ? (C ? 0.3 : 0.42) : (C ? 0.05 : 0.1)) * k;
+  P.head.rotation.y = 0;
+  bendWaist(P, th);
+  P.head.rotation.x += (bow ? 0.06 : 0.38) * k;
+  // 腕は胴にそわせる（気をつけの形のまま体といっしょに倒す）。真下へたらすと横から胴がかくれて、折れて見える
+  P.rarm.rotation.x -= th * 0.12; P.larm.rotation.x -= th * 0.12;
+  P.rarm.rotation.z = -0.06; P.larm.rotation.z = 0.06;
+}
+// ---------- 釣った魚を持ち上げて見せる（pose 'showfish'。ch.userData.showFish = { cm, key }） ----------
+// 魚の模型は長さ 1 の箱の組み合わせ（頭が +x）。大きさは cm で決める（村人の背 2（=32px）を約 170cm として、1cm ≒ 0.19px）。
+// 形の外側：x ±0.5、y -0.16〜+0.2、z ±0.075（目まで）。めり込まないように、置き場所はこの外側で計算する
+const FISH_COL = { fish_funa: [0x7f8456, 0xc9c79a], fish_masu: [0x9ea3b8, 0xe7b8c4], fish_koi: [0xe2752c, 0xf6eee0], fish_namazu: [0x55503f, 0x9a9278], fish_hotaru: [0x9fd86a, 0xe9ffb0], fish_tsuki: [0xd6cfa6, 0xf4f0d8],
+  fish_dojou: [0x7a6a48, 0xc8b88a], fish_bluegill: [0x5f7a5a, 0xe0a050], fish_ugui: [0x8a96a0, 0xd9b07a], fish_aji: [0x6f8fa8, 0xe8ecef], fish_saba: [0x3f7a8c, 0xdfe6ea],
+  fish_mebaru: [0x6a5a5e, 0xb9a8a0], fish_kasago: [0xb5502e, 0xe8a070], fish_tai: [0xe06a6a, 0xf8d8d0], fish_maguro: [0x2c3e5c, 0xc8d0d8], fish_hoshi: [0x2a3a78, 0x9fc8ff] };
+export const fishLenPx = (cm) => Math.max(2.2, (+cm || 0) * 0.188);
+function makeShowFish(key) {
+  const [c1, c2] = FISH_COL[key] || [0x8a9aa8, 0xdfe6ea];
+  const m1 = new THREE.MeshLambertMaterial({ color: c1 }), m2 = new THREE.MeshLambertMaterial({ color: c2 }), me = new THREE.MeshLambertMaterial({ color: 0x15171a });
+  const g = new THREE.Group();
+  const b = (w, h, d, x, y, z, m) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); o.castShadow = true; g.add(o); };
+  b(0.62, 0.28, 0.14, 0, 0, 0, m1);            // 胴
+  b(0.5, 0.06, 0.145, 0, -0.115, 0, m2);        // 白っぽいおなか
+  b(0.18, 0.22, 0.12, 0.40, -0.01, 0, m1);      // 頭
+  b(0.1, 0.14, 0.08, -0.36, 0, 0, m1);          // 尾の付け根
+  b(0.08, 0.32, 0.04, -0.45, 0, 0, m2);         // 尾びれ
+  b(0.22, 0.06, 0.03, -0.02, 0.17, 0, m2);      // 背びれ
+  b(0.04, 0.04, 0.15, 0.43, 0.04, 0, me);       // 目（左右）
+  g.userData.key = key;
+  return g;
+}
+function showFishPose(ch, P, B0, t) {
+  const sf = ch.userData.showFish || { cm: 20 };
+  if (!P.fish || P.fish.userData.key !== sf.key) { if (P.fish) P.body.remove(P.fish); P.fish = makeShowFish(sf.key); P.body.add(P.fish); }
+  const F = P.fish; F.visible = true;
+  if (P.tool) P.tool.visible = false; // 釣りざおは置いて、手で持つ
+  // 腕の長さと厚みの半分は、そで（上着の層、0.5px 大きい）までふくめる
+  const S = Math.abs(P.rarm.position.x), Ys = B0.arm, armLen = 12.25 * PX * P.rarm.scale.y, armHalf = 2.25 * PX * P.rarm.scale.z;
+  const chibi = !!ch.userData.chibi;
+  let L = fishLenPx(sf.cm) * PX;
+  if (chibi) L = Math.max(1.3 * PX, Math.min(L * 0.6, 6.5 * PX)); // 2 頭身は腕が短いので、小さめにして片手で下げる
+  const wag = Math.sin(t * 9) * 0.12; // 魚がぴちぴち動く（縦の軸のまわり）
+  F.scale.setScalar(L);
+  P.body.rotation.x = -0.05; P.head.rotation.x = 0.12; // 少し胸をはって、魚を見る
+  P.rleg.rotation.x = 0.06; P.lleg.rotation.x = -0.06;
+  if (!chibi && L >= 10 * PX) {
+    // 大きい魚：両腕を前へ水平に出し、魚を手の上にのせて抱える。腕の上の面（肩の高さ＋腕の厚みの半分）より上に魚の下の面
+    // マグロのように腕の幅より長い魚は、手を広げすぎず（φ は -0.64 まで）、はみ出したまま腕にのせる。顔に当たらないよう、魚の胸がわの面は頭より前
+    const hx = Math.min(Math.max(S, L / 2 - 1.2 * PX), S + armLen * 0.6), phi = Math.asin(Math.max(-1, Math.min(1, (S - hx) / armLen)));
+    P.rarm.rotation.set(-Math.PI / 2, 0, phi); P.larm.rotation.set(-Math.PI / 2, 0, -phi);
+    F.rotation.set(0, wag, 0);
+    F.position.set(0, Ys + armHalf + 0.16 * L + 0.1 * PX, Math.max(armLen * Math.cos(phi) - 1.5 * PX, 6 * PX + 0.09 * L));
+  } else if (!chibi) {
+    // 小さい魚：右手を前へまっすぐ出し、指先で尾をつまんで下げる（魚は手の先の面より前。頭が下）
+    P.rarm.rotation.set(-Math.PI / 2, 0, 0); P.larm.rotation.set(0.05, 0, -0.05);
+    F.rotation.set(0, wag, -Math.PI / 2);
+    F.position.set(-S, Ys + 0.3 * PX - 0.5 * L, armLen + 0.075 * L + 0.04 * L + 0.1 * PX);
+  } else {
+    // 2 頭身：右手を前下へ出し、腕のいちばん低い所（手の先の下の角）より下に魚を下げる
+    const th = 1.2;
+    P.rarm.rotation.set(-th, 0, 0); P.larm.rotation.set(0.05, 0, -0.05);
+    const tipY = Ys - armLen * Math.cos(th), tipZ = armLen * Math.sin(th);
+    const low = tipY - armHalf * Math.sin(th);
+    F.rotation.set(0, wag, -Math.PI / 2);
+    F.position.set(-S, low - 0.1 * PX - 0.5 * L, tipZ);
+  }
 }
 // 盾は腕の子にせず体に付け、毎コマ「左手の先」の少し前へ置く。板は縦で前向き（受ける時は少し上向き）。
 // 腕は必ず板の後ろ側に来るので、どの姿勢でも腕や手が板を突き抜けない。手は板の裏の取っ手を握る位置になる

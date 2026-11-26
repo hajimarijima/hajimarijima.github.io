@@ -378,6 +378,79 @@ const ICONS = {
     put(px, 14, 4, [20, 20, 28]); put(px, 13, 4, [235, 235, 245]);
     for (const [x, y] of [[9, 9], [10, 9], [6, 9]]) put(px, x, y, hex('#f4dc6a'));
   },
+  // ---- 池の魚（ふえた分） ----
+  // ドジョウ：細長い茶色の体に黒い点、口ひげ
+  fish_dojou(px) {
+    const g = shapeGrid();
+    for (const [x0, y0, x1, y1] of [[2.2, 9.2, 6, 8.2], [6, 8.2, 10, 9.6], [10, 9.6, 13.5, 8.4]]) line(g, x0, y0, x1, y1, 3.4, 'b');
+    for (const [x0, y0, x1, y1] of [[3, 10.5, 6, 9.7], [6, 9.7, 10, 11]]) line(g, x0, y0, x1, y1, 1.1, 'w');
+    poly(g, [[13, 8.6], [15.5, 6.8], [15.5, 10.6]], 't');
+    puffy(px, g, { b: { c: hex('#7a6444'), shine: 0.3 }, w: { c: hex('#c8b488'), flat: true }, t: { c: hex('#5e4c34') } }, 'dojou');
+    for (const [x, y] of [[5, 8], [8, 8], [11, 8], [7, 9], [10, 9]]) put(px, x, y, hex('#3a2c1c'));
+    put(px, 2, 9, [20, 20, 24]); put(px, 2, 8, [235, 235, 235]);
+    for (const [x, y] of [[0, 10], [1, 10], [0, 11]]) put(px, x, y, hex('#2e2a24'));
+  },
+  // ブルーギル：体高のある丸い体、えらぶたの青黒い点、オレンジの腹
+  fish_bluegill(px) {
+    fishBody(px, { back: '#5c7650', belly: '#e49a48', seed: 'gill', ry: 4.1, rx: 5.2, by: 10.6, bry: 1.8 });
+    put(px, 6, 8, hex('#1c2a48')); put(px, 6, 9, hex('#2c3c66')); // えらぶたの青黒い点
+    for (const x of [8, 11]) for (let y = 6; y <= 8; y++) put(px, x, y, tone(hex('#5c7650'), 0.8)); // うすい縦じま
+  },
+  // ウグイ：細めの銀色の体に、腹の赤い線（婚姻色）
+  fish_ugui(px) {
+    fishBody(px, { back: '#7f8c96', belly: '#e2e6e8', seed: 'ugui', ry: 2.7, bry: 1.3 });
+    for (let x = 5; x <= 11; x++) put(px, x, 10, tone(hex('#d8603a'), x === 8 ? 1.1 : 0.95));
+  },
+  // ---- 海の魚 ----
+  // アジ：青みの背と銀の腹、横に「ぜいご」（とげのあるうろこ）の線、切れこんだ尾
+  fish_aji(px) {
+    fishBody(px, { back: '#5f84a0', belly: '#e9eef2', seed: 'aji', ry: 2.9, fork: true });
+    for (let x = 6; x <= 12; x++) put(px, x, 9, tone(hex('#c9d4dc'), x % 2 ? 0.8 : 1.05));
+    put(px, 5, 7, hex('#2a3440'));
+  },
+  // サバ：青緑の背に黒い波もよう、銀の腹
+  fish_saba(px) {
+    fishBody(px, { back: '#3c7a88', belly: '#dfe6ea', seed: 'saba', ry: 2.9, rx: 5.9, fork: true });
+    for (const [x, y] of [[6, 6], [7, 7], [8, 6], [9, 6], [10, 7], [11, 6], [7, 8], [9, 8], [11, 8], [12, 7]]) put(px, x, y, hex('#1c3c46'));
+  },
+  // メバル：大きな目（目張）、こげ茶の体にうすい横じま
+  fish_mebaru(px) {
+    fishBody(px, { back: '#5e5056', belly: '#b8a69c', seed: 'mebaru', ry: 3.4, eye: false });
+    for (const x of [7, 10]) for (let y = 6; y <= 9; y++) put(px, x, y, tone(hex('#5e5056'), 0.82));
+    for (const [x, y, c] of [[3, 7, [18, 16, 20]], [4, 7, [18, 16, 20]], [3, 8, [18, 16, 20]], [4, 8, [40, 34, 30]], [3, 6, [240, 236, 220]], [4, 6, [200, 190, 160]]]) put(px, x, y, c);
+  },
+  // カサゴ：赤い体にまだらもよう、とげとげの背びれ、大きな頭
+  fish_kasago(px) {
+    const g = shapeGrid();
+    ellipse(g, 7.4, 9, 5.4, 3.3, 'b'); ellipse(g, 7.6, 10.4, 4.4, 1.5, 'w');
+    poly(g, [[12.3, 9], [15.5, 6.2], [15.5, 12.2]], 't');
+    poly(g, [[4.5, 6.2], [5, 3.6], [6.2, 5.6], [7, 3.4], [8.2, 5.6], [9, 3.8], [10, 5.8], [10.8, 4.6], [11.4, 6.6]], 't'); // とげの背びれ
+    puffy(px, g, { b: { c: hex('#b8502c'), shine: 0.3, grain: 0.1 }, w: { c: hex('#eaa476'), flat: true }, t: { c: hex('#8a3a20') } }, 'kasago');
+    for (const [x, y] of [[6, 8], [9, 7], [10, 9], [8, 10], [12, 8]]) put(px, x, y, hex('#6a2414'));
+    put(px, 4, 8, [20, 20, 24]); put(px, 4, 7, [240, 240, 240]);
+  },
+  // タイ：体高のある桃色の体、背に青い点、つや
+  fish_tai(px) {
+    fishBody(px, { back: '#dc6466', belly: '#f6d6cc', seed: 'tai', ry: 3.9, by: 10.4, bry: 1.7, shine: 0.5 });
+    for (const [x, y] of [[7, 6], [9, 6], [10, 7], [8, 7], [11, 8]]) put(px, x, y, hex('#7ad0ff'));
+  },
+  // マグロ：マスいっぱいの紡錘形。紺の背・銀の腹・黄色い小さなひれ・三日月の尾（ごくまれな大物）
+  fish_maguro(px) {
+    const g = shapeGrid();
+    ellipse(g, 7, 8.5, 6.6, 3.3, 'b'); ellipse(g, 7, 9.9, 5.8, 1.7, 'w');
+    poly(g, [[12.6, 8.5], [15.8, 3.2], [14.4, 8.5], [15.8, 13.8]], 't');
+    poly(g, [[5.5, 5.6], [8, 3], [8.6, 5.4]], 't'); poly(g, [[6, 11.4], [8, 13.6], [8.4, 11.6]], 't');
+    puffy(px, g, { b: { c: hex('#2a3c5c'), shine: 0.45 }, w: { c: hex('#c6ced8'), shine: 0.35, flat: true }, t: { c: hex('#1e2a44') } }, 'maguro');
+    for (const [x, y] of [[10, 5], [11, 6], [12, 6], [10, 12], [11, 11], [12, 11]]) put(px, x, y, hex('#f2c83a')); // 小さな黄色いひれ
+    for (let x = 4; x <= 11; x++) put(px, x, 8, tone(hex('#3e6088'), 1.05));
+    put(px, 2, 8, [20, 20, 24]); put(px, 2, 7, [240, 240, 240]);
+  },
+  // ホシアカリ：夜の海べだけ。夜空の色の体に星の粒が光り、ひれのふちがうすく光る（少しふしぎな魚）
+  fish_hoshi(px) {
+    fishBody(px, { back: '#22306c', belly: '#5a6ab8', seed: 'hoshi', ry: 3.1, fin: '#7fb4ff', shine: 0.5 });
+    for (const [x, y, k] of [[6, 7, 1.15], [9, 6, 1.0], [11, 8, 1.2], [8, 9, 0.9], [12, 10, 0.85]]) put(px, x, y, tone(hex('#fff4b0'), k));
+    put(px, 10, 7, hex('#bfe0ff'));
+  },
   // ベッド：木の枠に赤い掛け布団、頭の側に白いまくら（斜めから見た箱）
   bed(px) {
     // 左が頭の板、まくら、掛け布団（上の面と前の垂れ）、木の枠、脚。光は左上から
@@ -627,6 +700,16 @@ function fishIcon(px, back, belly, seed, whisker) {
   put(px, 4, 8, [20, 20, 24]); put(px, 4, 7, [240, 240, 240]);
   if (whisker) { put(px, 1, 10, hex('#2e2a24')); put(px, 2, 10, hex('#2e2a24')); put(px, 1, 7, hex('#2e2a24')); }
 }
+// fishIcon の形を変えられる版（ふえた魚用）：rx/ry 体の大きさ、by/bry 腹、fork 切れこんだ尾、fin ひれの色、eye 目を描くか
+function fishBody(px, { back, belly, seed, rx = 5.6, ry = 3.1, by = 9.8, bry = 1.6, fork = false, fin = null, shine = 0.35, eye = true }) {
+  const g = shapeGrid(), cy = 8.5;
+  ellipse(g, 7.6, cy, rx, ry, 'b'); ellipse(g, 7.6, by, rx - 0.8, bry, 'w');
+  const tx = 7.6 + rx - 0.7;
+  poly(g, fork ? [[tx, cy], [15.6, cy - 3.6], [14.2, cy], [15.6, cy + 3.6]] : [[tx, cy], [15.5, cy - 3.5], [15.5, cy + 3.5]], 't');
+  poly(g, [[6, cy - ry + 0.4], [9.5, cy - ry - 1.2], [10, cy - ry + 0.6]], 't');
+  puffy(px, g, { b: { c: hex(back), shine }, w: { c: hex(belly), shine: 0.3, flat: true }, t: { c: fin ? hex(fin) : tone(hex(back), 0.75) } }, seed);
+  if (eye) { put(px, 4, 8, [20, 20, 24]); put(px, 4, 7, [240, 240, 240]); }
+}
 function flower(px, petal, seed) {
   const g = shapeGrid();
   line(g, 8, 15, 8, 8, 1.4, 's');
@@ -639,8 +722,26 @@ function flower(px, petal, seed) {
 (async () => {
 TA = await import(require('url').pathToFileURL(path.join(__dirname, '..', 'js', 'toolart.js')).href);
 fs.mkdirSync(OUT, { recursive: true });
-for (const [name, draw] of Object.entries(ICONS)) { const px = canvas(); draw(px); writePNG(path.join(OUT, name + '.png'), S, S, px); }
-console.log('アイコンを ' + Object.keys(ICONS).length + ' 個作りました: ' + OUT);
+// ICONS_ONLY=fish_ のように名前の頭を渡すと、その絵だけ作る（ほかの絵と video/ の一覧は作らない）。
+// FISH_SHEET=パス で、魚の絵を 8 倍で並べた見本を書き出す
+const ONLY = process.env.ICONS_ONLY || '';
+const LIST = Object.entries(ICONS).filter(([name]) => name.startsWith(ONLY));
+for (const [name, draw] of LIST) { const px = canvas(); draw(px); writePNG(path.join(OUT, name + '.png'), S, S, px); }
+console.log('アイコンを ' + LIST.length + ' 個作りました: ' + OUT);
+if (process.env.FISH_SHEET) {
+  const FL = Object.keys(ICONS).filter((k) => k.startsWith('fish_')), Z = 8, CELL = S * Z + 16, COLS = 8;
+  const W = CELL * COLS + 16, H = CELL * Math.ceil(FL.length / COLS) + 16, sheet = new Uint8Array(W * H * 4);
+  for (let i = 0; i < W * H; i++) { sheet[i * 4] = 139; sheet[i * 4 + 1] = 139; sheet[i * 4 + 2] = 139; sheet[i * 4 + 3] = 255; }
+  FL.forEach((k, n) => {
+    const px = canvas(); ICONS[k](px); const ox = 8 + (n % COLS) * CELL, oy = 8 + Math.floor(n / COLS) * CELL;
+    for (let y = 0; y < S * Z; y++) for (let x = 0; x < S * Z; x++) {
+      const si = (Math.floor(y / Z) * S + Math.floor(x / Z)) * 4; if (!px[si + 3]) continue;
+      const di = ((oy + y) * W + ox + x) * 4; sheet[di] = px[si]; sheet[di + 1] = px[si + 1]; sheet[di + 2] = px[si + 2];
+    }
+  });
+  writePNG(process.env.FISH_SHEET, W, H, sheet); console.log('魚の見本: ' + process.env.FISH_SHEET + '（' + FL.join(' ') + '）');
+}
+if (ONLY) return;
 
 // 道具一覧（目で確かめる用）：横 = つるはし・斧・シャベル・くわ・剣・釣りざお、縦 = 木・石・鉄・金・ダイヤ。1 マス 16px を 6 倍
 {

@@ -111,8 +111,9 @@ function parseStartTool(text, startTools, { enemies = false } = {}) {
 const startToolByLabel = (startTools, label) => ((startTools && startTools.options) || []).find((o) => o.label === label) || null;
 const startToolById = (startTools, id) => ((startTools && startTools.options) || []).find((o) => o.id === id) || null;
 
-function registrationsFrom(comments, word, startTools, opts) {
-  // 古い順に見て、1 人 1 回。最後の名前を使う。道具・誕生日・好きな食べ物の言葉は、書いてある最後のものを使う
+function registrationsFrom(comments, word, startTools, opts = {}) {
+  // 古い順に見て、1 人 1 回。最後の名前を使う。道具・誕生日・好きな食べ物・MBTI の言葉は、書いてある最後のものを使う。
+  // 値ごとに、書いたコメントの時刻（bdAt・foodAt・mbtiAt）も持つ（あとから書き直した値が勝つように。applyCommentProfiles）
   const byUser = new Map();
   for (const c of [...comments].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))) {
     if (!isJoin(c.text, word)) continue;
@@ -120,13 +121,12 @@ function registrationsFrom(comments, word, startTools, opts) {
     const id = u.igId ? 'ig:' + u.igId : 'user:' + norm(u.username).toLowerCase();
     const prev = byUser.get(id);
     const tool = startTools ? parseStartTool(c.text, startTools, opts) : null;
-    const r = { ...u, firstAt: prev ? prev.firstAt : c.timestamp };
-    const st = tool || (prev && prev.startTool);
-    if (st) r.startTool = st;
-    const bd = parseBirthday(c.text) || (prev && prev.birthday);
-    if (bd) r.birthday = bd;
-    const fd = parseFood(c.text) || (prev && prev.food);
-    if (fd) r.food = fd;
+    const r = { ...(prev || {}), ...u, firstAt: prev ? prev.firstAt : c.timestamp };
+    if (tool) r.startTool = tool;
+    const p = parseCommentProfile(c.text, { word, startTools, mbti: opts.mbti !== false, join: true });
+    if (p.birthday) { r.birthday = p.birthday; r.bdAt = c.timestamp; }
+    if (p.food) { r.food = p.food; r.foodAt = c.timestamp; }
+    if (p.mbti) { r.mbti = p.mbti; r.mbtiAT = p.mbtiAT || null; r.mbtiAt = c.timestamp; }
     byUser.set(id, r);
   }
   return [...byUser.values()];
@@ -188,6 +188,133 @@ function parseFood(text) {
     return null;
   }
   return knownFood(t);
+}
+
+// ---------- 1 つのコメントにまとめて書いたプロフィール ----------
+// 「住みたい ピッケル 12月11日 リンゴ」「住みたい\nピッケル\n12/11\nりんご\nINFP」「誕生日 12/11」「好きな食べ物 りんご」「MBTI INFP」
+// URL・@名前・#タグ・絵文字は読まない（URL の中の「ENTJ」や「3/14」を拾わないため）
+const cleanText = (text) => norm(text)
+  .replace(/https?:\/\/\S+|www\.\S+|\S+\.(?:com|jp|net|org|io|me|co|ly|app|dev)(?:\/\S*)?/gi, ' ')
+  .replace(/[@#＃][^\s、,]+/g, ' ');
+// MBTI（16 タイプ。大文字小文字・全角は問わない）。「INFP-T」「infp-a」「INFPT」の A/T も読む。なければ null
+const MBTI_RE = /(?<![A-Za-z0-9_])([EI][NS][TF][JP])(?:[-_]?([AT]))?(?![A-Za-z0-9_])/i;
+function parseMbti(text) {
+  const m = cleanText(text).match(MBTI_RE);
+  if (!m) return null;
+  return { mbti: m[1].toUpperCase(), mbtiAT: m[2] ? m[2].toUpperCase() : null };
+}
+const BDAY_LABEL = /(?:誕生日|たんじょうび|誕生|生年月日|birthday)/i;
+const MBTI_LABEL = /MBTI|エムビーティーアイ/i;
+// 食べ物にしない言葉（あいさつ・気持ち）。まとめて書いたコメントの「残った 1 語」を食べ物にする時だけ使う
+// あいさつ・気持ち・わたし・よく使う言葉・「〇〇さん」の呼びかけ・文の終わり（です・ます・た・を…）
+const NOT_FOOD = new RegExp([
+  'よろしく|宜しく|お願い|おねがい|楽しみ|たのしみ|楽し|たのし|ありがと|かわいい|可愛い|すごい|すてき|素敵|いいね|最高|さいこう|はじめまして|初めまして|こんにち|こんばん|おはよう',
+  'フォロー|コメント|参加|プロフ|誕生|食べ物|たべもの|好物|好き|すき|大好き|わたし|あたし|私|僕|ぼく|俺|おれ|自分|ぜひ|是非|絶対|ぜったい|めっちゃ|とても|すごく|ほんと|本当|みんな|一緒|いっしょ|今日|明日',
+  '^(島|町|村|ここ|そこ|この|その|また|まだ|もう|あと|これ|それ|うち)(に|で|へ|も|は)?$',
+  '(さん|ちゃん|くん|君|様|さま|氏|殿)$',
+  '(です|ます|でした|でーす|たい|した|する|って|けど|よね|かな|そう|ね|よ|な|を|は|の|た|だ|!|\\?)$',
+].join('|'));
+// 1 つのコメントから、誕生日・好きな食べ物・MBTI を読む。
+//   join: 「住みたい」のコメントなら、名札（誕生日・好きな食べ物・MBTI）なしの「12/11」「りんご」「INFP」も読む。
+//         false（住んでいる人のあとからのコメント）なら、名札のある値と、MBTI だけのコメント（「ENFP」）だけを読む
+function parseCommentProfile(text, { word = null, startTools = null, mbti = true, join = true } = {}) {
+  const t = cleanText(text);
+  const out = {};
+  if (join) {
+    const bd = parseBirthday(t); if (bd) out.birthday = bd;
+  } else {
+    // 名札のすぐあと（14 文字まで）の日付だけ。「誕生日おめでとう」は人へのお祝いなので読まない
+    const m = !/おめでと/.test(t) && t.match(BDAY_LABEL);
+    if (m) { const bd = parseBirthday(t.slice(m.index + m[0].length, m.index + m[0].length + 14)); if (bd) out.birthday = bd; }
+  }
+  if (mbti) {
+    const lm = t.match(MBTI_LABEL);
+    const mb = lm ? parseMbti(t.slice(lm.index + lm[0].length)) : (join || /^\s*[A-Za-z_-]{4,6}\s*(です|だよ|でした)?[!！。]*\s*$/.test(t) ? parseMbti(t) : null);
+    if (mb) { out.mbti = mb.mbti; if (mb.mbtiAT) out.mbtiAT = mb.mbtiAT; }
+  }
+  const fl = t.match(FOOD_LABEL);
+  if (fl || join) {
+    const fd = parseFood(t);
+    if (fd) out.food = fd;
+    else if (join && !fl) { const lf = looseFood(t, { word, startTools }); if (lf) out.food = lf; }
+  }
+  return out;
+}
+// 名札なしで書いた知らない食べ物（「住みたい ピッケル 12/11 カレー」「住みたい12/11カレー」のカレー）。町にない物もそのまま使う（あとで町に足せる）。
+// 住みたい・道具・日付・MBTI・名札の言葉を区切りにして分け（続けて書いてもよい）、あいさつや呼びかけを除いて、残りがちょうど 1 語の時だけ使う
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function looseFood(t, { word = null, startTools = null } = {}) {
+  const words = [...JOIN_WORDS, ...(word ? [norm(word)] : []), ...((startTools && startTools.options) || []).flatMap((o) => o.words || []).map(norm)]
+    .filter(Boolean).sort((a, b) => b.length - a.length);
+  let s = t
+    .replace(/\d{1,2}\s*月\s*\d{1,2}\s*日?/g, ' ')
+    .replace(/\d{1,4}\s*[/.\-]\s*\d{1,2}(?:\s*[/.\-]\s*\d{1,2})?/g, ' ')
+    .replace(new RegExp(MBTI_RE.source, 'gi'), ' ')
+    .replace(/\d+/g, ' ')
+    .replace(/誕生日|たんじょうび|誕生|生年月日|生まれ|MBTI|エムビーティーアイ/gi, ' ');
+  if (words.length) s = s.replace(new RegExp(words.map(escRe).join('|'), 'g'), ' ');
+  const rest = [];
+  for (const raw of s.split(/[\s、,，。・/／!！?？~〜]+/)) {
+    const w = raw.replace(/[^\p{L}\p{N}ー々]/gu, '');
+    if (!w || /^(月|日|は|に|で|の|と|も|が|を|です|ます)$/.test(w) || NOT_FOOD.test(w)) continue;
+    rest.push(w);
+  }
+  if (rest.length !== 1) return null;
+  const w = rest[0];
+  if (Array.from(w).length > 10 || !/^[\p{L}ー・々]+$/u.test(w) || NOT_FOOD.test(w)) return null;
+  if (!PF) PF = require('../js/profile-fields.js');
+  return PF.badWord(w) ? null : w;
+}
+// 住んでいる人の、あとからのプロフィールのコメント（「誕生日 12/11」「MBTI ENFP」「好きな食べ物 りんご」）。
+// 「住みたい」のコメントは registrationsFrom で読むので、ここでは読まない。1 人ずつ、値ごとに最後のコメントが勝つ
+function profileUpdatesFrom(comments, word, { mbti = true } = {}) {
+  const byUser = new Map();
+  for (const c of [...(comments || [])].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))) {
+    if (!c || isJoin(c.text, word)) continue;
+    const p = parseCommentProfile(c.text, { word, mbti, join: false });
+    if (!p.birthday && !p.food && !p.mbti) continue;
+    const u = commentUser(c);
+    if (!u.igId && !u.username) continue;
+    const id = u.igId ? 'ig:' + u.igId : 'user:' + norm(u.username).toLowerCase();
+    const r = { ...(byUser.get(id) || {}), ...u };
+    if (p.birthday) { r.birthday = p.birthday; r.bdAt = c.timestamp; }
+    if (p.food) { r.food = p.food; r.foodAt = c.timestamp; }
+    if (p.mbti) { r.mbti = p.mbti; r.mbtiAT = p.mbtiAT || null; r.mbtiAt = c.timestamp; }
+    byUser.set(id, r);
+  }
+  return [...byUser.values()];
+}
+// コメントで書いたプロフィールを、もう住んでいる村人に入れる（道具・仕事は変えない。住んでいない人は何もしない）。
+// 値ごとに「前に入れたコメントの時刻」（v.profileAt）より新しいコメントだけを使う。
+// こうすると、毎回同じコメントを読み直しても、ログインのプロフィールで直した値を古いコメントで戻さない
+// joinComments・voteComments など、見ている投稿のコメントをまとめて渡す。返り値：変わった人数
+function applyCommentProfiles(villagers, comments, { word = null, startTools = null, mbti = true, enemies = false } = {}) {
+  const all = [...registrationsFrom(comments || [], word, startTools, { enemies, mbti }), ...profileUpdatesFrom(comments, word, { mbti })];
+  const latest = new Map(); // 村人ごとに、値ごとの最後
+  for (const r of all) {
+    const v = findVillager(villagers, r);
+    if (!v) continue;
+    const cur = latest.get(v) || {};
+    for (const [f, at] of [['birthday', 'bdAt'], ['food', 'foodAt'], ['mbti', 'mbtiAt']]) {
+      if (r[f] && r[at] && (!cur[at] || Date.parse(r[at]) >= Date.parse(cur[at]))) { cur[f] = r[f]; cur[at] = r[at]; if (f === 'mbti') cur.mbtiAT = r.mbtiAT; }
+    }
+    latest.set(v, cur);
+  }
+  let changed = 0;
+  for (const [v, s] of latest) {
+    const since = v.profileAt ? Date.parse(v.profileAt) : -Infinity;
+    let newest = since, ch = false;
+    const fresh = (at) => at && Date.parse(at) > since;
+    if (fresh(s.bdAt)) { if (v.birthday !== s.birthday) { v.birthday = s.birthday; ch = true; } newest = Math.max(newest, Date.parse(s.bdAt)); }
+    if (fresh(s.foodAt)) { if (!v.profile || v.profile.food !== s.food) { v.profile = { ...(v.profile || {}), food: s.food }; ch = true; } newest = Math.max(newest, Date.parse(s.foodAt)); }
+    if (fresh(s.mbtiAt)) {
+      if (v.mbti !== s.mbti || (v.mbtiAT || null) !== (s.mbtiAT || null)) { v.mbti = s.mbti; if (s.mbtiAT) v.mbtiAT = s.mbtiAT; else delete v.mbtiAT; ch = true; }
+      newest = Math.max(newest, Date.parse(s.mbtiAt));
+    }
+    if (newest > since) { v.profileAt = new Date(newest).toISOString(); ch = true; } // 時刻も書き残す（次から古いコメントを使わない）
+    if (ch) changed++;
+  }
+  return changed;
 }
 const autoBirthday = (key) => { const h = hashStr('bday:' + key), m = (h % 12) + 1; return md(m, ((h >>> 5) % (m === 2 ? 28 : MONTH_DAYS[m - 1])) + 1); };
 const autoFood = (key) => AUTO_FOODS[hashStr('food:' + key) % AUTO_FOODS.length];
@@ -265,4 +392,4 @@ function readFollowerExport(json) {
 // hidden.json に書く印（hmac:...）
 const hiddenEntry = (username) => 'hmac:' + userHash(username);
 
-module.exports = { saltIsDev, hiddenEntry, norm, igHash, userHash, keyFor, nickname, loadHidden, applyPrivacy, findVillager, upsertVillager, registrationsFrom, isJoin, JOIN_WORDS, parseStartTool, startToolByLabel, startToolById, parseBirthday, parseFood, FOODS, autoBirthday, autoFood, fillJoinProfile, parseChoice, tallyVote, readFollowerExport, commentUser };
+module.exports = { saltIsDev, hiddenEntry, norm, igHash, userHash, keyFor, nickname, loadHidden, applyPrivacy, findVillager, upsertVillager, registrationsFrom, isJoin, JOIN_WORDS, parseStartTool, startToolByLabel, startToolById, parseBirthday, parseFood, parseMbti, parseCommentProfile, profileUpdatesFrom, applyCommentProfiles, FOODS, autoBirthday, autoFood, fillJoinProfile, parseChoice, tallyVote, readFollowerExport, commentUser };

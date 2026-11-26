@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { makeCharacter, animate, setTool, setAccent, chibiOf } from './character.js';
+import { makeCharacter, animate, setTool, setAccent, setArmor, chibiOf } from './character.js';
+import { armorLook, gearNames } from './smithing.js';
 import { initAuth } from './auth.js';
-import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, JOB, ACTION, RES, fmtDate, homeName, buildingLabel, showError, KIND, KIND_COLOR, MBTI, LETTER, mdText, villagerUrl, faceCanvas, emptyNote, lookDataUrl, loadImage, drawFigure, gaugeHtml, loadDiary, titlesOf, titleBadges } from './common.js';
+import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, JOB, ACTION, RES, fmtDate, homeName, buildingLabel, showError, KIND, KIND_COLOR, MBTI, LETTER, mdText, villagerUrl, faceCanvas, emptyNote, lookDataUrl, loadImage, drawFigure, gaugeHtml, loadDiary, badgeList, badgeIcon, bestFishText, mbtiText } from './common.js';
 import { BODIES, BODY_LABEL } from './skingen.js';
 import { decodeHours, parseCode, hourOf, hourText } from './hours.js';
 import { heldOf } from './invslots.js';
@@ -40,29 +41,48 @@ async function main() {
   if (ps) ps.hidden = !(D.config.ui && D.config.ui.profileSection);
   document.getElementById('name').textContent = v.display;
   // 称号のバッジ（名前のすぐ下。説明もそえる）
-  const tl = titlesOf(v, D.config), nameEl = document.getElementById('name');
-  if (tl.length) { const box = document.createElement('div'); box.className = 'titles'; box.innerHTML = titleBadges(v, D.config) + `<small class="muted">${tl.map((t) => esc(t.desc || '')).join('／')}</small>`; nameEl.after(box); }
+  // 絵（48 ドット）・名前・説明を並べる。技能バッジ（銅・銀・金・ダイヤ）は持ち物の下の「バッジ」に出る
+  const tl = badgeList(v, D.config).filter((b) => b.kind === 'title'), nameEl = document.getElementById('name');
+  if (tl.length) {
+    const box = document.createElement('div'); box.className = 'titles badges';
+    box.innerHTML = tl.map((b) => `<figure class="badge"${b.desc ? ` title="${esc(b.desc)}"` : ''}>${badgeIcon(b, 48)}<figcaption><b>${esc(b.name)}</b>${b.desc ? `<small>${esc(b.desc)}</small>` : ''}</figcaption></figure>`).join('') +
+      '<a class="bdgall" href="badges.html">バッジをぜんぶ見る</a>';
+    nameEl.after(box);
+  }
   document.getElementById('info').innerHTML = [
     ['参加した日', `${fmtDate(v.joined)}（${v.joinedDay}日目）`],
     // 誕生日・好きな食べ物（「住みたい 誕生日3月14日 りんご」で書いた値。書いていない人は島が決めた値）。プロフィールの欄を出す時はそちらに出る
-    ...(ps && !ps.hidden ? [] : [...(v.birthday ? [['誕生日', mdText(v.birthday)]] : []), ...(v.profile && v.profile.food ? [['好きな食べ物', v.profile.food]] : [])]),
-    ['今の仕事', `${JOB[L.job] || 'まだなし'}${L.action ? '（' + ACTION[L.action] + '）' : ''}`],
+    ...(ps && !ps.hidden ? [] : [...(v.birthday ? [['誕生日', mdText(v.birthday)]] : []), ...(v.profile && v.profile.food ? [['好きな食べ物', v.profile.food]] : []), ...(mbtiText(v, D.config) ? [['MBTI', mbtiText(v, D.config).replace('MBTI：', '')]] : [])]),
+    ['今の仕事', `${JOB[L.job] || 'まだなし'}${L.action ? '（' + ACTION[L.action] + '）' : ''}${L.smith && L.job !== 'smith' ? '・村の鍛冶職人' : ''}`],
+    ['装備', gearNames(L, D.config.items).join('・') || 'なし（素手）'],
     ...hourRows(L),
-    ['住んでいる家', homeName(L, D.world, D.config)],
+    ['住んでいる家', homeName(L, D.world, D.config, D.state)],
     ['最初の道具', startToolText(v, L, D.config)],
     ['体力', gaugeHtml('heart', L.hp, (D.config.needs || {}).max || 20) + (L.restWhy === 'weak' ? ' <small class="muted">休んで戻している</small>' : '')],
     ['おなか', gaugeHtml('food', L.hunger, (D.config.needs || {}).max || 20)],
     ['スキン', v.look ? `${esc(BODY_LABEL[v.look.body] || '')}・${v.look.seed} 番（プロフィールで選んだ見た目）` : `${v.skin} 番`],
     ['体型', v.body === 'chibi' ? '2 頭身' : '通常'],
+    ...(bestFishText(L, D.config) ? [['釣り', bestFishText(L, D.config)]] : []),
   ].map(([k, val]) => `<dt>${k}</dt><dd>${k === 'スキン' || k === '体力' || k === 'おなか' ? val : esc(val)}</dd>`).join('') + (v.hidden ? '<dt>表示</dt><dd>名前をかくしてあだ名で出しています</dd>' : '');
   document.getElementById('stats').innerHTML = ['wood', 'stone', 'food'].map((r) => `<div class="stat"><b>${Math.floor(L.gathered[r])}</b><small>${RES[r]}</small></div>`).join('');
   const built = L.built.map((id) => D.world.buildings.find((b) => b.id === id)).filter(Boolean);
   document.getElementById('built').innerHTML = built.length ? built.map((b) => `<span class="tag">${esc(buildingLabel(b, D.world, D.config))}（${b.day}日目）</span>`).join(' ') : 'まだありません。';
+  // 釣った一番大きな魚（魚ごとに 1 つ。島の記録を持っている魚には印）
+  const fb = Object.entries(L.fishBest || {}).sort((a, b) => b[1][0] - a[1][0]);
+  const fsec = document.getElementById('fishsec');
+  if (fsec && fb.length) {
+    const top = (D.state.fishing && D.state.fishing.top) || {};
+    fsec.hidden = false;
+    document.getElementById('fishbest').innerHTML = fb.map(([it, [cm, day]]) => {
+      const rec = top[it] && top[it][0] && top[it][0][1] === v.key;
+      return `<span class="tag">${esc((D.config.items[it] || {}).name || it)} ${cm}cm（${day}日目）${rec ? ' ★島の記録' : ''}</span>`;
+    }).join(' ');
+  }
   const diary = await loadDiary(v.key, L);
   document.getElementById('diary').innerHTML = diary.slice().reverse().map((d) => `<li><span class="d">${d.day}日目</span><span>${esc(d.text)}</span></li>`).join('') || '<li>まだ日記がありません。</li>';
 
   // 持ち物
-  renderInventory(L, D.config);
+  renderInventory(L, D.config, v);
   renderSocial(v, D);
   renderProfile(v, D.config, { day: D.state.day, L });
 
@@ -86,11 +106,12 @@ async function main() {
   const ch = makeCharacter(skinSrc(v), { scale: 1, slim: skinSlim(v), chibi: chibiOf(v) });
   scene.add(ch);
   if (v.profile && v.profile.color) setAccent(ch, v.profile.color);
-  let tool = { level: 'hoe', chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', tend: 'hoe', berry: 'basket', apple: 'basket', harvest: 'basket', forage: 'basket', fish: 'rod', ranch: 'basket' }[L.action];
+  setArmor(ch, armorLook(L.gear, D.config.smithing)); // 鍛冶職人が作った防具（帽子・服・くつ）
+  let tool = { level: 'hoe', chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', tend: 'hoe', berry: 'basket', apple: 'basket', harvest: 'basket', forage: 'basket', fish: 'rod', ranch: 'basket', smith: 'hammer' }[L.action];
   if (tool && ['axe', 'pick', 'hoe', 'rod'].includes(tool)) tool += ':' + (L.toolTier && L.toolTier !== 'hand' ? L.toolTier : 'wood'); // 道具の素材で色と形を変える
   setTool(ch, tool || null);
   let mode = 'idle';
-  const pose = { chop: 'chop', dig: 'dig', dig_last: 'dig', till: 'dig', berry: 'gather', apple: 'gather', harvest: 'gather', tend: 'gather', forage: 'gather' }[L.action] || 'idle';
+  const pose = { chop: 'chop', dig: 'dig', dig_last: 'dig', till: 'dig', berry: 'gather', apple: 'gather', harvest: 'gather', tend: 'gather', forage: 'gather', smith: 'smith' }[L.action] || 'idle';
   renderer.domElement.addEventListener('click', () => { mode = mode === 'idle' ? pose : 'idle'; });
   function resize() { const w = el.clientWidth, h = el.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
   addEventListener('resize', resize); resize();
@@ -277,7 +298,7 @@ function renderProfile(v, config, ctx) {
   update();
 }
 
-function renderInventory(L, config) {
+function renderInventory(L, config, v) {
   const IC = config.inventory, items = config.items;
   const slots = L.slots || IC.base, level = L.level || 1, xp = L.xp || 0;
   document.getElementById('lv').textContent = 'Lv' + level;
@@ -327,15 +348,18 @@ function renderInventory(L, config) {
     p.textContent = `夜の見張りで倒した敵 ${L.kills.total} 体（${parts}）。`;
     tail.after(p); tail = p;
   }
-  renderBadges(L, config, tail);
+  renderBadges(L, config, tail, v);
 }
 
 // バッジ：もらったものは絵で並べ、次の段までの残りを添える。まだのものは一番近い 2 つだけ「あと いくつ」
-function renderBadges(L, config, after) {
+// 称号バッジ（名前の下に出す）がある人は、はじまりの住人（founder）を重ねて出さない（町のカードと同じ。common.js の titleBadges）
+function renderBadges(L, config, after, v) {
   const BG = config.badges; if (!BG) return;
   const got = L.badges || {}, box = document.createElement('div'); box.className = 'badges';
   const near = [];
+  const hasTitle = badgeList(v, config).some((b) => b.kind === 'title');
   for (const [id, B] of Object.entries(BG.list)) {
+    if (B.founder && hasTitle) continue;
     const t = got[id] ?? -1;
     if (t < 0) {
       if (!B.founder) { const n = badgeCount(L, B.stat); near.push({ B, left: B.tiers[0] - n, r: n / B.tiers[0] }); }

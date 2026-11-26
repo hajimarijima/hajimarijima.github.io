@@ -1,21 +1,37 @@
 {
   "title": "はじまり島",
-  "account": "@your_account",
+  "account": "@comment_de_sodatsu",
+  "profileUrl": "https://www.instagram.com/comment_de_sodatsu/",
+  "profileUrlNote": "投票の投稿の URL（votePostUrl）が空の時、投票のボタンはここ（インスタのプロフィール）へ飛ぶ",
   "joinWord": "住みたい",
+  "mbtiOn": true,
+  "mbtiOnNote": "コメントで MBTI（INFP・ENTJ・INFP-T など）を受け付けて、村人のページとカードに「MBTI：INFP」と出すか。書いた人だけに出る（書いていない人には入れない）。false にすると読まないし出さない。サイトの案内の例（住みたい ピッケル 12/11 りんご INFP）からも INFP が消える",
+  "votePostUrl": "",
+  "votePostUrlNote": "投票の投稿（インスタ）の URL をここに貼る。例 \"https://www.instagram.com/p/XXXXXXXX/\"。貼ると、投票のページと町のページの投票の帯に「インスタの投稿にコメントして投票する」ボタンが出る。投票はこの投稿のコメントだけで数える。スマホからは GitHub の Actions →「投稿の URL を変える」→ Run workflow に URL を貼るだけで変えられる（ここを手で書きかえてもよい）。空のあいだは Secrets の IG_VOTE_MEDIA を使う",
+  "joinPostUrl": "",
+  "joinPostUrlNote": "「住みたい」を集める投稿（インスタ）の URL。いくつもある時は [\"URL1\", \"URL2\"] のように並べる（古い投稿も並べておけば、そこへの「住みたい」も受け付けつづける）。Actions の「投稿の URL を変える」で貼ると、ここに足される。空のあいだは Secrets の IG_JOIN_MEDIA を使う",
   "joinExclude": ["comment_de_sodatsu"],
   "startAt": null,
   "startAtNote": "町を始める日時（日本時間）。例 \"2026-11-28 06:00\"。null のあいだは 0 日目のまま（「住みたい」の人はすぐ住み始めるが、日は進まない）。この時刻を過ぎた最初の朝の daily で 1 日目になる。Actions の daily を start を選んで動かしても始まる",
   "baseVote": {
-    "note": "拠点（町のチェスト・たき火・広場を置く、村のまん中）の場所は、フォロワーの投票で決める。0 日目のあいだ、地図に A・B・C の候補が出る。投票の投稿（IG_VOTE_MEDIA）に「A」「B」「C」か場所の名前（words の言葉）をコメントしてもらう。1 人 1 票、何度か書いたら最後のコメント。町のアカウントの持ち主（joinExclude）は数えない。決まるのは 1 日目にする朝（startAt か Actions の start）。until に日時（例 \"2026-11-28 05:00\"、日本時間）を書くと、その時刻で締め切り、そのあと最初の受付（15 分ごと）で決まる。同点や票がない時は fallback の候補（同点のうちにあれば）にする。name と words は自由に書きかえてよい（地図の札と、コメントで読む言葉）。x・z は地図の位置なので、変える時は島の陸の上で、岸から 20 以上・候補どうし 20 以上はなす。enabled を false にすると、前と同じく島のまん中に拠点を置く",
+    "note": "拠点（町のチェスト・たき火・広場を置く、村のまん中）の場所は、フォロワーの投票で決める。0 日目のあいだ、地図に A・B・C の候補が出る。投票の投稿（IG_VOTE_MEDIA）に「A」「B」「C」か場所の名前（words の言葉）をコメントしてもらう。1 人 1 票、何度か書いたら最後のコメント。町のアカウントの持ち主（joinExclude）は数えない。決まるのは 1 日目にする朝（startAt か Actions の start）。until に日時（例 \"2026-11-28 05:00\"、日本時間）を書くと、その時刻で締め切り、そのあと最初の受付（15 分ごと）で決まる。同点や票がない時は fallback の候補（同点のうちにあれば）にする。name と words は自由に書きかえてよい（地図の札と、コメントで読む言葉）。x・z は地図の位置なので、変える時は島の陸の上で、岸から 15 以上・候補どうし 20 以上はなす（池からも 14 以上）。enabled を false にすると、前と同じく島のまん中に拠点を置く",
     "enabled": true,
+    "needPost": true,
+    "needPostNote": "true の間は、投票の投稿の URL（votePostUrl）を貼るまで拠点の投票を始めない（町の画面の「投票中」の帯も出さず、コメントも数えない）。投票の動画を上げたら「投稿の URL を変える」で URL を貼ると始まる",
     "question": "拠点はどこにする？",
     "until": null,
     "fallback": "B",
     "candidates": [
-      { "name": "浜辺の近く", "x": 10, "z": 22, "words": ["浜辺", "はまべ", "浜", "砂浜", "ビーチ"], "desc": "南の砂浜まで歩いてすぐ。港や釣りに近い" },
-      { "name": "池のそば", "x": -10, "z": 3, "words": ["池", "いけ"], "desc": "島のまん中に近く、池で釣りができる。広い" },
-      { "name": "森の入口", "x": 12, "z": -18, "words": ["森", "もり"], "desc": "北の森のそば。木がたくさん取れる。北の島への橋にも近い" }
-    ]
+      { "name": "浜辺の近く", "x": 8, "z": 31, "words": ["浜辺", "はまべ", "浜", "砂浜", "ビーチ"], "desc": "島の南のはし。海が目の前で、砂浜まで歩いてすぐ。海べで釣りもできる" },
+      { "name": "池のそば", "x": -27, "z": 2, "words": ["池", "いけ"], "desc": "島の西。池のすぐそばで釣りができる。となりは広い野原" },
+      { "name": "森の入口", "x": 14, "z": -28, "words": ["森", "もり"], "desc": "島の北。森のすぐ手前で、木がたくさん取れる。北の島への橋にも近い" }
+    ],
+    "placeNote": "今の場所：A は南の砂浜の手前（岸から約 17）、B は西の池のとなり（池から約 15）、C は北の森の手前（岸から約 18、橋のたもとから約 25）。3 つは 45 以上はなれている。x・z を変えたら、0 日目の島を作り直す（init）と、そのまわりの木がどく。作り直さない時も、地図の旗は次の受付（join）で新しい場所に動き、決まった時にまわりの木と岩をどける"
+  },
+  "tent": {
+    "note": "テント（家がまだない人の寝床）。村人がいれば、たき火のうしろに大きいテントを 1 つ張る。中に 1 人 1 つの敷物を並べて寝る。ベッドを作った人は、敷物のかわりにテントの中にベッドを置く（ベッドは外に置かない。家ができたら家の中へ移る）。家のない人が perTent 人をこえたら 2 つ目、3 つ目のテントを張る（maxTents まで）。それでも入れない人は、たき火のそばで横になる。テントの場所は js/tents.js（広場のまわりの、ふさがっていない所）",
+    "perTent": 4,
+    "maxTents": 3
   },
   "startTools": {
     "note": "参加する時に、最初に持つ道具を 1 つ選べる。コメントの「住みたい ピッケル」「住みたい 釣り」などの言葉で決まり、道具の言葉がなければ、いちばん人が少ない仕事の道具になる。木の道具で、持ち物 3 つのうち 1 つを使う。選んだ道具の仕事を優先する。ログイン後のプロフィールで、参加した日（1 日目）の間に 1 回だけ変えられる",
@@ -94,14 +110,78 @@
     "autoNote": "道具の言葉がない人は、その日までに選ばれた数がいちばん少ない仕事の道具（つるはし・斧・釣りざお・くわ）になる"
   },
   "titles": {
-    "note": "村人の称号。村人の titles（id の配列）に入り、村人ページの名前の下・住人一覧にバッジで出る。町の名札には小さな★。持ち主が足す時は list に { id（英数字・変えない）, name（表示する名前）, desc（説明）, icon（バッジの印。なければ★）, auto } を足す。auto: \"first\" は、いちばん最初に島に住んだ 1 人だけに自動でおくる（tools/titles.js。おくった時は町の歴史と本人の日記に 1 回だけ書く）。auto のない称号は、villagers.json の titles に手で id を足すとおくれる",
+    "note": "村人の称号バッジ（リボンつきのメダルの絵）。村人の titles（id の配列）に入り、村人ページ・町のカード・住人一覧・バッジのページ（badges.html）に絵で出る。町の名札には小さな★。1 人 1 回だけもらえて、なくならない（おくった時は町の歴史と本人の日記に 1 回だけ書く。tools/titles.js）。持ち主が足す時は list に { id（英数字・変えない）, name（名前）, desc（説明）, how（もらい方。まだの人に見せる）, img（絵。icons/title_<id>.png。絵は tools/gen_title_badges.js で作る。なければ icon の文字）, auto, n } を足す。auto の種類：\"first\"＝いちばん最初に島に住んだ 1 人だけ／\"count\"＝村人の記録 stat の数が n に届いた（stat は items.apple のように書く。items.fish_* のように * で終わると、その名前で始まる物を全部足す）／\"days\"＝住んで n 日たった／\"friends\"＝友だち・親友・家族が n 人／\"fishRecord\"＝釣りランキングで島の 1 位（どれかの魚）になった／\"bridge\"＝橋づくりを手伝った／\"home\"＝自分の家ができた。auto のない称号は、villagers.json の titles に手で id を足すとおくれる",
     "list": [
       {
         "id": "first_villager",
         "name": "はじまりの村人",
         "desc": "はじまり島に最初に住んだ人",
+        "how": "島にいちばん最初に住んだ 1 人だけ",
         "icon": "★",
+        "img": "icons/title_first_villager.png",
         "auto": "first"
+      },
+      {
+        "id": "angler",
+        "name": "釣り名人",
+        "desc": "魚を 20 匹釣った人",
+        "how": "魚を 20 匹釣る",
+        "img": "icons/title_angler.png",
+        "auto": "count",
+        "stat": "items.fish_*",
+        "n": 20
+      },
+      {
+        "id": "big_catch",
+        "name": "大物ハンター",
+        "desc": "釣りランキングで島の 1 位になった人",
+        "how": "どれかの魚で、島でいちばん大きいのを釣る",
+        "img": "icons/title_big_catch.png",
+        "auto": "fishRecord"
+      },
+      {
+        "id": "apple_lover",
+        "name": "りんご好き",
+        "desc": "りんごを 50 こ集めた人",
+        "how": "りんごを 50 こ集める",
+        "img": "icons/title_apple_lover.png",
+        "auto": "count",
+        "stat": "items.apple",
+        "n": 50
+      },
+      {
+        "id": "bridge_builder",
+        "name": "橋の大工",
+        "desc": "となりの島への橋づくりを手伝った人",
+        "how": "橋をかける日に、橋づくりの係になる",
+        "img": "icons/title_bridge_builder.png",
+        "auto": "bridge"
+      },
+      {
+        "id": "homeowner",
+        "name": "マイホーム",
+        "desc": "自分の家ができた人",
+        "how": "町に自分の家ができる",
+        "img": "icons/title_homeowner.png",
+        "auto": "home"
+      },
+      {
+        "id": "old_timer",
+        "name": "古株",
+        "desc": "島に住んで 30 日たった人",
+        "how": "島に 30 日住む",
+        "img": "icons/title_old_timer.png",
+        "auto": "days",
+        "n": 30
+      },
+      {
+        "id": "popular",
+        "name": "人気者",
+        "desc": "友だちが 5 人できた人",
+        "how": "友だち・親友・家族を合わせて 5 人つくる",
+        "img": "icons/title_popular.png",
+        "auto": "friends",
+        "n": 5
       }
     ]
   },
@@ -484,6 +564,16 @@
         "food": 1.2
       }
     },
+    "fish_dojou": { "name": "ドジョウ", "value": { "food": 0.4 } },
+    "fish_bluegill": { "name": "ブルーギル", "value": { "food": 0.5 } },
+    "fish_ugui": { "name": "ウグイ", "value": { "food": 0.6 } },
+    "fish_aji": { "name": "アジ", "value": { "food": 0.6 } },
+    "fish_saba": { "name": "サバ", "value": { "food": 0.8 } },
+    "fish_mebaru": { "name": "メバル", "value": { "food": 0.7 } },
+    "fish_kasago": { "name": "カサゴ", "value": { "food": 0.8 } },
+    "fish_tai": { "name": "タイ", "value": { "food": 1.1 } },
+    "fish_maguro": { "name": "マグロ", "value": { "food": 2 } },
+    "fish_hoshi": { "name": "ホシアカリ", "value": { "food": 0.9 } },
     "torch": {
       "name": "たいまつ",
       "value": {}
@@ -515,7 +605,21 @@
     "bow": {
       "name": "弓",
       "value": {}
-    }
+    },
+    "leather": {
+      "name": "革",
+      "value": {},
+      "note": "まだ手に入らない（村人は動物を殺さないので）。革の防具のレシピだけ先に置いてある"
+    },
+    "wool_cap": { "name": "羊毛の帽子", "armor": "head" },
+    "wool_shirt": { "name": "羊毛の服", "armor": "body" },
+    "wool_boots": { "name": "羊毛のくつ", "armor": "feet" },
+    "leather_cap": { "name": "革の帽子", "armor": "head" },
+    "leather_tunic": { "name": "革の服", "armor": "body" },
+    "leather_boots": { "name": "革のくつ", "armor": "feet" },
+    "iron_cap": { "name": "鉄の帽子", "armor": "head" },
+    "iron_mail": { "name": "鉄の服", "armor": "body" },
+    "iron_boots": { "name": "鉄のくつ", "armor": "feet" }
   },
   "buildings": {
     "hut": {
@@ -1349,7 +1453,17 @@
       "fish_koi",
       "fish_namazu",
       "fish_hotaru",
-      "fish_tsuki"
+      "fish_tsuki",
+      "fish_dojou",
+      "fish_bluegill",
+      "fish_ugui",
+      "fish_aji",
+      "fish_mebaru",
+      "fish_saba",
+      "fish_kasago",
+      "fish_tai",
+      "fish_hoshi",
+      "fish_maguro"
     ]
   },
   "gather": {
@@ -1706,7 +1820,7 @@
     },
     "toolVoteEvery": 5,
     "furniture": {
-      "note": "家具。ベッドは板 3 と羊毛 3（羊毛は柵のヒツジからもらう）。持っている人は家（家がなければテント）のそばに置いて寝る",
+      "note": "家具。ベッドは板 3 と羊毛 3（羊毛は柵のヒツジからもらう）。作るまでは、テントの中の敷物で寝る。作った人は家の中（家がなければテントの中）にベッドを置いて寝る。ベッドを外に置くことはない。家ができたら、ベッドは家の中へ移る",
       "bed": {
         "from": {
           "planks": 3,
@@ -1718,6 +1832,32 @@
   "enemies": {
     "enabled": false,
     "note": "夜の敵（ゾンビ・スケルトン・クモ）。まだ出さない。true にすると 2 日目の夜から来る"
+  },
+  "smithing": {
+    "note": "鍛冶屋と鍛冶職人。unlock の建物（作業台と倉庫）がぜんぶ建って minDay 日目をすぎると、「鍛冶屋」（buildings.smithy）が「何を建てる？」の候補に入る（次の 3 つの中）。鍛冶屋が建つと、次の日から村人の smiths 人（石をいちばん多く集めた人から）が鍛冶職人（鍛冶）になる。それまではだれも鍛冶をしない。鍛冶職人は昼に、町のチェストの材料で、ほかの村人の道具をより良い物（木→石→鉄…、crafting.recipes）に作り直したり、防具（armor：帽子・服・くつ）を作ったりする。1 日に perDay 個まで、1 つ 1 時間（鍛冶屋の金床で金づちをふるう）。作る物がない日はふつうの仕事をする。先に作るのは、見張り（剣を持っている人）→ 今の道具・防具の段階がいちばん低い人。防具は持ち物の枠を使わず、村人ごとの gear に入る（村人ページとカードに「装備」で出る）。防具の守り（armorTiers の def）は、夜の敵の攻撃を少しへらす（combat.armorPerDef）。keep：チェストに残す数（羊毛はベッドにも使う）。革はまだ手に入らないので、革の防具は作れない（レシピだけ置いてある）。鉄は岩からまれに出る鉄鉱石と石炭で作る。lookAt：人が多い時に、1 回に見る人数",
+    "building": "smithy",
+    "unlock": { "built": ["workbench", "storehouse"], "minDay": 6 },
+    "smiths": 1,
+    "perDay": 2,
+    "lookAt": 60,
+    "keep": { "wool": 3 },
+    "toolKinds": ["pickaxe", "axe", "hoe", "shovel", "sword", "fishing_rod"],
+    "armorTiers": {
+      "wool": { "name": "羊毛", "def": 1, "color": "#f3efe6" },
+      "leather": { "name": "革", "def": 1.5, "color": "#8a5a32" },
+      "iron": { "name": "鉄", "def": 2, "color": "#c3c9d0" }
+    },
+    "armor": {
+      "wool_cap": { "slot": "head", "tier": "wool", "from": { "wool": 2 } },
+      "wool_shirt": { "slot": "body", "tier": "wool", "from": { "wool": 4 } },
+      "wool_boots": { "slot": "feet", "tier": "wool", "from": { "wool": 2, "planks": 1 } },
+      "leather_cap": { "slot": "head", "tier": "leather", "from": { "leather": 3 } },
+      "leather_tunic": { "slot": "body", "tier": "leather", "from": { "leather": 5 } },
+      "leather_boots": { "slot": "feet", "tier": "leather", "from": { "leather": 3 } },
+      "iron_cap": { "slot": "head", "tier": "iron", "from": { "iron": 3, "coal": 1 } },
+      "iron_mail": { "slot": "body", "tier": "iron", "from": { "iron": 5, "coal": 2 } },
+      "iron_boots": { "slot": "feet", "tier": "iron", "from": { "iron": 3, "coal": 1 } }
+    }
   },
   "firstChoices": [
     "hut",
@@ -1760,7 +1900,24 @@
       [
         "fish_namazu",
         12
-      ]
+      ],
+      ["fish_dojou", 20],
+      ["fish_bluegill", 22],
+      ["fish_ugui", 18]
+    ],
+    "seaNote": "海べで釣る時の魚（池の fish の代わり）。島の町だけ。seaShare は、釣りの日に海べへ行く見こみ（池がない島はいつも海べ）。maguro の重み 0.4 は「海で 250 匹に 1 匹ほど」のごくまれ。seaNightFish は夜の海べで、hours.nightFishP の見こみでこちらから選ぶ",
+    "seaShare": 0.5,
+    "seaFish": [
+      ["fish_aji", 40],
+      ["fish_saba", 26],
+      ["fish_mebaru", 20],
+      ["fish_kasago", 18],
+      ["fish_tai", 9],
+      ["fish_maguro", 0.4]
+    ],
+    "seaNightFish": [
+      ["fish_mebaru", 24],
+      ["fish_hoshi", 12]
     ],
     "treasure": {
       "p": 0.03,
@@ -1787,6 +1944,26 @@
           2
         ]
       ]
+    },
+    "sizesNote": "釣った魚の大きさ（cm）。魚ごとに min〜max の間で決まり、大きいほど出にくい（skew が大きいほど小さめが多くなる。2 で「max に近いのは 10 匹に 1 匹ほど」）。bigP の確率（0.01 なら 100 匹に 1 匹）で「大物」になり、max〜bigMax の大きさになる。数を変えるだけで次の日から効く。上位の記録は魚ごとに rankKeep 匹まで残す（釣りランキングのページ fish.html）",
+    "rankKeep": 10,
+    "sizes": {
+      "fish_funa": { "min": 8, "max": 30, "skew": 2, "bigP": 0.01, "bigMax": 45 },
+      "fish_masu": { "min": 15, "max": 45, "skew": 2, "bigP": 0.01, "bigMax": 70 },
+      "fish_koi": { "min": 20, "max": 60, "skew": 2, "bigP": 0.01, "bigMax": 100 },
+      "fish_namazu": { "min": 25, "max": 70, "skew": 2, "bigP": 0.01, "bigMax": 120 },
+      "fish_hotaru": { "min": 2, "max": 5, "skew": 2, "bigP": 0.02, "bigMax": 8 },
+      "fish_tsuki": { "min": 30, "max": 80, "skew": 2, "bigP": 0.02, "bigMax": 130 },
+      "fish_dojou": { "min": 8, "max": 18, "skew": 2, "bigP": 0.01, "bigMax": 25 },
+      "fish_bluegill": { "min": 10, "max": 22, "skew": 2, "bigP": 0.01, "bigMax": 30 },
+      "fish_ugui": { "min": 12, "max": 30, "skew": 2, "bigP": 0.01, "bigMax": 45 },
+      "fish_aji": { "min": 12, "max": 35, "skew": 2, "bigP": 0.01, "bigMax": 50 },
+      "fish_saba": { "min": 20, "max": 45, "skew": 2, "bigP": 0.01, "bigMax": 60 },
+      "fish_mebaru": { "min": 12, "max": 30, "skew": 2, "bigP": 0.01, "bigMax": 40 },
+      "fish_kasago": { "min": 10, "max": 30, "skew": 2, "bigP": 0.01, "bigMax": 45 },
+      "fish_tai": { "min": 25, "max": 60, "skew": 2, "bigP": 0.01, "bigMax": 100 },
+      "fish_maguro": { "min": 80, "max": 200, "skew": 2, "bigP": 0.02, "bigMax": 300 },
+      "fish_hoshi": { "min": 20, "max": 50, "skew": 2, "bigP": 0.02, "bigMax": 80 }
     }
   },
   "farming": {
@@ -2058,6 +2235,9 @@
     "critMax": 0.4,
     "critMult": 1.8,
     "shieldGuardP": 0.55,
+    "armorPerDef": 0.08,
+    "armorMax": 0.6,
+    "armorNote": "防具（smithing.armor）：敵の 1 回の攻撃を、守りの合計 × armorPerDef の確率（上限 armorMax）で 1 へらす（1 より下にはならない）。羊毛 3 つで 24%、鉄 3 つで 48%",
     "mobs": {
       "zombie": {
         "hp": 20,

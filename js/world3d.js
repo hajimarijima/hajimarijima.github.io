@@ -99,7 +99,13 @@ export function makeHouse(L, b) {
   if (L.awning) { const a = box(w * 0.8, 0.12, 1.0, L.awning, 0, 1.9, d / 2 + 0.5, g); a.rotation.x = 0.3; for (let i = 0; i < 2; i++) { const s = box(w * 0.16, 0.13, 1.0, 0xfaf6ee, -w * 0.16 + i * w * 0.32, 1.91, d / 2 + 0.5, g); s.rotation.x = 0.3; } }
   if (L.props === 'crates') { box(0.7, 0.7, 0.7, 0xa47a4a, w / 2 + 0.6, 0.35, d / 2 - 0.4, g); box(0.6, 0.6, 0.6, 0x93693c, w / 2 + 0.5, 1.0, d / 2 - 0.4, g); }
   if (L.props === 'workbench') { box(1.4, 0.7, 0.7, 0x8a5a33, -w / 2 - 0.9, 0.35, d / 2 - 0.6, g); }
-  if (L.props === 'anvil') { box(0.6, 0.5, 0.4, 0x3a3a3e, w / 2 + 0.7, 0.25, d / 2, g); }
+  if (L.props === 'anvil') { // 金床（台・くびれ・上の打つ面と角）。鍛冶職人は前（+z）に立って打つ
+    const ax = w / 2 + 0.75, az = d / 2 + 0.2;
+    // 村人（背の高さ約 3.8）のももの高さ（打つ面 1.45）。金づちが打つ面に届く高さ
+    box(0.9, 0.3, 0.6, 0x2e2e32, ax, 0.15, az, g); box(0.48, 0.82, 0.38, 0x3a3a3e, ax, 0.71, az, g);
+    box(1.3, 0.34, 0.56, 0x46464c, ax, 1.28, az, g); box(0.3, 0.24, 0.32, 0x46464c, ax - 0.78, 1.32, az, g);
+    box(1.31, 0.03, 0.57, 0x8a8f96, ax, 1.46, az, g); // 打つ面の光
+  }
   if (L.props === 'nets') { box(0.08, 1.4, 0.08, 0x6b4a2b, w / 2 + 0.8, 0.7, 0, g); box(0.05, 0.9, 1.6, 0x9fb8a0, w / 2 + 0.8, 0.9, 0, g); }
   if (L.bell) { box(0.8, 1.0, 0.8, L.wall, 0, h + Math.min(w, d) * 0.55 + 0.2, 0, g); box(0.4, 0.4, 0.4, 0xd4af37, 0, h + Math.min(w, d) * 0.55 + 0.3, 0, g); }
   if (L.spire) { const s = new THREE.Group(); box(1.6, 3, 1.6, L.wall, 0, h + 1.5, d / 2 - 0.8, s); roof(s, 'pyramid', 1.6, 1.6, 2.4, L.roof, h + 3); s.position.z = 0; g.add(s); }

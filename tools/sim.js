@@ -24,6 +24,9 @@ const CB = require('../js/combat.js'); // 夜の戦い・バッジの段 // 1 �
 const W = require('./welcome'); // 新しく来た人を迎える決まり・町を始める日の決まり（join.js と共通）
 const IS = require('../js/island.js'); // 島の形（どこが陸か・まだ行けない島・橋）
 const BASE = require('./base'); // 拠点の場所の投票（0 日目）
+const FZ = require('./fishsize'); // 釣った魚の大きさと釣りランキング
+const SMT = require('../js/smithing.js'); // 鍛冶屋と鍛冶職人（道具の作り直し・防具）
+const TN = require('../js/tents.js'); // テント（家のない人の寝床。1 つに何人・いくつまで）
 // 村のまん中（拠点）。前のデータは (0, -1)
 const ctrOf = (world) => (world && world.square ? { x: world.square.x, z: world.square.z } : { x: 0, z: -1 });
 
@@ -97,6 +100,23 @@ function stepDay(S) {
   const baseDecided = BASE.decideBase(S, { day, now: S.now || new Date(), hist });
   // 釣り・畑・動物は別の乱数（ここが増えても、木・岩・投票の流れは変わらない）
   const R2 = makeRng(state.seed + ':farm:' + day);
+  // 釣った魚の大きさも別の乱数（大きさを足しても、ほかの流れは変わらない）。島の新記録は魚ごとに 1 日 1 行（同じ日にまた破られたら、その行を書きかえる）
+  const RF = makeRng(state.seed + ':fishsize:' + day), recToday = {};
+  const fishCatch = (v, L, c, it) => {
+    const FC = config.fishing || {}, sz = FC.sizes && FC.sizes[it];
+    if (!sz) return;
+    const cm = FZ.rollSize(sz, RF), nm = ITEMS0[it] ? ITEMS0[it].name : it;
+    const ent = [it, cm];
+    (c.fishCm = c.fishCm || []).push(ent);
+    if (it === 'fish_maguro' && first('maguro', `${v.display}が、海べで ${cm}cm のマグロを釣り上げた！ 島ではじめてのマグロ`, { who: [v.key], item: it, cm })) c.notes.push(`${cm}cm のマグロが釣れた！ 島ではじめて。`); // ごくまれな大物
+    const r = FZ.addCatch(state, L, v.key, it, cm, day, FC.rankKeep || 10);
+    if (!r.record) return;
+    ent.push(1); // 町の画面で「新記録！」と見せる印
+    const text = `${v.display}が ${cm}cm の${nm}を釣った！ 島の新記録`;
+    if (recToday[it]) Object.assign(recToday[it], { text, who: [v.key], cm });
+    else { hist('fish', text, { who: [v.key], item: it, cm }); recToday[it] = history[history.length - 1]; }
+    c.notes.push(`${cm}cm の${nm}を釣り上げた。島の新記録！（前は ${r.prev}cm）`);
+  };
   // 「はじめて」の出来事は、町の歴史に 1 回だけ書く
   const first = (key, text, extra) => { if (state.firsts[key]) return false; state.firsts[key] = day; hist('first', text, extra); return true; };
   // 切り株・新しい木・草の畑・体力とおなかは、また別の乱数（ほかの流れを変えない）
@@ -156,6 +176,8 @@ function stepDay(S) {
       const v = P.upsertVillager(villagers, { igId: r.igId, username: r.username, joined: date, joinedDay: day, source: 'comment', startTool: r.startTool, birthday: r.birthday, food: r.food }, hidden);
       if (v) v._new = true;
     }
+    // コメントで書いた誕生日・好きな食べ物・MBTI（あとから書いた値が勝つ。tools/people.js の applyCommentProfiles。join.js と同じ）
+    P.applyCommentProfiles(villagers, [...inbox.joinComments, ...(inbox.voteComments || [])], { word: config.joinWord, startTools: config.startTools, mbti: config.mbtiOn !== false, enemies: enemiesOn });
   }
   // 町のアカウントの持ち主は村人にしない（join.js と同じ）
   W.removeOwners(S, W.ownerNames(inbox, config));
@@ -286,6 +308,14 @@ function stepDay(S) {
   state.votes = state.votes.filter((v) => day < v.closesDay);
   // 新しい投票を開く（村人がいる時だけ）
   const builtTypes = world.buildings.map((b) => b.type);
+  // 鍛冶屋：作業台と倉庫が建って minDay 日目をすぎたら（config.smithing.unlock）、「何を建てる？」の候補に入れる（次の 3 つの中）
+  {
+    const SMC = config.smithing, sb = SMC && SMC.building;
+    if (sb && B(sb) && active.length && !state.pool.includes(sb) && !builtTypes.includes(sb) && !(state.plan && state.plan.build === sb) && SMT.smithyUnlocked(SMC, builtTypes, day)) {
+      state.pool.splice(Math.min(2, state.pool.length), 0, sb);
+      hist('event', `${B(sb).name}が「何を建てる？」の候補に入った。建つと、村人のひとりが鍛冶職人になって、道具や防具を作る。`, { buildingType: sb });
+    }
+  }
   const choices = () => {
     const out = [];
     for (const b of state.pool) {
@@ -458,6 +488,22 @@ function stepDay(S) {
     }
     ctxs.push(c);
   }
+  // ---- 鍛冶職人（config.smithing）：鍛冶屋が建った次の日から、smiths 人が鍛冶をする。それまではだれもしない ----
+  const SMC = config.smithing || null;
+  const smithyB = SMC ? world.buildings.find((b) => b.type === SMC.building && b.day < day) : null;
+  if (smithyB) {
+    state.smiths = (state.smiths || []).filter((k) => life[k] && active.some((v) => v.key === k));
+    const nS = SMC.smiths || 1;
+    if (state.smiths.length < nS) {
+      const cand = active.filter((v) => !state.smiths.includes(v.key)).sort((a, b) => ((life[b.key].gathered || {}).stone || 0) - ((life[a.key].gathered || {}).stone || 0) || (a.key < b.key ? -1 : 1));
+      for (const v of cand.slice(0, nS - state.smiths.length)) {
+        state.smiths.push(v.key); life[v.key].smith = day;
+        hist('event', `鍛冶屋ができたので、${v.display}が村の鍛冶職人になった。これからは鍛冶屋で、みんなの道具や防具を作る。`, { who: [v.key], buildingType: SMC.building });
+        diaryExtra[v.key] = (diaryExtra[v.key] || '') + '鍛冶屋ができたので、今日から村の鍛冶職人になった。';
+      }
+    }
+    for (const c of ctxs) if (state.smiths.includes(c.v.key) && !c.off) c.smith = smithyB;
+  }
 
   // 橋がかかった島には、木こりと石掘りの何人か（config.expansion の workShare）が、その島の木と岩から先に選んで働きに行く
   {
@@ -563,6 +609,37 @@ function stepDay(S) {
     return null;
   };
 
+  // ---- 鍛冶職人の 1 時間（config.smithing）：鍛冶屋の金床で、チェストの材料から 道具の作り直しか防具を 1 つ作る ----
+  //   見張り（剣を持つ人）が先、そのあとは段階の低い人から（js/smithing.js の pickJob）。作る物がなければ null（ふつうの仕事にもどる）
+  const ctxByKey = new Map(ctxs.map((x) => [x.v.key, x]));
+  const smithHour = (c, h) => {
+    if (!SMC || (today.smithed || 0) >= (SMC.perDay || 2)) return null;
+    const people = active.map((v) => { const l = life[v.key]; return { key: v.key, L: l, guard: !!(l && l.inv && I.getTool(l.inv, 'sword')) }; });
+    const r = SMT.pickJob({ store: state.store, people, config, built, CR });
+    if (!r.job) {
+      if (r.want && !c.smithWant) { c.smithWant = 1; c.notes.push(`鍛冶屋で${ITEMS[r.want.key].name}を作りたかったが、チェストの材料が足りない。`); }
+      return null;
+    }
+    const j = r.job, T = life[j.to], to = active.find((v) => v.key === j.to), nm = ITEMS[j.key].name;
+    if (j.type === 'tool') {
+      const old = I.getTool(T.inv, j.kind), oldCopy = old && { ...old };
+      I.removeTool(T.inv, j.kind);
+      if (!I.addTool(T.inv, T.slots, j.key, CC.tiers[j.tier].durability)) { if (oldCopy) I.addTool(T.inv, T.slots, oldCopy.item, oldCopy.dur); return null; }
+    } else { T.gear = T.gear || {}; T.gear[j.slot] = j.key; }
+    replaceStore(j.store);
+    today.smithed = (today.smithed || 0) + 1;
+    today.crafted.push({ who: c.v.key, item: j.key, for: j.to });
+    const self = j.to === c.v.key;
+    c.ev.push({ h, text: self ? `${tm(h)}、鍛冶屋で自分の${nm}を作った。` : `${tm(h)}、鍛冶屋で${to.display}に${nm}を作った。` });
+    const tc = ctxByKey.get(j.to);
+    if (tc && !self) tc.ev.push({ h, text: `${tm(h)}、鍛冶職人の${c.v.display}が${nm}を作ってくれた。` });
+    hist('craft', self ? `鍛冶職人の${c.v.display}が、自分の${nm}を作った。` : `鍛冶職人の${c.v.display}が${to.display}に${nm}を作った。`, { who: self ? [c.v.key] : [c.v.key, j.to], item: j.key, smith: true });
+    if (j.type === 'armor') first('armor', `はじめて防具（${nm}）ができた。夜の敵の攻撃を少し防げる。`, { item: j.key });
+    c.work++; c.workAt = c.workAt ?? h; (c.workHs = c.workHs || []).push(h);
+    c.acts = c.acts || {}; c.acts.smith = (c.acts.smith || 0) + 1;
+    return 'sm:' + c.smith.id;
+  };
+
   // ---- 木・岩をえらぶ ----
   let bedMade = false; // 今日だれかがベッドを作った
   let noTree = false, noRock = false; // もう選べる木・岩がない（その日はもう探さない。選べる物は 1 日の中では増えない）
@@ -639,7 +716,7 @@ function stepDay(S) {
     const wildN = world.fields.filter((f) => f.wild).length;
     const canPlant = !!I.getTool(L.inv, 'hoe') && (state.store.seeds || 0) > 0 && wildN < GR.maxFields;
     if (world.fieldSlots.length || canPlant || world.fields.length) subs.push(['farm', c.want === '農業' ? 5 : 1.8]);
-    if (world.pond && rodOK) subs.push(['fish', c.want === '漁業' ? 5 : 1.0]);
+    if ((world.pond || world.islands) && rodOK) subs.push(['fish', c.want === '漁業' ? 5 : 1.0]);
     if (tamed.length && !ranchTaken) subs.push(['ranch', c.want === '牧場' ? 5 : 2.5]);
     let sub = R2.weighted(subs);
     const forced = { '漁業': 'fish', '牧場': 'ranch' }[c.want];
@@ -649,7 +726,10 @@ function stepDay(S) {
   };
   const pickFood = (c, night) => {
     const sub = foodSub(c), L = c.L, FA = config.farming;
-    if (sub === 'fish') return { action: 'fish', target: 'pond' };
+    if (sub === 'fish') { // 釣り場：島の町は、その日ごとに海べか池（乱数は使わず、名前と日から決める。池がなければ海べ）
+      if (!c.spot) { const hs = [...(c.v.key + ':' + day)].reduce((h0, ch) => (h0 * 31 + ch.charCodeAt(0)) >>> 0, 7); c.spot = world.islands && (!world.pond || hs % 100 < (config.fishing.seaShare ?? 0.5) * 100) ? 'sea' : 'pond'; }
+      return { action: 'fish', target: c.spot };
+    }
     if (sub === 'ranch' && !c.ranched) return { action: 'ranch', target: (world.buildings.find((b) => b.type === 'pen') || {}).id || null };
     if (sub === 'farm' || sub === 'ranch') {
       const ripe = world.fields.filter((f) => f.stage >= (f.max || 3) && f.day !== day && !takenFields.has(f.id)); // 今日まいた・世話した畑は、明日から
@@ -725,6 +805,8 @@ function stepDay(S) {
   const GAIN = { bed: HR.sleepGain('bed', H), tree: HR.sleepGain('tree', H), ground: HR.sleepGain('ground', H) }; // 1 日 1 回だけ作る
   const sinceBed = (c, h) => (h - c.bedH + 24) % 24;
   const outdoorSleep = (L) => !L.home && L.zz !== 'bed';
+  let tentDay = null; // その日のテントの寝床の割り当て（1 日 1 回だけ作る）
+  const tentNow = () => tentDay || (tentDay = TN.tentPlan(active, life, config));
   function hourFor(c, h, night) {
     const L = c.L;
     // 1. 眠気：眠い → 寝る。眠気が 0 になったら起きる
@@ -737,8 +819,10 @@ function stepDay(S) {
         c.pos = null; c.fresh = true; c.homeWalk = (c.homeWalk || 0) + 1; c.homeAt = c.homeAt ?? h; c.goHome = true;
       } else if (L.sleepy >= H.sleepAt) {
         // 寝る場所：ベッド → 家・テントのそば → 村のまん中の近くの木（遠くの森では寝ない）
-        c.sleepTree = L.bed || L.home ? null : sleepTree(c);
-        L.zz = L.bed ? 'bed' : !L.home && c.sleepTree && (objOf[c.tree] || objOf[c.lastTree] || hashStr('tree:' + L.chrono + c.v.key) % 2) ? 'tree' : 'ground';
+        //   家のない人はテントの中（ベッドか敷物。js/tents.js の割り当て）。テントがいっぱいなら たき火のそば。ベッドは外に置かない
+        const tentSlot = !L.home && tentNow().slot[c.v.key];
+        c.sleepTree = null; c.inTent = !!tentSlot;
+        L.zz = L.bed && (L.home || tentSlot) ? 'bed' : 'ground';
         c.pos = null;
         L.sleepy = Math.min(L.sleepy, H.sleepAt + 10);
         c.sleptAt = h; c.sleepPlace = L.zz;
@@ -792,6 +876,12 @@ function stepDay(S) {
       if (c.pos && dist(c.pos, world.chest) > FAR.homeR) { c.pos = null; c.fresh = true; c.homeWalk = (c.homeWalk || 0) + 1; c.homeAt = c.homeAt ?? h; return finish('wh', 'light'); }
       if (night) { const gc = guardCraft(c, h); if (gc) return finish(gc, 'light'); c.guardH = (c.guardH || 0) + 1; return finish('w', 'light'); }
       return finish(freeHour(c, h), 'free');
+    }
+    // 鍛冶職人：昼に、作る物があれば まず鍛冶屋で作る（1 日 perDay 個まで。なければふつうの仕事）
+    if (c.smith && !c.smithDone && !night) {
+      const code = smithHour(c, h);
+      if (code) return finish(code, 'heavy');
+      c.smithDone = true;
     }
     // 整地
     if (c.level && !c.level.done) {
@@ -897,18 +987,18 @@ function stepDay(S) {
     const slow = night && !torchOK(L) && !R4.chance(H.nightSlow); // 暗い外仕事は、うまく進まないことがある
     const FA = config.farming, q = (lo, hi, m) => Math.max(0, Math.round(R.int(lo, hi) * m));
     if (a.action === 'fish') { // うきが沈んだら釣り上げる。良い釣りざおほど、よく沈む。夜は夜だけの魚もいる
-      const FC = config.fishing, out = [];
+      const FC = config.fishing, out = [], sea = a.target === 'sea' && FC.seaFish, pl = sea ? '海' : '池'; // 海べでは海の魚
       for (let k = 0; k < H.fishCasts; k++) {
         if (!R2.chance(Math.min(0.95, FC.biteChance * CC.tiers.wood.hits / st.hits))) continue;
         let it;
-        if (night && R2.chance(H.nightFishP)) { it = R2.weighted(H.nightFish); if (!c.nightFish) { c.nightFish = 1; c.ev.push({ h, text: `${tm(h)}、夜の池で${ITEMS[it].name}を釣り上げた。` }); first('nightfish', `${v.display}が、夜の池ではじめて${ITEMS[it].name}を釣った。`, { who: [v.key], item: it }); } }
-        else it = R2.chance(FC.treasure.p) ? R2.weighted(FC.treasure.items) : R2.chance(FC.junk.p) ? R2.weighted(FC.junk.items) : R2.weighted(FC.fish);
+        if (night && R2.chance(H.nightFishP)) { it = R2.weighted(sea && FC.seaNightFish ? FC.seaNightFish : H.nightFish); if (!c.nightFish) { c.nightFish = 1; c.ev.push({ h, text: `${tm(h)}、夜の${pl}で${ITEMS[it].name}を釣り上げた。` }); first('nightfish', `${v.display}が、夜の${pl}ではじめて${ITEMS[it].name}を釣った。`, { who: [v.key], item: it }); } }
+        else it = R2.chance(FC.treasure.p) ? R2.weighted(FC.treasure.items) : R2.chance(FC.junk.p) ? R2.weighted(FC.junk.items) : R2.weighted(sea ? FC.seaFish : FC.fish);
         out.push([it, 1]);
-        if (it.startsWith('fish_')) first('fish', `${v.display}が、村ではじめて魚を釣った（${ITEMS[it].name}）。`, { who: [v.key], item: it });
-        else if (FC.treasure.items.some(([k2]) => k2 === it)) { first('treasure', `${v.display}が池から${ITEMS[it].name}を釣り上げた。村ではじめての宝物。`, { who: [v.key], item: it }); c.notes.push(`${ITEMS[it].name}が釣れた。`); }
+        if (it.startsWith('fish_')) { first('fish', `${v.display}が、村ではじめて魚を釣った（${ITEMS[it].name}）。`, { who: [v.key], item: it }); fishCatch(v, L, c, it); }
+        else if (FC.treasure.items.some(([k2]) => k2 === it)) { first('treasure', `${v.display}が${pl}から${ITEMS[it].name}を釣り上げた。村ではじめての宝物。`, { who: [v.key], item: it }); c.notes.push(`${ITEMS[it].name}が釣れた。`); }
       }
-      give(c, out); wear(); c.target = c.target || 'pond';
-      return finish('f', 'light');
+      give(c, out); wear(); c.target = c.target || (sea ? 'sea' : 'pond');
+      return finish(sea ? 'f:sea' : 'f', 'light');
     }
     if (a.action === 'ranch') { // 柵の中の動物の世話。もらえる物は 1 日 1 回
       c.ranched = true;
@@ -1094,7 +1184,7 @@ function stepDay(S) {
     const acts = Object.entries(c.acts || {}).sort((a, b) => b[1] - a[1]);
     const main = c.off ? 'rest' : c.levelH ? 'level' : acts.length ? acts[0][0] : 'rest';
     const action = main === 'stump' ? 'chop' : main === 'guard' ? 'forage' : main;
-    const job = c.off ? 'rest' : main === 'level' ? 'level' : { chop: 'wood', dig: 'stone' }[action] || (main === 'rest' ? 'rest' : 'food');
+    const job = c.off ? 'rest' : main === 'level' ? 'level' : main === 'smith' ? 'smith' : { chop: 'wood', dig: 'stone' }[action] || (main === 'rest' ? 'rest' : 'food');
     const tg = c.tgt ? Object.entries(c.tgt).sort((a, b) => b[1] - a[1])[0][0] : null;
     L.job = job; L.action = action;
     L.target = main === 'level' ? c.level.target : (action === 'chop' || action === 'dig') ? tg : action === 'rest' ? null : (c.target || null);
@@ -1108,6 +1198,7 @@ function stepDay(S) {
     L.xp += c.work * IC.xp[xpType] + c.trips * IC.xp.carry;
     L.amount = RES.includes(job) ? Math.round(gotVal[job] * 10) / 10 : 0;
     L.today = { got: c.got, trips: c.trips, actions: c.work };
+    if (c.fishCm) L.today.fish = c.fishCm.filter((e) => e[2]).concat(c.fishCm.filter((e) => !e[2])).slice(0, 8); // 新記録の魚は必ず残す // 今日釣った魚と大きさ（町の画面の「+1 フナ 23cm」）
     if (RES.includes(job)) today.jobs[job]++;
     for (const r of RES) today.gained[r] = Math.round((today.gained[r] + gotVal[r]) * 10) / 10;
     L.sleepy = Math.round(L.sleepy * 10) / 10; L.stamina = Math.round(L.stamina * 10) / 10;
@@ -1128,7 +1219,9 @@ function stepDay(S) {
       tend: [`${t0}畑の世話をした。芽がのびてきた。${haul}。`, `${t0}畑に水をまいた。${haul}。`],
       harvest: [`${t0}畑で${(FA0.crops[c.crop] || FA0.crops.wheat).name}を収穫した。${haul}。`, `${t0}畑の作物をかりとった。${haul}。`],
       forage: c.guardH && !Object.keys(c.got).length ? [`${t0}村のはずれで見張りをした。`] : [`${t0}野原で草や実を集めた。${haul}。`],
-      fish: Object.keys(c.got).length ? [`${t0}池で釣りをした。うきが沈むのを待って、${haul}を釣り上げた。`, `${t0}釣りざおを持って池へ行った。${haul}。`] : [`${t0}池で釣りをしたが、何もかからなかった。`],
+      fish: c.target === 'sea' ? (Object.keys(c.got).length ? [`${t0}海べで釣りをした。波の上のうきが沈むのを待って、${haul}を釣り上げた。`, `${t0}釣りざおを持って海べへ行った。${haul}。`] : [`${t0}海べで釣りをしたが、何もかからなかった。`])
+        : Object.keys(c.got).length ? [`${t0}池で釣りをした。うきが沈むのを待って、${haul}を釣り上げた。`, `${t0}釣りざおを持って池へ行った。${haul}。`] : [`${t0}池で釣りをしたが、何もかからなかった。`],
+      smith: [`${t0}鍛冶屋の金床で、金づちをふるった。`, `${t0}鍛冶屋で火をおこして、金づちをふるった。`],
       ranch: c.ranchGot ? [`${t0}柵の中の動物に、えさと水をやった。${haul}をもらった。`, `${t0}動物の世話をした。${haul}をもらった。`] : [`${t0}柵の中の動物に、えさと水をやった。`],
     };
     // 日記は 1 日の時刻の順に書く（できごとごとに時刻 h を付けて並べる）。夜おそく寝た文は、いちばん最後（c.tail）
@@ -1191,7 +1284,7 @@ function stepDay(S) {
     if (c.noFood) { put(23.5, 'おなかがすいたが、食べる物がなかった。'); noFood = true; }
     else if (c.starved) put(23.5, 'おなかがすいて、体力が減った。');
     if (c.sleptAt !== undefined) {
-      const st = { bed: `${tm(c.sleptAt)}、ベッドでぐっすり眠った。`, tree: `${tm(c.sleptAt)}、木にもたれて眠った。`, ground: L.home ? `${tm(c.sleptAt)}、家の床で横になって眠った。` : `${tm(c.sleptAt)}、地面にごろんと横になって眠った。` }[c.sleepPlace];
+      const st = { bed: L.home ? `${tm(c.sleptAt)}、ベッドでぐっすり眠った。` : `${tm(c.sleptAt)}、テントの中のベッドでぐっすり眠った。`, tree: `${tm(c.sleptAt)}、木にもたれて眠った。`, ground: L.home ? `${tm(c.sleptAt)}、家の床で横になって眠った。` : c.inTent ? `${tm(c.sleptAt)}、テントの中で敷物にくるまって眠った。` : `${tm(c.sleptAt)}、テントがいっぱいだったので、たき火のそばで横になって眠った。` }[c.sleepPlace];
       // その日の最後のできごとなら、あとで足される文（レベル・立ち話など）のさらに後ろに置く
       if (P2.every((x) => x.h < c.sleptAt)) c.tail = st; else put(c.sleptAt, st);
     }
@@ -1543,7 +1636,8 @@ function stepDay(S) {
     const sw = I.getTool(inv, 'sword'), tool = inv.find((x) => I.isTool(x.item));
     const weapon = sw ? sw.item : tool ? tool.item : (state.store.torch || 0) > 0 ? 'torch' : null;
     const shield = shieldLeft > 0; if (shield) shieldLeft--;
-    return { weapon, shield };
+    const armor = SMT.armorDef(L.gear, config.smithing); // 鍛冶職人が作った防具の守り（ない人は 0：前と同じ戦い）
+    return armor > 0 ? { weapon, shield, armor } : { weapon, shield };
   };
   state.night = config.enemies && config.enemies.enabled ? N.stepNight({ day, seed: state.seed, active, life, world, state, config, hist, gear: nightGear, guards: ctxs.filter((c) => c.awakeNight && !c.off).map((c) => c.v.key), outside: ctxs.filter((c) => c.outNight && R4.chance(H.outsideHurtP)).map((c) => c.v.key) }) : null;
   syncRes();
@@ -1584,6 +1678,8 @@ function stepDay(S) {
     }
   }
 
+  // 称号バッジ（釣りの 1 位・橋づくり・友だちの数など、一日の終わりに決まるもの。1 人 1 回だけ。tools/titles.js）
+  require('./titles').awardTitles({ config, villagers, life, history, state, social: S.social }, { day, date });
   for (const k in life) if (life[k].diary.length > 90) life[k].diary.splice(0, life[k].diary.length - 90);
   state.day = day; state.date = date; state.today = today; state.updated = new Date().toISOString();
 }

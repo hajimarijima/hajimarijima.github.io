@@ -2,10 +2,10 @@
 import { makeSkin } from './skingen.js';
 import { decodeWorld } from './tilemap.js';
 import { diaryPath } from './datafiles.js';
-export const JOB = { wood: '木を切る', stone: '岩を掘る', food: '食べ物を集める' };
+export const JOB = { wood: '木を切る', stone: '岩を掘る', food: '食べ物を集める', smith: '鍛冶（道具や防具を作る）' };
 export const RES = { wood: '木材', stone: '石', food: '食べ物' };
 export const RES_COLOR = { wood: '#b07a45', stone: '#8d939b', food: '#6aa84f' };
-export const ACTION = { level: '村のまん中を整地している', chop: '木を切っている', dig: '岩を掘っている', dig_last: '岩を掘り終えた', berry: '木の実を集めている', apple: 'りんごをもいでいる', till: '畑を耕している', tend: '畑の世話をしている', harvest: '畑で収穫している', forage: '草や実を集めている', fish: '池で釣りをしている', ranch: '柵の動物の世話をしている', rest: 'ケガで休んでいる' };
+export const ACTION = { level: '村のまん中を整地している', chop: '木を切っている', dig: '岩を掘っている', dig_last: '岩を掘り終えた', berry: '木の実を集めている', apple: 'りんごをもいでいる', till: '畑を耕している', tend: '畑の世話をしている', harvest: '畑で収穫している', forage: '草や実を集めている', fish: '池で釣りをしている', ranch: '柵の動物の世話をしている', rest: 'ケガで休んでいる', smith: '鍛冶屋で金づちをふるっている' };
 
 // 関係の名前と色（tools/social.js の KIND と同じ）
 export const KIND = { family: '家族', best: '親友', friend: '友だち', rival: 'ライバル', crush: '片思い', known: '知り合い' };
@@ -42,7 +42,7 @@ export async function loadDiary(key, L) {
 }
 
 export function nav(current) {
-  const items = [['index.html', '町'], ['history.html', '歴史'], ['vote.html', '投票'], ['people.html', '村人'], ['relations.html', '関係']];
+  const items = [['index.html', '町'], ['history.html', '歴史'], ['vote.html', '投票'], ['people.html', '村人'], ['relations.html', '関係'], ['fish.html', '釣り'], ['badges.html', 'バッジ']];
   const el = document.createElement('header');
   el.className = 'site-head';
   // 町のページは「./」で開く（URL の末尾に index.html が付かないように）
@@ -75,12 +75,45 @@ export function startNote(state, config) {
   return `町はまだ始まっていません（0日目）。${when}から1日目が始まります。`;
 }
 // 「住みたい」の案内（どの画面でも同じ言葉）
-export const joinText = (config) => `フォローして、インスタの投稿に「${(config && config.joinWord) || '住みたい'}」とコメントすると、すぐ町に住めます（15 分ほどで入居）。`;
+export const joinText = (config) => `フォローして、インスタの投稿に「${(config && config.joinWord) || '住みたい'}」とコメントすると、すぐ町に住めます（15 分ほどで入居）。` +
+  `道具・誕生日・好きな食べ物${mbtiOn(config) ? '・MBTI' : ''}もいっしょに書けます（例「${(config && config.joinWord) || '住みたい'} ピッケル 12/11 りんご${mbtiOn(config) ? ' INFP' : ''}」）。住んだあとも「誕生日 12/11」のようにコメントすれば変えられます。`;
+// MBTI を出すか（config.mbtiOn）。村人の MBTI の文（書いていない人は ''）。例「MBTI：INFP-T」
+export const mbtiOn = (config) => !config || config.mbtiOn !== false;
+export const mbtiText = (v, config) => (mbtiOn(config) && v && v.mbti ? `MBTI：${v.mbti}${v.mbtiAT ? '-' + v.mbtiAT : ''}` : '');
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // 称号（v.titles の id → config.titles.list の名前と説明）。バッジの HTML（説明は title 属性）
 export const titlesOf = (v, config) => ((v && v.titles) || []).map((id) => ((config && config.titles && config.titles.list) || []).find((t) => t.id === id)).filter(Boolean);
-export const titleBadges = (v, config) => titlesOf(v, config).map((t) => `<span class="titlebadge" title="${esc(t.desc || '')}">${esc(t.icon || '★')} ${esc(t.name)}</span>`).join('');
+// 村人が持っているバッジを全部（称号バッジ → 技能バッジ config.badges の順）。{ kind, id, name, desc, src, icon }
+// 称号の絵は config の img（icons/title_<id>.png）、技能バッジは icons/badge_<id>_<段>.png（はじまりの住人は icons/badge_founder.png）
+export function badgeList(v, config, L) {
+  const out = titlesOf(v, config).map((t) => ({ kind: 'title', id: t.id, name: t.name, desc: t.desc || '', src: t.img || '', icon: t.icon || '★' }));
+  const BG = config && config.badges, got = (L && L.badges) || {};
+  if (BG && BG.list) for (const [id, B] of Object.entries(BG.list)) {
+    const tr = got[id]; if (tr == null || tr < 0) continue;
+    out.push({ kind: 'skill', id, tier: tr, founder: !!B.founder, name: B.founder ? B.name : `${B.name}（${(BG.tierNames || [])[tr] || ''}）`, desc: B.note || '', src: B.founder ? `icons/badge_${id}.png` : `icons/badge_${id}_${tr}.png`, icon: '●' });
+  }
+  return out;
+}
+// バッジの絵 1 つ（絵がない称号は印の文字）
+export const badgeIcon = (b, size = 24) => (b.src ? `<img class="bdgimg pixel" src="${esc(b.src)}" alt="${esc(b.name)}" width="${size}" height="${size}" loading="lazy" decoding="async">` : `<span class="bdgtxt">${esc(b.icon || '★')}</span>`);
+// 小さなバッジの並び（町のカード・住人一覧）。称号が 2 つまでなら名前も出す。それより多い時と技能バッジは絵だけ（名前と説明は title に）
+export const titleBadges = (v, config, L) => {
+  let list = badgeList(v, config, L);
+  // はじまりの称号（金のバッジ）がある人は、同じ意味の「はじまりの住人」バッジは重ねて出さない
+  if (list.some((b) => b.kind === 'title' && /はじまり/.test(b.name))) list = list.filter((b) => !b.founder);
+  if (!list.length) return '';
+  // カードはバッジの絵だけ（名前は押した時・長押しの説明で出す）
+  return '<span class="bdgrow">' + list.map((b) => {
+    const tip = esc(b.name + (b.desc ? '：' + b.desc : ''));
+    return `<span class="bdgi" title="${tip}">${badgeIcon(b, 24)}</span>`;
+  }).join('') + '</span>';
+};
+// いちばん大きい魚（life の fishBest）。「いちばんの大物：コイ 59cm」。釣っていなければ ''
+export function bestFishText(L, config) {
+  const fb = Object.entries((L && L.fishBest) || {}).sort((a, b) => b[1][0] - a[1][0])[0];
+  return fb ? `いちばんの大物：${((config && config.items && config.items[fb[0]]) || {}).name || fb[0]} ${fb[1][0]}cm` : '';
+}
 export const skinUrl = (n) => 'skins/skin_' + String(n).padStart(3, '0') + '.png';
 // 村人のスキンの画像：プロフィールで見た目を決めた人（v.look = { body, seed }）はその場で作る。ほかは番号の画像
 const lookCache = {};
@@ -170,10 +203,12 @@ export function showError(e) {
   console.error(e);
 }
 
-export function homeName(life, world, config) {
-  if (!life.home) return 'たき火のそばのテント';
+export function homeName(life, world, config, state) {
+  // 拠点の場所の投票中（0 日目）は、たき火もチェストもまだ無い（テントは島のまん中）
+  const tent = state && (state.votes || []).some((v) => v.kind === 'base') ? '島のまん中のテント' : 'たき火のそばのテント';
+  if (!life.home) return tent;
   const b = world.buildings.find((x) => x.id === life.home);
-  if (!b) return 'たき火のそばのテント';
+  if (!b) return tent;
   const same = world.buildings.filter((x) => x.type === b.type);
   return config.buildings[b.type].name + (same.length > 1 ? ' ' + (same.indexOf(b) + 1) + '号' : '');
 }

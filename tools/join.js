@@ -48,6 +48,11 @@ for (const r of P.registrationsFrom(comments, config.joinWord, config.startTools
   if (v) registered++;
 }
 for (const v of S.villagers) P.applyPrivacy(v, hidden);
+// コメントで書いた誕生日・好きな食べ物・MBTI（「住みたい ピッケル 12/11 りんご INFP」、住んでいる人の「誕生日 12/11」「MBTI ENFP」）。
+// 見ている投稿のコメントをぜんぶ見る。あとから書いた値が勝つ。道具・仕事は変えない（config.mbtiOn が false なら MBTI は読まない）
+const profComments = [...comments, ...((inbox && inbox.voteComments) || [])].filter((c) => !owners.includes(String(P.commentUser(c).username || '').toLowerCase()));
+const profUpdated = P.applyCommentProfiles(S.villagers, profComments, { word: config.joinWord, startTools: config.startTools, mbti: config.mbtiOn !== false, enemies });
+if (profUpdated) console.log(`コメントのプロフィール：${profUpdated} 人`);
 // 「住みたい」で来た人で、誕生日・好きな食べ物がまだない人には、名前から決まった値を足す（ある値は変えない）
 let filled = 0;
 for (const v of S.villagers) if (P.fillJoinProfile(v)) filled++;
@@ -86,7 +91,7 @@ if (baseWorld) {
 }
 if (stateChanged) write('state.json', S.state);
 
-const changed = removed || registered || added.length || comments.length || filled;
+const changed = removed || registered || added.length || comments.length || filled || profUpdated;
 if (removed || registered || added.length || titled.length) {
   write('villagers.json', S.villagers);
   ST.writeLife(DATA, S.life);

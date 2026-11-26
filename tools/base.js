@@ -7,11 +7,13 @@
 const P = require('./people');
 const { makeRng } = require('./rand');
 const W = require('./welcome');
+const TN = require('../js/tents.js'); // テントの場所（拠点が決まったら、そこの木と岩もどける）
 
 const KEYS = ['A', 'B', 'C'];
 const QUESTION = '拠点はどこにする？';
 
 const cfgOf = (config) => (config && config.baseVote) || null;
+const postSet = (config) => /instagram\.com\//.test(String((config && config.votePostUrl) || ''));
 const voteOf = (state) => ((state && state.votes) || []).find((v) => v.kind === 'base') || null;
 
 // 0 日目の投票を作る（init.js）。opensAt：作った日の 0 時（日本時間）。closesAt：until（決めていなければ null ＝ 町が始まる時まで）
@@ -43,6 +45,12 @@ function wordsOf(vote, config) {
 // コメントを数え直す（1 人 1 票・最後のコメント・持ち主は数えない・締め切りのあとは数えない）。
 //   締め切りが決まっていない間は「今」まで
 function tallyBase(vote, { inbox, config, now = new Date() }) {
+  // 候補の名前・説明・場所は config.json に合わせる（投票の途中で config を書きかえた時も、地図の旗と決まる場所がそろう）
+  const BC0 = cfgOf(config);
+  if (BC0 && Array.isArray(BC0.candidates) && BC0.candidates.length === 3) vote.options.forEach((o, i) => { const c = BC0.candidates[i]; if (c) Object.assign(o, { name: c.name, x: c.x, z: c.z, desc: c.desc || '' }); });
+  // baseVote.needPost：投票の投稿の URL（votePostUrl）を貼るまでは数えない（ほかの投稿の A・B・C を拾わない）
+  if (BC0 && BC0.needPost && !postSet(config)) { vote.waiting = true; return { votes: vote.counted || { A: 0, B: 0, C: 0 }, voters: 0, comments: 0, timeline: vote.timeline || [], who: [] }; }
+  delete vote.waiting;
   const comments = (inbox && inbox.voteComments) || [];
   const close = vote.closesAt && Date.parse(vote.closesAt) < now.getTime() ? vote.closesAt : now.toISOString();
   const t = P.tallyVote(comments, { opensAt: vote.opensAt, closesAt: close, exclude: W.ownerNames(inbox, config), words: wordsOf(vote, config) });
@@ -67,7 +75,7 @@ function winnerOf(vote, config) {
 }
 
 // 拠点を置く：チェスト・たき火・広場（まだ整地していない）・区画。まわり（広場の半径 + 2.5）の木と岩はどける
-function applyBase(world, c, { seed = 'town', key = null, name = '', day = 0 } = {}) {
+function applyBase(world, c, { seed = 'town', key = null, name = '', day = 0, config = null } = {}) {
   const x = +(+c.x).toFixed(2), z = +(+c.z).toFixed(2);
   const r = (world.square && world.square.r) || 8;
   world.square = { x, z, r, leveled: 0 };
@@ -75,8 +83,11 @@ function applyBase(world, c, { seed = 'town', key = null, name = '', day = 0 } =
   world.chest = { x: +(x + 5.2).toFixed(2), z: +(z + 1.6).toFixed(2), day: (world.chest && world.chest.day) || 0 };
   world.campfire = { x: +(x + 2.5).toFixed(2), z: +(z + 4).toFixed(2) };
   const clear = r + 2.5;
-  world.trees = (world.trees || []).filter((t) => Math.hypot(t.x - x, t.z - z) >= clear);
-  world.rocks = (world.rocks || []).filter((o) => Math.hypot(o.x - x, o.z - z) >= clear);
+  // テントを置く所（js/tents.js の候補。広場の外にはみ出す分も）も空ける
+  const tents = TN.tentCandidates({ x, z }, TN.tentCfg(config).perTent);
+  const free = (o) => Math.hypot(o.x - x, o.z - z) >= clear && !tents.some((t) => TN.inTent(t, o.x, o.z, 1.6));
+  world.trees = (world.trees || []).filter(free);
+  world.rocks = (world.rocks || []).filter(free);
   // 整地する前の草と小石（1 日目にならす）
   const R = makeRng('base:' + seed + ':' + key);
   world.debris = [];
@@ -99,7 +110,7 @@ function decideBase(S, { day, now = new Date(), hist }) {
   vote.closedAt = vote.closesAt && Date.parse(vote.closesAt) < now.getTime() ? vote.closesAt : now.toISOString();
   const w = winnerOf(vote, config);
   const opt = vote.options.find((o) => o.key === w.key);
-  applyBase(world, opt, { seed: state.seed, key: opt.key, name: opt.name, day });
+  applyBase(world, opt, { seed: state.seed, key: opt.key, name: opt.name, day, config });
   state.votes = state.votes.filter((v) => v !== vote);
   const total = KEYS.reduce((s, k) => s + vote.votes[k], 0);
   const tally = vote.options.map((o) => `${o.key} ${vote.votes[o.key]}票`).join('・');

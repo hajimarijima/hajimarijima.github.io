@@ -27,7 +27,7 @@ export function seededRng(str) {
   return () => { h = (h + 0x6D2B79F5) >>> 0; let t = h; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
-// ひと晩の戦い：敵は逃げず、どちらかが全員倒れるまで戦う。mobs: [{ type }]、guards: [{ key, weapon, shield }]
+// ひと晩の戦い：敵は逃げず、どちらかが全員倒れるまで戦う。mobs: [{ type }]、guards: [{ key, weapon, shield, armor? }]（armor は防具の守りの合計）
 // 返す値：{ mobs: [{ type, max, hp, fate: 'killed'|'raid', by, round }], guards: [{ key, max, hp, down: 倒れた回 | null }],
 //          log: [...], taken: { key: 受けたダメージ }, down: [倒れた見張り], end: 'won'|'lost' }
 //   log の 1 行：見張りの攻撃 { r, g, m, dmg, crit, kill? } ／ 敵の攻撃 { r, m, g, to, down? } か { r, m, g, guard: true }
@@ -59,7 +59,9 @@ export function fightNight({ mobs, guards, C, rng }) {
       const gi = foe(mi), g = guards[gi], S = C.mobs[m.type] || C.mobs.zombie;
       if (!up(G[gi])) return; // この回にもう倒れている
       if (g.shield && rng() < C.shieldGuardP) { log.push({ r, m: mi, g: g.key, guard: true }); return; }
-      const to = Math.max(1, S.atk + (rng() < 0.3 ? 1 : 0));
+      let to = Math.max(1, S.atk + (rng() < 0.3 ? 1 : 0));
+      // 防具（g.armor ＝守りの合計）：ときどき 1 へらす。防具のない人は乱数を使わない（前と同じ結果）
+      if (g.armor > 0 && rng() < Math.min(C.armorMax ?? 0.6, g.armor * (C.armorPerDef ?? 0.08))) to = Math.max(1, to - 1);
       taken[g.key] = (taken[g.key] || 0) + to;
       G[gi].hp = Math.max(0, G[gi].hp - to);
       const e = { r, m: mi, g: g.key, to };

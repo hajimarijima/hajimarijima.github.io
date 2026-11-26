@@ -75,7 +75,7 @@ function stepNight(S) {
   const gs = guards.map((k) => ({ key: k, ...((S.gear && S.gear(k)) || { weapon: null, shield: false }) }));
   const F = CB.fightNight({ mobs: list, guards: gs, C, rng: () => R.next() });
   night.fight = {
-    gear: Object.fromEntries(gs.map((g) => [g.key, { weapon: g.weapon || null, shield: !!g.shield }])),
+    gear: Object.fromEntries(gs.map((g) => [g.key, { weapon: g.weapon || null, shield: !!g.shield, ...(g.armor ? { armor: g.armor } : {}) }])),
     mobs: F.mobs.map((m) => ({ type: m.type, max: m.max, hp: m.hp, fate: m.fate, by: m.by, round: m.round })),
     guards: F.guards, log: F.log, taken: F.taken, end: F.end,
   };

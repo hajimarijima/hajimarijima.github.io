@@ -3,22 +3,23 @@
 //   記号：sb ベッドで寝る・st 木にもたれて寝る・sg 地面（床）で寝る・e 食べる・r 休む・k チェストへ運ぶ・cr:道具 作る・
 //         c:木 木を切る・u:木 切り株を掘る・d:岩 岩を掘る・f 釣り・h:畑 収穫・ti:畑 耕す・te:畑 世話・gb:草むら 木の実・ga:木 りんごをもぐ・g 野原で集める・
 //         n 動物の世話・w 見張り・l:square|site 整地・wk:木|岩 遠くの木・岩まで歩く・wh 寝るので村へ歩いて帰る・
-//         （仕事のあとの時間）sp 散歩・tk:村人 おしゃべり・sv 池のそばで海をながめる・wf:畑 畑に水をやる・pt 柵の動物をなでる・hk:村人 荷物運びを手伝う
-export const CODE_ACTION = { sb: 'sleep', st: 'sleep', sg: 'sleep', e: 'eat', r: 'rest', k: 'carry', cr: 'craft', c: 'chop', u: 'stump', d: 'dig', f: 'fish', h: 'harvest', ti: 'till', te: 'tend', gb: 'berry', ga: 'apple', g: 'forage', n: 'ranch', w: 'guard', l: 'level', wk: 'walkout', wh: 'walkhome', sp: 'walk', tk: 'chat', sv: 'view', wf: 'water', pt: 'pet', hk: 'help' };
-export const ACTION_CODE = { chop: 'c', stump: 'u', dig: 'd', fish: 'f', harvest: 'h', till: 'ti', tend: 'te', berry: 'gb', apple: 'ga', forage: 'g', ranch: 'n', guard: 'w', level: 'l', walkout: 'wk', walkhome: 'wh', eat: 'e', rest: 'r', carry: 'k', craft: 'cr', walk: 'sp', chat: 'tk', view: 'sv', water: 'wf', pet: 'pt', help: 'hk' };
+//         （仕事のあとの時間）sp 散歩・tk:村人 おしゃべり・sv 池のそばで海をながめる・wf:畑 畑に水をやる・pt 柵の動物をなでる・hk:村人 荷物運びを手伝う・sm:鍛冶屋 鍛冶職人が道具や防具を作る
+export const CODE_ACTION = { sb: 'sleep', st: 'sleep', sg: 'sleep', e: 'eat', r: 'rest', k: 'carry', cr: 'craft', c: 'chop', u: 'stump', d: 'dig', f: 'fish', h: 'harvest', ti: 'till', te: 'tend', gb: 'berry', ga: 'apple', g: 'forage', n: 'ranch', w: 'guard', l: 'level', wk: 'walkout', wh: 'walkhome', sp: 'walk', tk: 'chat', sv: 'view', wf: 'water', pt: 'pet', hk: 'help', sm: 'smith' };
+export const ACTION_CODE = { chop: 'c', stump: 'u', dig: 'd', fish: 'f', harvest: 'h', till: 'ti', tend: 'te', berry: 'gb', apple: 'ga', forage: 'g', ranch: 'n', guard: 'w', level: 'l', walkout: 'wk', walkhome: 'wh', eat: 'e', rest: 'r', carry: 'k', craft: 'cr', walk: 'sp', chat: 'tk', view: 'sv', water: 'wf', pet: 'pt', help: 'hk', smith: 'sm' };
 export const SLEEP_PLACE = { sb: 'bed', st: 'tree', sg: 'ground' };
 // 画面に出す言葉（今していること）
-export const ACTION_JA = { sleep: '寝ている', eat: 'ごはんを食べている', rest: '休んでいる', carry: 'チェストへ運んでいる', craft: '道具を作っている', chop: '木を切っている', stump: '切り株を掘っている', dig: '岩を掘っている', fish: '池で釣りをしている', harvest: '畑で収穫している', till: '畑を耕している', tend: '畑の世話をしている', berry: '木の実を集めている', apple: 'りんごをもいでいる', forage: '草や実を集めている', ranch: '柵の動物の世話をしている', guard: '見張りをしている', level: '整地している', walkout: '遠くの仕事場まで歩いている', walkhome: '寝るので村へ帰っている', walk: '村のまわりを散歩している', chat: 'おしゃべりしている', view: '池のそばで海をながめている', water: '畑に水をやっている', pet: '柵の動物をなでている', help: '荷物運びを手伝っている' };
+export const ACTION_JA = { sleep: '寝ている', eat: 'ごはんを食べている', rest: '休んでいる', carry: 'チェストへ運んでいる', craft: '道具を作っている', chop: '木を切っている', stump: '切り株を掘っている', dig: '岩を掘っている', fish: '池で釣りをしている', harvest: '畑で収穫している', till: '畑を耕している', tend: '畑の世話をしている', berry: '木の実を集めている', apple: 'りんごをもいでいる', forage: '草や実を集めている', ranch: '柵の動物の世話をしている', guard: '見張りをしている', level: '整地している', walkout: '遠くの仕事場まで歩いている', walkhome: '寝るので村へ帰っている', walk: '村のまわりを散歩している', chat: 'おしゃべりしている', view: '池のそばで海をながめている', water: '畑に水をやっている', pet: '柵の動物をなでている', help: '荷物運びを手伝っている', smith: '鍛冶屋で金づちをふるっている' };
 export const PLACE_JA = { bed: 'ベッドで', tree: '木にもたれて', ground: '地面で' };
 export function hourText(x) {
   if (!x || !x.action) return '';
   if (x.action === 'sleep') return (PLACE_JA[x.place] || '') + '寝ている';
   if (x.action === 'craft' && x.target === 'bed') return 'ベッドを作っている';
+  if (x.action === 'fish' && x.target === 'sea') return '海べで釣りをしている';
   return ACTION_JA[x.action] || '';
 }
 // 仕事のあとの時間（とれる物はない）
 export const FREE = new Set(['walk', 'chat', 'view', 'water', 'pet', 'help']);
-export const WORK = new Set(['chop', 'stump', 'dig', 'fish', 'harvest', 'till', 'tend', 'berry', 'apple', 'forage', 'ranch', 'guard', 'level']);
+export const WORK = new Set(['chop', 'stump', 'dig', 'fish', 'harvest', 'till', 'tend', 'berry', 'apple', 'forage', 'ranch', 'guard', 'level', 'smith']);
 
 // 24 個 → まとめた文字列
 export function encodeHours(arr) {
