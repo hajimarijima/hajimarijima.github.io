@@ -1308,6 +1308,8 @@ t('すぐの入居：join.js で 0 日目に住み始め、daily（--gate）は�
   assert.ok(L.diary.length === 1 && L.diary[0].day === 0 && L.diary[0].text.startsWith('今日から村に住むことになった。'), '日記の 1 行目');
   let hist = read('history.json');
   assert.ok(hist.some((h) => h.type === 'join' && h.day === 0 && h.who.includes(v.key)), '町の歴史に残る');
+  assert.strictEqual(v.joinedAt, '10:00', '島に来た時刻（日本時間の 時:分）');
+  assert.strictEqual(hist.find((h) => h.type === 'join').time, '10:00', '歴史の行にも時刻');
   assert.ok(!STORE.readWorld(dir).chest.day,'0 日目はまだチェストを置かない（1 日目の朝）');
   // もう一度動かしても、同じ人は増えない・日記も増えない
   node('tools/join.js', '--now', '2026-11-27T10:15:00+09:00');
@@ -2351,6 +2353,152 @@ at('投稿の URL が見つからない・空の時は Secrets の ID を使う�
   r = await IG.resolveMedia({ votePostUrl: 'https://example.com/x' }, { IG_VOTE_MEDIA: '999' }, 'U1', 'T', () => {});
   assert.strictEqual(r.vote, '999', 'インスタ以外の URL は使わない');
   IG._setFetch(null);
+});
+// ---------- 最近の投稿をまとめて読む（collect）：にせの Graph API ----------
+// media：一覧（comments_count つき）、cm：投稿 ID → コメント。呼ばれた URL を返す
+function fakeIG(media, cm, { me = { followers_count: 42, username: 'town_owner' } } = {}) {
+  const calls = [];
+  IG._setFetch(async (url) => {
+    calls.push(url);
+    const u = new URL(url);
+    const ok = (body) => ({ ok: true, json: async () => body, text: async () => '' });
+    if (/\/media$/.test(u.pathname)) return ok({ data: media });
+    const m = /\/(\d+)\/comments$/.exec(u.pathname);
+    if (m) {
+      const all = cm[m[1]] || [], p = Number(u.searchParams.get('page') || 0), per = 2; // 2 件ずつのページ
+      const body = { data: all.slice(p * per, p * per + per) };
+      if ((p + 1) * per < all.length) body.paging = { next: url.replace(/&page=\d+|$/, '') + '&page=' + (p + 1) };
+      return ok(body);
+    }
+    if (/\/U1$/.test(u.pathname)) return ok(me);
+    return { ok: false, status: 404, text: async () => 'nope' };
+  });
+  return calls;
+}
+const NOW_IG = new Date('2026-11-26T12:00:00Z');
+const igC = (id, uid, user, text, ts = '2026-11-26T01:00:00+0000') => ({ id, text, timestamp: ts, from: { id: uid, username: user } });
+const MEDIA = [
+  { id: '111', permalink: 'https://www.instagram.com/p/NEWEST/', timestamp: '2026-11-26T00:00:00+0000', comments_count: 3 },
+  { id: '222', permalink: 'https://www.instagram.com/reel/VOTE1/', timestamp: '2026-11-25T00:00:00+0000', comments_count: 3 },
+  { id: '444', permalink: 'https://www.instagram.com/p/NOCOM/', timestamp: '2026-11-24T00:00:00+0000', comments_count: 0 },
+  { id: '333', permalink: 'https://www.instagram.com/p/OLD/', timestamp: '2026-08-01T00:00:00+0000', comments_count: 1 },
+];
+const CM = {
+  111: [igC('c1', '1', 'aki', '住みたい ピッケル'), igC('c2', '2', 'ben', 'A'), igC('c6', '1', 'aki', '誕生日 3/14')],
+  222: [igC('c3', '3', 'cho', '住みたい'), igC('c4', '1', 'aki', 'B'), igC('c7', '9', 'town_owner', 'A')],
+  333: [igC('c5', '4', 'dan', '住みたい')],
+};
+at('最近の投稿：どの投稿の「住みたい」も受け付ける・投票は投票の投稿だけ・同じ人は 1 人・持ち主は数えない', async () => {
+  const calls = fakeIG(MEDIA, CM);
+  const r = await IG.collect({ cfg: { votePostUrl: 'https://www.instagram.com/p/VOTE1/' }, env: {}, userId: 'U1', token: 'T', now: NOW_IG, log: () => {} });
+  const ids = (cs) => cs.map((c) => c.id).sort();
+  assert.deepStrictEqual(ids(r.data.voteComments), ['c3', 'c4'], '投票は投票の投稿だけ（ほかの投稿の A は数えない）・持ち主は外す');
+  assert.deepStrictEqual(ids(r.data.joinComments), ['c1', 'c2', 'c3', 'c4', 'c6'], '最近の投稿ぜんぶ（60 日より古い投稿は読まない）・同じコメントは 1 回');
+  const regs = P.registrationsFrom(r.data.joinComments);
+  assert.deepStrictEqual(regs.map((x) => x.username).sort(), ['aki', 'cho'], 'from.id ごとに 1 人');
+  assert.deepStrictEqual(P.tallyVote(r.data.voteComments, { opensAt: '2026-11-25T00:00:00Z', closesAt: '2026-11-27T00:00:00Z' }).votes, { A: 0, B: 1, C: 0 }, 'ほかの投稿の A は票にならない');
+  assert.ok(!calls.some((c) => /\/444\/comments/.test(c)), 'コメントのない投稿は呼ばない');
+  assert.ok(!calls.some((c) => /\/333\/comments/.test(c)), '古い投稿は呼ばない');
+  assert.strictEqual(calls.filter((c) => /\/222\/comments/.test(c)).length, 2, '投票の投稿は 1 回だけ読む（2 ページ）');
+  assert.strictEqual(r.calls, calls.length);
+  assert.strictEqual(r.calls, 1 + 1 + 2 + 2, '一覧 1・フォロワーと名前 1・コメント（2 件ずつ）4');
+  assert.strictEqual(r.data.followers, 42); assert.strictEqual(r.data.owner, 'town_owner');
+  assert.deepStrictEqual(r.cache.media, { 111: 3, 222: 3, 444: 0 }, '覚え書きは ID と数だけ');
+  assert.ok(!JSON.stringify(r.cache).includes('aki') && !JSON.stringify(r.cache).includes('住みたい'), '覚え書きに名前・コメントは入れない');
+  // joinPostUrl の投稿は、古くても読む
+  fakeIG(MEDIA, CM);
+  const r2 = await IG.collect({ cfg: { votePostUrl: 'https://www.instagram.com/p/VOTE1/', joinPostUrl: 'https://www.instagram.com/p/OLD/' }, userId: 'U1', token: 'T', now: NOW_IG, log: () => {} });
+  assert.ok(r2.data.joinComments.some((c) => c.id === 'c5'), 'joinPostUrl はいつも読む');
+  IG._setFetch(null);
+});
+at('最近の投稿：数（joinScanPosts）・日にち（joinScanDays）で切る・おかしな値は既定', async () => {
+  assert.deepStrictEqual(IG.scanOpts({}), { posts: 25, days: 60 });
+  assert.deepStrictEqual(IG.scanOpts({ joinScanPosts: 500, joinScanDays: -1 }), { posts: 100, days: 60 });
+  assert.deepStrictEqual(IG.scanOpts({ joinScanPosts: 'x', joinScanDays: 0 }), { posts: 25, days: 0 });
+  let calls = fakeIG(MEDIA, CM);
+  let r = await IG.collect({ cfg: { votePostUrl: 'https://www.instagram.com/p/VOTE1/', joinScanPosts: 1 }, userId: 'U1', token: 'T', now: NOW_IG, log: () => {} });
+  assert.deepStrictEqual(r.data.joinComments.map((c) => c.id).sort(), ['c1', 'c2', 'c3', 'c4', 'c6'], '1 投稿＋投票の投稿');
+  calls = fakeIG(MEDIA, CM);
+  r = await IG.collect({ cfg: { votePostUrl: 'https://www.instagram.com/p/VOTE1/', joinScanPosts: 0 }, env: { IG_JOIN_MEDIA: '333' }, userId: 'U1', token: 'T', now: NOW_IG, log: () => {} });
+  assert.ok(!calls.some((c) => /\/111\/comments/.test(c)), '0 なら最近の投稿は読まない（決めた投稿だけ）');
+  assert.ok(r.data.joinComments.some((c) => c.id === 'c5'));
+  fakeIG(MEDIA, CM);
+  r = await IG.collect({ cfg: { votePostUrl: 'https://www.instagram.com/p/VOTE1/', joinScanDays: 0 }, userId: 'U1', token: 'T', now: NOW_IG, log: () => {} });
+  assert.ok(r.data.joinComments.some((c) => c.id === 'c5'), '0 なら日にちで切らない');
+  IG._setFetch(null);
+});
+at('覚え書き：コメントの数が同じ投稿は読まない・Webhook の投稿と数が変わった投稿は読む・6 時間で全部読み直す', async () => {
+  fakeIG(MEDIA, CM);
+  const cfg = { votePostUrl: 'https://www.instagram.com/p/VOTE1/' };
+  const first = await IG.collect({ cfg, userId: 'U1', token: 'T', now: NOW_IG, log: () => {} });
+  let calls = fakeIG(MEDIA, CM);
+  let r = await IG.collect({ cfg, userId: 'U1', token: 'T', now: new Date(NOW_IG.getTime() + 10 * 60e3), cache: first.cache, log: () => {} });
+  assert.ok(!calls.some((c) => /\/111\/comments/.test(c)), '数が同じ投稿は読まない');
+  assert.ok(calls.some((c) => /\/222\/comments/.test(c)), '投票の投稿は毎回読む');
+  assert.ok(!calls.some((c) => /\/U1\?/.test(c)), 'フォロワー数は 1 時間覚えておく');
+  assert.strictEqual(r.calls, 1 + 2, '一覧 1・投票の投稿 2 ページ');
+  assert.strictEqual(r.data.followers, 42);
+  assert.strictEqual(r.stats.skipped, 1);
+  // Webhook が教えた投稿は、数が同じでも読む（数字以外は捨てる）
+  assert.deepStrictEqual(IG.hintIds('111, abc,222;x,'), ['111']);
+  calls = fakeIG(MEDIA, CM);
+  r = await IG.collect({ cfg, userId: 'U1', token: 'T', now: new Date(NOW_IG.getTime() + 10 * 60e3), cache: first.cache, hint: '111', log: () => {} });
+  assert.ok(calls.some((c) => /\/111\/comments/.test(c)));
+  // 数が変わったら読む
+  calls = fakeIG(MEDIA.map((m) => (m.id === '111' ? { ...m, comments_count: 4 } : m)), CM);
+  r = await IG.collect({ cfg, userId: 'U1', token: 'T', now: new Date(NOW_IG.getTime() + 10 * 60e3), cache: first.cache, log: () => {} });
+  assert.ok(calls.some((c) => /\/111\/comments/.test(c)));
+  assert.strictEqual(r.cache.media['111'], 4);
+  // 6 時間たったら全部読み直す
+  calls = fakeIG(MEDIA, CM);
+  r = await IG.collect({ cfg, userId: 'U1', token: 'T', now: new Date(NOW_IG.getTime() + 7 * 3600e3), cache: first.cache, log: () => {} });
+  assert.ok(calls.some((c) => /\/111\/comments/.test(c)) && r.stats.full);
+  // 読めなかった投稿は覚え書きに入れない（次にまた読む）
+  fakeIG(MEDIA, { 222: CM[222] });
+  const failing = IG._setFetch;
+  calls = [];
+  IG._setFetch(async (url) => {
+    calls.push(url);
+    if (/\/111\/comments/.test(url)) return { ok: false, status: 500, text: async () => 'x' };
+    const u = new URL(url), ok = (b) => ({ ok: true, json: async () => b, text: async () => '' });
+    if (/\/media$/.test(u.pathname)) return ok({ data: MEDIA });
+    if (/\/222\/comments/.test(u.pathname)) return ok({ data: CM[222] });
+    return ok({ followers_count: 1, username: 'town_owner' });
+  });
+  r = await IG.collect({ cfg, userId: 'U1', token: 'T', now: NOW_IG, log: () => {} });
+  assert.ok(!('111' in r.cache.media), '失敗した投稿は覚えない');
+  assert.ok(failing);
+  IG._setFetch(null);
+});
+at('Webhook の受け口（tools/webhook/worker.mjs）：署名を確かめる・コメントの投稿の ID だけ取る・GET の確かめ', async () => {
+  const W = await import(require('url').pathToFileURL(path.join(ROOT, 'tools', 'webhook', 'worker.mjs')).href);
+  const body = new TextEncoder().encode(JSON.stringify({ object: 'instagram', entry: [{ id: '1', changes: [{ field: 'comments', value: { comment_id: 'x', text: '住みたい', from: { id: '5' }, media: { id: '1789' } } }] }] }));
+  const sig = 'sha256=' + require('crypto').createHmac('sha256', 'APPSECRET').update(body).digest('hex');
+  assert.ok(await W.verifySignature(sig, body, ['APPSECRET']));
+  assert.ok(await W.verifySignature(sig, body, [undefined, 'APPSECRET']), '2 つ目の秘密でも通す');
+  assert.ok(!(await W.verifySignature(sig, body, ['WRONG'])));
+  assert.ok(!(await W.verifySignature('sha1=abc', body, ['APPSECRET'])));
+  assert.deepStrictEqual(W.commentMedia(JSON.parse(new TextDecoder().decode(body))), ['1789'], 'Facebook のログインの形');
+  assert.deepStrictEqual(W.commentMedia([{ object: 'instagram', entry: [{ id: '1', field: 'comments', value: { id: 'c', media: { id: '42' } } }, { id: '1', field: 'mentions', value: {} }] }]), ['42'], 'インスタのログインの形・ほかの field は見ない');
+  assert.deepStrictEqual(W.commentMedia({ object: 'page', entry: [] }), []);
+  // GET（Meta の確かめ）と POST（署名ちがい）
+  const env = { META_VERIFY_TOKEN: 'vt', META_APP_SECRET: 'APPSECRET' };
+  let res = await W.default.fetch(new Request('https://w.example/?hub.mode=subscribe&hub.verify_token=vt&hub.challenge=12345'), env, { waitUntil() {} });
+  assert.strictEqual(res.status, 200); assert.strictEqual(await res.text(), '12345');
+  res = await W.default.fetch(new Request('https://w.example/?hub.mode=subscribe&hub.verify_token=no&hub.challenge=1'), env, { waitUntil() {} });
+  assert.strictEqual(res.status, 403);
+  res = await W.default.fetch(new Request('https://w.example/', { method: 'POST', body, headers: { 'X-Hub-Signature-256': 'sha256=' + '0'.repeat(64) } }), env, { waitUntil() {} });
+  assert.strictEqual(res.status, 401);
+  const waits = [];
+  res = await W.default.fetch(new Request('https://w.example/', { method: 'POST', body, headers: { 'X-Hub-Signature-256': sig } }), env, { waitUntil: (p) => waits.push(p) });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(waits.length, 0, 'GH_DISPATCH_TOKEN がない時は GitHub に頼まない');
+  const src = fs.readFileSync(path.join(ROOT, 'tools', 'webhook', 'worker.mjs'), 'utf8');
+  assert.ok(!/ghp_|github_pat_/.test(src), '鍵をコードに書かない');
+  const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'join.yml'), 'utf8');
+  assert.ok(/repository_dispatch:\s*\n\s*types: \[ig-comment\]/.test(wf) && /workflow_dispatch/.test(wf), 'join.yml は Webhook と手で動く');
+  assert.ok(/IG_HINT_MEDIA: \$\{\{ github\.event\.client_payload\.media \}\}/.test(wf) && !/run:.*client_payload/.test(wf), 'Webhook の値は env で渡す');
+  assert.ok(/instagram\.js --cache/.test(wf), 'join は覚え書きを使う');
 });
 t('投稿の URL を変える（set_post.js）：その値だけ書きかえ・住みたいは足していく・悪い URL は止める', () => {
   const SP = require('../tools/set_post');

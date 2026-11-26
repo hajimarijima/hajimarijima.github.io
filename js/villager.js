@@ -50,7 +50,7 @@ async function main() {
     nameEl.after(box);
   }
   document.getElementById('info').innerHTML = [
-    ['参加した日', `${fmtDate(v.joined)}（${v.joinedDay}日目）`],
+    ['参加した日', v.joinedAt && /^\d{2}:\d{2}$/.test(v.joinedAt) ? `${fmtDate(v.joined)} ${v.joinedAt} に島に来た（${v.joinedDay}日目）` : `${fmtDate(v.joined)}（${v.joinedDay}日目）`],
     // 誕生日・好きな食べ物（「住みたい 誕生日3月14日 りんご」で書いた値。書いていない人は島が決めた値）。プロフィールの欄を出す時はそちらに出る
     ...(ps && !ps.hidden ? [] : [...(v.birthday ? [['誕生日', mdText(v.birthday)]] : []), ...(v.profile && v.profile.food ? [['好きな食べ物', v.profile.food]] : []), ...(mbtiText(v, D.config) ? [['MBTI', mbtiText(v, D.config).replace('MBTI：', '')]] : [])]),
     ['今の仕事', `${JOB[L.job] || 'まだなし'}${L.action ? '（' + ACTION[L.action] + '）' : ''}${L.smith && L.job !== 'smith' ? '・村の鍛冶職人' : ''}`],

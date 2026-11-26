@@ -1,7 +1,16 @@
 # インスタの API につながるかだけ確かめる（手で動かす。町は進めない・何も書かない）
+# 「webhook をオンにする」を選ぶと、コメントがついたらすぐ知らせてもらう設定をこのアカウントでオンにする（docs/すぐ反映する手順.md）
 name: ig-check
 on:
   workflow_dispatch:
+    inputs:
+      what:
+        description: "すること"
+        type: choice
+        options:
+          - "つながるか確かめる"
+          - "webhook をオンにする"
+        default: "つながるか確かめる"
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -11,7 +20,14 @@ jobs:
         with:
           node-version: 20
       - name: インスタにつながるか
+        if: inputs.what != 'webhook をオンにする'
         run: node tools/instagram.js --check
+        env:
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+      - name: webhook をオンにする
+        if: inputs.what == 'webhook をオンにする'
+        run: node tools/instagram.js --subscribe
         env:
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}

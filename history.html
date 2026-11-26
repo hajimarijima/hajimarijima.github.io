@@ -31,7 +31,7 @@ loadAll().then((D) => {
   const draw = () => {
     f.innerHTML = types.map(([k, t]) => `<button data-k="${k}" class="${k === cur ? 'on' : ''}">${t}</button>`).join('');
     const list = D.history.filter((h) => cur === 'all' || (cur === 'vote' ? h.type.startsWith('vote') : cur === 'social' ? ['social', 'birthday'].includes(h.type) : cur === 'event' ? ['event', 'start', 'fish'].includes(h.type) : h.type === cur));
-    document.getElementById('tl').innerHTML = list.slice().reverse().map((h) => `<li class="${h.type}"><div class="when">${h.day}日目・${fmtDate(h.date)}</div>${esc(h.text)}</li>`).join('');
+    document.getElementById('tl').innerHTML = list.slice().reverse().map((h) => `<li class="${h.type}"><div class="when">${h.day}日目・${fmtDate(h.date)}${/^\d{2}:\d{2}$/.test(h.time || '') ? ' ' + h.time : ''}</div>${esc(h.text)}</li>`).join('');
   };
   f.addEventListener('click', (e) => { const k = e.target.dataset && e.target.dataset.k; if (k) { cur = k; draw(); } });
   draw();

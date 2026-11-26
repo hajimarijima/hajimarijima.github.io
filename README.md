@@ -316,12 +316,16 @@ node tools/hide.js ユーザー名
 
 15 分ごとの `join.yml` は、インスタを読む → 住む人の受付（その場で入居）→ 変わったファイル（村人・暮らし・日記・歴史・関係・地図）をコミット、だけをします。日は進めません。
 
+- 「住みたい」と誕生日・好きな食べ物・MBTI は、**最近の投稿（`config.json` の `joinScanPosts`、既定 25 件・`joinScanDays` 既定 60 日まで）のどれに書いてもよい**。`joinPostUrl` の投稿は古くても読みます。投票（A・B・C）は投票の投稿のコメントだけで数えます。
+- join はコメントの数が前と同じ投稿を読みません（Actions のキャッシュに、投稿ごとの数だけを覚えておく。名前やコメントは入れない。6 時間に 1 回は全部読み直す）。
+- コメントがついたら 2〜3 分で反映したい時は **`docs/すぐ反映する手順.md`**（Cloudflare の受け口 `tools/webhook/` から `repository_dispatch` で join を動かす）。
+
 **要る Secrets の名前**
 | 名前 | 中身 | 無い時 |
 |---|---|---|
 | `IG_TOKEN` | インスタの長期アクセストークン（60 日で切れる） | インスタを読まずに進む |
 | `IG_USER_ID` | インスタのプロのアカウントの ID | 同上 |
-| `IG_JOIN_MEDIA` | 「住みたい」を集める投稿の ID（カンマ区切りで複数可）。`config.json` の `joinPostUrl` があればそちらが先 | 最近の 5 投稿から集める |
+| `IG_JOIN_MEDIA` | 「住みたい」を集める投稿の ID（カンマ区切りで複数可）。`config.json` の `joinPostUrl` があればそちらが先。どちらも最近の投稿（`joinScanPosts`）に足して読む | 最近の投稿だけ読む |
 | `IG_VOTE_MEDIA` | 今の投票の投稿の ID。`config.json` の `votePostUrl` があればそちらが先 | いちばん新しい投稿で数える |
 | `FIREBASE_SERVICE_ACCOUNT` | Firebase のサービスアカウントの鍵の JSON（Google ログインを使う時だけ） | Firestore の同期をとばす |
 

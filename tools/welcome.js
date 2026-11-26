@@ -8,6 +8,7 @@ const HR = require('../js/hours.js');
 
 const NE_DEFAULT = { max: 20, hungerBase: 4, hungerWork: 5, eat: 10, starve: 2, regenAt: 14, regen: 2, restBelow: 8, restHeal: 8, restHunger: 2 };
 const jstToday = (now = new Date()) => new Date(now.getTime() + 9 * 3600e3).toISOString().slice(0, 10);
+const jstTime = (now = new Date()) => new Date(now.getTime() + 9 * 3600e3).toISOString().slice(11, 16); // "14:05"
 
 function newLife() {
   return { job: null, target: null, home: null, gathered: { wood: 0, stone: 0, food: 0 }, built: [], contrib: { wood: 0, stone: 0, food: 0 }, diary: [] };
@@ -117,7 +118,9 @@ function welcomeNow(S, { now = new Date() } = {}) {
     added.push(v);
   }
   if (!added.length) return { added, worldChanged: false };
+  const time = jstTime(now); // 島に来た時刻（日本時間の 時:分）
   for (const v of added) {
+    if (!v.joinedAt) v.joinedAt = time;
     const L = life[v.key] = newLife();
     const note = ensureLife(L, v, { day, life, config });
     refreshLevel(L, day - v.joinedDay + 1, IC);
@@ -131,7 +134,7 @@ function welcomeNow(S, { now = new Date() } = {}) {
     L.diary.push({ day, date, text: '今日から村に住むことになった。よろしく。' + note + (day === 0 ? 'まだ町は始まっていない。始まる日まで、島を見て回る。' : '') });
     if (S.social) { S.social.view = S.social.view || {}; if (!S.social.view[v.key]) S.social.view[v.key] = []; }
   }
-  history.push({ day, date, type: 'join', text: added.map((v) => v.display).join('、') + ' が村に住むことになった。', who: added.map((v) => v.key) });
+  history.push({ day, date, time, type: 'join', text: added.map((v) => v.display).join('、') + ' が村に住むことになった。', who: added.map((v) => v.key) });
   let worldChanged = false;
   if (day >= 1 && world.chest && !world.chest.day) {
     world.chest.day = day; worldChanged = true;

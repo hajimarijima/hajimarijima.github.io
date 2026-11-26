@@ -1,0 +1,20 @@
+# コマンドで置く人だけ使う見本（Cloudflare の画面でコピペして置くなら要らない）。
+# 使い方：このファイルを wrangler.toml という名前でコピーし、id を自分の KV の ID にして `npx wrangler deploy`。
+# 合言葉・鍵はここに書かない。`npx wrangler secret put META_VERIFY_TOKEN` のように 1 つずつ入れる
+#   （META_VERIFY_TOKEN・META_APP_SECRET・GH_DISPATCH_TOKEN。使う時だけ IG_APP_SECRET・IG_TOKEN・IG_USER_ID）
+name = "town-webhook"
+main = "worker.mjs"
+compatibility_date = "2024-09-23"
+
+# 続けて来たコメントで何度も頼まないため（任意）。2 分ごとの見回りには必須
+[[kv_namespaces]]
+binding = "TOWN_KV"
+id = "ここに KV の ID"
+
+# Webhook が届かない時の代わり：2 分ごとにコメントの数を見る（IG_TOKEN・IG_USER_ID を入れた時だけ動く）
+[triggers]
+crons = ["*/2 * * * *"]
+
+[vars]
+GITHUB_REPO = "hajimarijima/hajimarijima.github.io"
+DEBOUNCE_SECONDS = "30"

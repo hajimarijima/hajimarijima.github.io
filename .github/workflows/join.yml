@@ -1,35 +1,57 @@
-# 15 分ごとに「住みたい」コメントを読んで、その場で町に住んでもらう（日は進めない。進めるのは daily.yml）。
+# 「住みたい」コメントを読んで、その場で町に住んでもらう（日は進めない。進めるのは daily.yml）。
 # 0 日目（町が始まる前）でも、受け付けた人はすぐ町に住み始める。
-# GitHub の混み具合で、実際には 15〜30 分おきくらいになることがある。
+# 動くとき：
+#   ・15 分ごと（schedule）。GitHub の混み具合で、実際には 15〜30 分おきくらいになることがある
+#   ・コメントがついたらすぐ（repository_dispatch の ig-comment。tools/webhook/ の受け口が呼ぶ。docs/すぐ反映する手順.md）
+#   ・手で（Actions → join → Run workflow）
+# 最近の投稿（config.json の joinScanPosts）のどれに「住みたい」と書いても受け付ける。投票は投票の投稿だけで数える。
 name: join
 
 on:
   workflow_dispatch:
+  repository_dispatch:
+    types: [ig-comment]
   schedule:
     - cron: "*/15 * * * *"
 
 permissions:
   contents: write
 
+# 2 段の順番待ち：
+#   ・join どうし（town-join）：動いている 1 つ＋待っている 1 つだけ。待っている間に次が来たら、新しい方だけ残る（最新のコメントはどれでも読めるので困らない）
+#   ・町のファイルを書く仕事どうし（town。daily・投稿の URL を変える と同じ）：同時に書かない
+#   join が town で待つのは 1 つだけになるので、コメントがたくさん来ても、待っている daily を押し出さない
 concurrency:
-  group: town
+  group: town-join
   cancel-in-progress: false
 
 jobs:
   join:
     runs-on: ubuntu-latest
+    concurrency:
+      group: town
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+      # 前に読んだ投稿ごとのコメントの数（公開しない。名前やコメントは入っていない）。数が同じ投稿は読まずに API を節約する
+      - name: 前の覚え書きを出す
+        uses: actions/cache/restore@v4
+        with:
+          path: data/inbox/ig_cache.json
+          key: ig-cache-${{ github.run_id }}
+          restore-keys: ig-cache-
       - name: インスタを読む
-        run: node tools/instagram.js
+        run: node tools/instagram.js --cache
         env:
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_JOIN_MEDIA: ${{ secrets.IG_JOIN_MEDIA }}
           IG_VOTE_MEDIA: ${{ secrets.IG_VOTE_MEDIA }}
+          # Webhook が教えてくれた、コメントがついた投稿の ID（数字以外は instagram.js が捨てる）
+          IG_HINT_MEDIA: ${{ github.event.client_payload.media }}
       - name: 住む人の受付
         run: node tools/join.js
         env:
@@ -44,3 +66,10 @@ jobs:
             if [ -e "$f" ]; then git add "$f"; fi
           done
           git diff --cached --quiet || (git commit -m "住む人の受付・入居" && git push)
+      # 受付とコミットまで済んだ時だけ、覚え書きを残す（途中で止まったら、次は前の覚え書きでまた読む）
+      - name: 覚え書きを残す
+        if: success() && hashFiles('data/inbox/ig_cache.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: data/inbox/ig_cache.json
+          key: ig-cache-${{ github.run_id }}-${{ github.run_attempt }}
