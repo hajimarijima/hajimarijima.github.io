@@ -115,7 +115,11 @@ t('名前かくし：公開ファイルのどこからも、かくした人の�
     bad.push(h('user:' + uname).slice(0, 16), h('key:user:' + uname).slice(0, 10));
     if (igid) bad.push(h('ig:' + igid).slice(0, 16), h('key:ig:' + igid).slice(0, 10));
   }
-  for (const b of bad) assert.ok(!text.includes(b.toLowerCase()), '公開ファイルに入っている：' + b);
+  // 数字だけの ID（見本は 4 けた）は、ハッシュの 16 進の中にたまたま並ぶことがあるので、前後が英数字でない所だけ見る
+  for (const b of bad) {
+    const hit = /^\d+$/.test(b) ? new RegExp(`(^|[^0-9a-z])${b}($|[^0-9a-z])`).test(text) : text.includes(b.toLowerCase());
+    assert.ok(!hit, '公開ファイルに入っている：' + b);
+  }
   // 印は塩入りの HMAC になっている（塩を知らなければ名前から作れない）
   assert.strictEqual(hv.userHash, hm('user:' + uname).slice(0, 16));
   if (igid) assert.strictEqual(hv.key, hm('key:ig:' + igid).slice(0, 10));
