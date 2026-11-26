@@ -11,6 +11,7 @@ const path = require('path');
 const http = require('http');
 const { execFileSync } = require('child_process');
 const puppeteer = require('puppeteer-core');
+const STONE = require('./sfx_stone');
 
 const ROOT = path.join(__dirname, '..');
 const VIDEO = path.join(ROOT, 'video');
@@ -123,19 +124,13 @@ function synth(duration, sfx) {
       for (let k = 0; k < len; k++) { const tt = k / len; lp += (noise() - lp) * (0.02 + 0.05 * tt); add(s0 + k, 0.5 * e.gain * lp * Math.sin(Math.PI * tt), Math.sin(tt * 3) * 0.4); }
       continue;
     }
-    if (e.type === 'chop') {
-      // 木を切る「コッ」：太い木の胴が鳴る低い 2 つの響き＋木くずの短い音
-      let lp = 0;
-      for (let k = 0; k < SR * 0.3; k++) {
-        const tt = k / SR; lp += (noise() - lp) * 0.12;
-        add(s0 + k, 0.32 * e.gain * (Math.sin(2 * Math.PI * 140 * tt) * Math.exp(-tt * 22) + 0.45 * Math.sin(2 * Math.PI * 310 * tt) * Math.exp(-tt * 35) + lp * 1.4 * Math.exp(-tt * 60)), pan);
-      }
-    } else if (e.type === 'build') {
-      // 作る・組み立てる「トン」：やわらかい低い音
-      for (let k = 0; k < SR * 0.22; k++) {
-        const tt = k / SR;
-        add(s0 + k, 0.26 * e.gain * (Math.sin(2 * Math.PI * (95 + 60 * Math.exp(-tt * 40)) * tt) * Math.exp(-tt * 20) + 0.25 * Math.sin(2 * Math.PI * 230 * tt) * Math.exp(-tt * 45)), pan);
-      }
+    if (STONE.SOUNDS[e.type]) {
+      // 木を切る（chop）・作る（build）など：sfx_stone.js の選んでもらった音。1 回ずつ大きさをそろえて足す
+      const tmp = new Float32Array(SR * 0.5);
+      STONE.SOUNDS[e.type]((i, v) => { if (i >= 0 && i < tmp.length) tmp[i] += v; }, 0);
+      let pk = 0; for (const v of tmp) pk = Math.max(pk, Math.abs(v));
+      const g = pk > 0 ? 0.32 * e.gain / pk : 0;
+      for (let k = 0; k < tmp.length; k++) add(s0 + k, tmp[k] * g, pan);
     } else {
       // 岩を掘る「ガッ」：中くらいの高さの石の響き＋低い「ゴッ」＋砕ける音（甲高くはしない）
       let lp = 0, lp2 = 0;

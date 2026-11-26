@@ -366,3 +366,23 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .pbar i { display: block; height: 100%; background: #6a9f4e; }
 .dot.r-wood { background: #b07a45; } .dot.r-stone { background: #8d939b; } .dot.r-food { background: #6aa84f; }
 #chestcard { scroll-margin-top: 64px; }
+
+/* 建てている物・橋を押した時の札（あと何個いるか）。村人カードと同じ場所（下）に出す */
+.btag.pjtag { cursor: pointer; }
+.vcard.pjcard { display: block; max-width: 380px; padding: 12px 16px 10px; max-height: calc(100% - 120px); overflow: auto; }
+.pj p { margin: 0; }
+.pj .pj-name { font-size: 16px; padding-right: 22px; line-height: 1.35; }
+.pj .pj-name .muted { font-size: 13px; }
+.pj .pj-prog { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin: 6px 0 4px; font-size: 13px; }
+.pj .pj-prog b { font-size: 18px; color: #2e7d32; }
+.pj > .pbar { height: 8px; }
+.pj .pj-sub { margin: 10px 0 4px; font-size: 12px; color: var(--sub); font-weight: 700; }
+.pj-rows { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.pj-rows li { display: grid; grid-template-columns: 24px 1fr auto; gap: 8px; align-items: center; font-size: 14px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+.pj-rows li:last-child { border-bottom: 0; }
+.pj-rows li img, .pj-rows li .dot { width: 22px; height: 22px; margin: 0; image-rendering: pixelated; }
+.pj-rows .gc { white-space: nowrap; }
+.pj-rows .gc b { font-size: 16px; color: #b3541e; }
+.pj-rows .gc small { margin-left: 4px; color: var(--sub); font-size: 12px; }
+.pj-rows li.done .gc { color: #2e7d32; font-weight: 700; }
+.pj .pj-who { margin-top: 8px; font-size: 12px; }

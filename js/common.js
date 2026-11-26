@@ -5,7 +5,7 @@ import { diaryPath } from './datafiles.js';
 export const JOB = { wood: '木を切る', stone: '岩を掘る', food: '食べ物を集める' };
 export const RES = { wood: '木材', stone: '石', food: '食べ物' };
 export const RES_COLOR = { wood: '#b07a45', stone: '#8d939b', food: '#6aa84f' };
-export const ACTION = { level: '村のまん中を整地している', chop: '木を切っている', dig: '岩を掘っている', dig_last: '岩を掘り終えた', berry: '木の実を集めている', till: '畑を耕している', tend: '畑の世話をしている', harvest: '畑で収穫している', forage: '草や実を集めている', fish: '池で釣りをしている', ranch: '柵の動物の世話をしている', rest: 'ケガで休んでいる' };
+export const ACTION = { level: '村のまん中を整地している', chop: '木を切っている', dig: '岩を掘っている', dig_last: '岩を掘り終えた', berry: '木の実を集めている', apple: 'りんごをもいでいる', till: '畑を耕している', tend: '畑の世話をしている', harvest: '畑で収穫している', forage: '草や実を集めている', fish: '池で釣りをしている', ranch: '柵の動物の世話をしている', rest: 'ケガで休んでいる' };
 
 // 関係の名前と色（tools/social.js の KIND と同じ）
 export const KIND = { family: '家族', best: '親友', friend: '友だち', rival: 'ライバル', crush: '片思い', known: '知り合い' };

@@ -14,7 +14,7 @@ import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, J
 import { makeSky, jstHour, parseTime, phaseName } from './daynight.js';
 import { hourOf, hourText, isNight } from './hours.js';
 import { tagName } from './search.js';
-import { goalHtml, chestHtml } from './chestview.js';
+import { goalHtml, chestHtml, projectList, projectCardHtml } from './chestview.js';
 // 動画の書き出し（?video=1）で開いた時
 let IS_VIDEO = false;
 import { makeTerrain, BLOCK } from './terrain_gen.js';
@@ -268,6 +268,9 @@ async function main() {
   }
   // 道と家の前の小道
   scene.add(makeRoads(world.buildings, (world.plots || []).filter((p) => !p.island), config));
+  // 建てている物・作っている橋（押すと「あと何個いるか」の札。userData.project に projectList の id）
+  const projPicks = [];
+  const pjTag = (tag, id) => { tag.classList.add('pjtag'); tag.style.pointerEvents = 'auto'; tag.addEventListener('click', (e) => { e.stopPropagation(); openProject(id); }); };
   // 橋（となりの島へ。config.expansion）と、島の名前の札
   const bridges = ISLANDS ? makeBridges() : [];
   ROUTE.world = world; ROUTE.bridges = bridges.filter((b) => b.built);
@@ -305,11 +308,13 @@ async function main() {
         }
         g.traverse((o) => { if (o.isMesh) { o.castShadow = !LITE; o.receiveShadow = true; } });
         scene.add(g);
+        if (!br.built) { g.userData.project = 'bridge:' + br.id; projPicks.push(g); }
       }
       if (ex || br.built) {
         const tag = document.createElement('div');
         tag.className = 'btag' + (br.built === state.day || !br.built ? ' new' : '');
         tag.textContent = br.built ? (br.built === state.day ? '今日できた ' : '') + (br.name || '橋') : `橋を作っている（${Math.round(prog * 100)}%）`;
+        if (!br.built) pjTag(tag, 'bridge:' + br.id);
         const lo = new CSS2DObject(tag); const mid = br.built ? 0.5 : Math.max(0.08, prog * 0.5);
         lo.position.set(br.a.x + dx * mid, 3, br.a.z + dz * mid); scene.add(lo); btags.push(lo);
       }
@@ -391,8 +396,10 @@ async function main() {
       for (const y of [1.1, Math.min(sh - 0.2, 2.4)]) { box(sw * 2 + 0.2, 0.14, 0.14, 0x8a5a33, 0, y, -sd, g); box(sw * 2 + 0.2, 0.14, 0.14, 0x8a5a33, 0, y, sd, g); box(0.14, 0.14, sd * 2 + 0.2, 0x8a5a33, -sw, y, 0, g); box(0.14, 0.14, sd * 2 + 0.2, 0x8a5a33, sw, y, 0, g); }
     }
     g.position.set(plan.site.x, 0, plan.site.z); g.rotation.y = Math.atan2(-(plan.site.x - CTR.x), -(plan.site.z - CTR.z)); scene.add(g);
+    g.userData.project = 'plan'; projPicks.push(g);
     const stN = ['土台', '壁', '屋根', 'できあがり'][prog >= 1 ? 3 : prog >= st[1] ? 2 : prog >= st[0] ? 1 : 0];
     const tag = document.createElement('div'); tag.className = 'btag new'; tag.textContent = '建てている：' + config.buildings[plan.build].name + (plan.started ? `（${stN} ${Math.round(prog * 100)}%）` : '（材料と部品を集めている）');
+    pjTag(tag, 'plan');
     const lo = new CSS2DObject(tag); lo.position.set(plan.site.x, 4.2, plan.site.z); scene.add(lo); btags.push(lo);
   }
   // 「どこに建てる？」の投票中は、A/B/C の場所に旗
@@ -707,15 +714,15 @@ async function main() {
       work = act === 'rest' ? { ...p.home, fx: null } : act === 'guard' ? { x: Math.cos(ang) * 22, z: Math.sin(ang) * 20 - 1, fx: null } : { x: p.drop.x, z: p.drop.z, fx: drop.x, fz: drop.z };
     } else {
       // 木を切る人は葉の外に立つ（頭が葉に入らないように）、掘る人は岩の外に立つ
-      const off = act === 'fish' ? world.pond.r + 0.9 : act === 'ranch' ? 3.4 : act === 'level' ? 2 + (hash(p.v.key + 'lv') % 40) / 10 : act && act.startsWith('dig') ? 2.6 : act === 'chop' ? (a.stump ? 1.6 : 1.25 * ((tg && tg.size) || 1) + 0.6) : 1.2;
+      const off = act === 'fish' ? world.pond.r + 0.9 : act === 'ranch' ? 3.4 : act === 'level' ? 2 + (hash(p.v.key + 'lv') % 40) / 10 : act && act.startsWith('dig') ? 2.6 : act === 'apple' ? 1.25 * ((tg && tg.size) || 1) + 0.6 : act === 'chop' ? (a.stump ? 1.6 : 1.25 * ((tg && tg.size) || 1) + 0.6) : 1.2;
       work = tg ? { x: tg.x + Math.cos(ang) * off, z: tg.z + Math.sin(ang) * off, fx: tg.x, fz: tg.z } : { x: -12 + (hash(p.v.key) % 9), z: 12 + (hash(p.v.key) % 5), fx: null };
       if (act === 'carry' && p.work && !init) work = p.work; // 運んだら、さっきの仕事場へもどる
     }
     // 立つ所は、物にも寝ている人にもかからない所（かかる時は近くの空いたマスへ）
     if (a.action !== 'chat') work = freePt(work, BODY_S, p.v.key);
     p.work = work;
-    p.pose = { level: 'dig', chop: 'chop', dig: 'dig', dig_last: 'dig', berry: 'gather', harvest: 'gather', tend: 'gather', till: 'dig', forage: 'gather', fish: 'fish', ranch: 'gather', craft: 'gather', walk: 'walk', chat: 'talk', view: 'sit', water: 'water', pet: 'gather' }[act] || (p.stay ? 'idle' : 'gather');
-    let tool = { level: 'hoe', chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', berry: 'basket', harvest: 'basket', tend: 'hoe', forage: 'basket', fish: 'rod', ranch: 'basket', guard: 'torch', water: 'basket' }[act] || null;
+    p.pose = { level: 'dig', chop: 'chop', dig: 'dig', dig_last: 'dig', berry: 'gather', apple: 'gather', harvest: 'gather', tend: 'gather', till: 'dig', forage: 'gather', fish: 'fish', ranch: 'gather', craft: 'gather', walk: 'walk', chat: 'talk', view: 'sit', water: 'water', pet: 'gather' }[act] || (p.stay ? 'idle' : 'gather');
+    let tool = { level: 'hoe', chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', berry: 'basket', apple: 'basket', harvest: 'basket', tend: 'hoe', forage: 'basket', fish: 'rod', ranch: 'basket', guard: 'torch', water: 'basket' }[act] || null;
     if (act === 'walk') { p.wander = true; p.wi = 0; p.routes.w = null; }
     // 持っている道具の素材（木・石・鉄・金・ダイヤ）で色と形を変える。素手で切る・掘る人は何も持たない
     const tier = L.toolTier || 'hand';
@@ -1494,7 +1501,11 @@ async function main() {
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
     const hit = ray.intersectObjects(clickables, false)[0];
     if (hit) openCard(hit.object.userData.owner.userData.villager);
-    else closeCard();
+    else {
+      const ph = ray.intersectObjects(projPicks, true)[0];
+      let o = ph && ph.object; while (o && !o.userData.project) o = o.parent;
+      if (o) openProject(o.userData.project); else closeCard();
+    }
   });
 
   // ---------- 大きさ ----------
@@ -1655,7 +1666,7 @@ async function main() {
   const card = document.getElementById('card');
   async function openCard(v) {
     const L = life[v.key] || {};
-    card.hidden = false;
+    card.hidden = false; card.classList.remove('pjcard');
     card.innerHTML = '';
     const face = await faceCanvas(v, 48);
     face.className = 'face pixel';
@@ -1670,7 +1681,19 @@ async function main() {
     x.onclick = closeCard;
     card.append(face, who, a, x);
   }
-  function closeCard() { card.hidden = true; }
+  function closeCard() { card.hidden = true; card.classList.remove('pjcard'); }
+  // 建てている物・橋の札：名前・進み・あと何個（あつまった数 / いる数）・作っている人
+  function openProject(id) {
+    const p = projectList(state, world, config, hourNow()).find((x) => x.id === id);
+    if (!p) return closeCard();
+    const nameOf = (k) => { const v = active.find((x) => x.key === k); return v ? v.display : ''; };
+    card.hidden = false; card.classList.add('pjcard');
+    card.innerHTML = `<div class="pj">${projectCardHtml(p, nameOf)}</div>`;
+    const x = document.createElement('button');
+    x.className = 'close'; x.setAttribute('aria-label', '閉じる'); x.textContent = '×';
+    x.onclick = closeCard;
+    card.append(x);
+  }
 }
 
 // 拠点の場所の投票中の帯（地図の上）。票はコメントを数えた数（15 分ごとの受付で数え直す）

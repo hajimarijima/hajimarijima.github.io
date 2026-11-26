@@ -190,7 +190,32 @@ const TREE_PARTS = [
 ];
 export const TREE_LEN = 4.75 * TK + LIFT; // 倒れた時の長さ（てっぺんまで）
 export const TREE_LEAF_Y = 2.0 * TK + LIFT; // 葉の下の高さ
-const partCol = (P, k) => (P.c < 0 ? TRUNK : GREENS[k][P.c]);
+const partCol = (P, k) => (P.c < 0 ? TRUNK : (GREENS[k] || GREENS[0])[P.c]);
+// ---------- りんごの木：葉の箱の外側に、半分顔を出した赤い実（＋明るい光の角・茶色のへた）。葉の下にぶら下がる実も ----------
+//   [x, y, z, 外向き nx, ny, nz]（木の大きさ 1 の時の位置。葉の面から少し外に出す）。実って（appleWait がない）いる時だけ描く
+const APPLE = 0xc8262e, APPLE_HI = 0xf2725e, APPLE_DK = 0x8e1a20, APPLE_STEM = 0x4a3218;
+const A_FACE = 1.2 * TK + 0.12, A_FACE2 = 0.9 * TK + 0.12, A_Y0 = 2.6 * TK + LIFT, A_Y1 = 3.6 * TK + LIFT, A_BOT = 2.0 * TK + LIFT;
+const APPLE_SPOTS = [
+  [A_FACE, A_Y0 - 0.5, 1.0, 1, 0, 0], [A_FACE, A_Y0 + 0.7, -1.6, 1, 0, 0], [-A_FACE, A_Y0 + 0.1, -0.8, -1, 0, 0],
+  [-0.6, A_Y0 - 0.6, A_FACE, 0, 0, 1], [1.9, A_Y0 + 0.8, A_FACE, 0, 0, 1], [0.9, A_Y0 - 0.2, -A_FACE, 0, 0, -1], [-2.0, A_Y0 + 0.5, -A_FACE, 0, 0, -1],
+  [A_FACE2, A_Y1 - 0.2, 0.4, 1, 0, 0], [-0.8, A_Y1 + 0.3, A_FACE2, 0, 0, 1],
+  [1.6, A_BOT - 0.43, 0.9, 0, -1, 0], [-1.2, A_BOT - 0.43, -1.5, 0, -1, 0],
+];
+const A_FACE_L = 1.15 * TK + 0.16, A_YL = 3.1 * TK + LIFT;
+const APPLE_SPOTS_LITE = [[A_FACE_L, A_YL - 1.2, 0.8, 1, 0, 0], [-A_FACE_L, A_YL + 0.4, -1, -1, 0, 0], [0.5, A_YL - 0.6, A_FACE_L, 0, 0, 1], [-1.2, A_YL + 0.9, -A_FACE_L, 0, 0, -1]];
+// 実 1 つの箱：[色, 大きさ, 中心]。外向きの面の上の角を明るく、下を少し暗く（立体に見えるように）
+function appleParts(sp, a) {
+  const [x, y, z, nx, ny, nz] = sp, out = [];
+  out.push({ c: APPLE, s: [a, a, a], p: [x, y, z] });
+  out.push({ c: APPLE_DK, s: [a * 0.7, a * 0.18, a * 0.7], p: [x + nx * 0.04, y - a * 0.5, z + nz * 0.04] });
+  const hx = nx ? x + nx * a * 0.42 : x - a * 0.18, hz = nz ? z + nz * a * 0.42 : z - a * 0.18;
+  if (!ny) out.push({ c: APPLE_HI, s: [nx ? a * 0.2 : a * 0.28, a * 0.28, nz ? a * 0.2 : a * 0.28], p: [hx, y + a * 0.2, hz] });
+  else out.push({ c: APPLE_HI, s: [a * 0.28, a * 0.28, a * 0.2], p: [x - a * 0.18, y + a * 0.15, z + a * 0.42] });
+  out.push({ c: APPLE_STEM, s: [a * 0.16, a * 0.36, a * 0.16], p: [x, y + a * 0.6, z] });
+  return out;
+}
+export const hasApples = (t) => t && t.fruit === 'apple' && !t.appleWait;
+const appleBoxes = (lite) => (lite ? APPLE_SPOTS_LITE : APPLE_SPOTS).flatMap((sp) => appleParts(sp, lite ? 0.85 : 0.62));
 export function makeTree(t) {
   const g = new THREE.Group();
   const s = t.size || 1, k = t.kind || 0;
@@ -199,6 +224,12 @@ export function makeTree(t) {
   for (const P of TREE_PARTS) {
     const m = cube(body, lamC(partCol(P, k)), ...P.s, ...P.p);
     if (P.c < 0) trunk = m;
+  }
+  let apples = null;
+  if (t.fruit === 'apple') { // 倒れる時は実も一緒に（body の子）
+    apples = new THREE.Group(); body.add(apples);
+    for (const P of appleBoxes(false)) cube(apples, lamC(P.c), ...P.s, ...P.p);
+    apples.visible = hasApples(t);
   }
   body.scale.setScalar(s);
   // 切り株：最初の版の切り株（茶色の低い箱・明るい切り口・横に出た根）を幹の太さに合わせる
@@ -210,7 +241,7 @@ export function makeTree(t) {
   const sapling = new THREE.Group(); g.add(sapling);
   cube(sapling, lamC(TRUNK), 0.15 * 2.2, 0.7 * 2.2, 0.15 * 2.2, 0, 0.35 * 2.2, 0);
   cube(sapling, lamC(GREENS[k][1]), 0.6 * 2.2, 0.5 * 2.2, 0.6 * 2.2, 0, 0.9 * 2.2, 0);
-  g.userData.tree = { body, trunk, stump, sapling, size: s, stumpH: SH, leafCol: '#' + GREENS[k][0].toString(16).padStart(6, '0') };
+  g.userData.tree = { body, trunk, stump, sapling, apples, size: s, stumpH: SH, leafCol: '#' + GREENS[k][0].toString(16).padStart(6, '0') };
   g.position.set(t.x, 0, t.z);
   setTreeState(g, t.state);
   return g;
@@ -340,6 +371,7 @@ function objectBoxes(o, lite, out) {
   if (o.state === 'sapling') { for (const P of SAPLING_PARTS(k)) push(P, Q); return; }
   if (o.state && o.state !== 'tree') return;
   for (const P of lite ? TREE_PARTS_LITE : TREE_PARTS) push({ c: partCol(P, k), s: P.s.map((v) => v * s), p: P.p.map((v) => v * s) }, Q);
+  if (hasApples(o)) for (const P of appleBoxes(lite)) push({ c: P.c, s: P.s.map((v) => v * s), p: P.p.map((v) => v * s) }, Q);
 }
 const vcMat = () => lam('vcolor', () => new THREE.MeshLambertMaterial({ vertexColors: true }));
 // 物の一覧 → チャンクごとの Mesh を入れた Group。lite：遠くの木を簡単な形に。shadow：影を落とすか

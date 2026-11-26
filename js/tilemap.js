@@ -134,9 +134,13 @@ const r2 = (v) => Math.round(v * 100) / 100;
 const FAR = 44;
 // マスの中の少しずれた所（同じマスなら毎回同じ）
 export const spotIn = (i, j) => ({ x: r2((i + 0.18 + fr(i, j, 1) * 0.64) * TILE), z: r2((j + 0.18 + fr(i, j, 2) * 0.64) * TILE) });
+// りんごの木：木のおよそ 10 本に 1 本（マスの場所から決まる。保存した町も、読むだけでりんごの木になる）
+export const APPLE_SHARE = 0.1;
+export const isAppleTile = (i, j) => fr(i, j, 6) < APPLE_SHARE;
 export function plainTree(i, j) {
   const { x, z } = spotIn(i, j);
   const t = { id: `t${i}_${j}`, x, z, state: 'tree', regrow: 0, kind: Math.floor(fr(i, j, 3) * 3), size: r2(0.85 + fr(i, j, 4) * 0.35) };
+  if (isAppleTile(i, j)) t.fruit = 'apple';
   if (Math.hypot(x, z + 1) > FAR) t.far = 1;
   return t;
 }

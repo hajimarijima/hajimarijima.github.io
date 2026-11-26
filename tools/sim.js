@@ -405,7 +405,8 @@ function stepDay(S) {
   const H = config.hours;
   const R4 = makeRng(state.seed + ':hours:' + day); // 1 時間ごとの行動は別の乱数（投票・天気・生えかわりの流れを変えない）
   const CHRONO = ['朝型', '夜型'];
-  const takenFields = new Set(), takenBushes = new Set();
+  const takenFields = new Set(), takenBushes = new Set(), takenApple = new Set();
+  const AP = config.apples; // りんごの木（数は config.json の apples）
   const bushCap = Math.ceil(world.bushes.length * (H.bushShare ?? 1));
   let ranchTaken = null; // 動物の世話は 1 日 1 人（もらえる物はその人がまとめて受け取る）
   const center = world.campfire;
@@ -571,7 +572,9 @@ function stepDay(S) {
   const farAnchor = (c) => { for (const x of ctxs) if (x !== c && x.pos && isFar(x.pos)) return x.pos; return null; };
   const nextTree = (from, c) => {
     if (noTree) return null;
-    const ok = (t) => t.state === 'tree' && !t.gone && !claimT.has(t.id) && reach(t); // 橋のない島の木は選ばない
+    const ok0 = (t) => t.state === 'tree' && !t.gone && !claimT.has(t.id) && reach(t); // 橋のない島の木は選ばない
+    // りんごの木は、近くにほかの木があるうちは切らない（実をとるために残す）
+    const ok = (t) => ok0(t) && !(AP && t.fruit === 'apple' && IX.trees.any(t.x, t.z, AP.spareR ?? 12, (o) => o !== t && o.fruit !== 'apple' && ok0(o)));
     let cand = IX.trees.nearest(from.x, from.z, from === center ? 8 : 2, ok);
     if (!cand.length) { noTree = true; return null; }
     let t = from === center ? R4.pick(cand) : cand[0];
@@ -660,6 +663,12 @@ function stepDay(S) {
       void FA;
     }
     if (night) return { action: 'guard' }; // 暗くて実が見えない夜は、見張りをする
+    // りんごの木：チェストから near 以内の、実っている木（1 日に村ぜんたいで perDay 本まで）
+    if (AP && takenApple.size < (AP.perDay ?? 3)) {
+      const ok = (t) => t.fruit === 'apple' && t.state === 'tree' && !t.gone && !t.appleWait && !takenApple.has(t.id) && !claimT.has(t.id) && reach(t) && dist(t, world.chest) <= (AP.near ?? FAR.near);
+      const at = IX.trees.nearest(world.chest.x, world.chest.z, 6, ok);
+      if (at.length) return { action: 'apple', o: R.pick(at) };
+    }
     // 草むらの実は、1 日に村ぜんたいで bushShare の割合まで（とった草むらは何日かでまた実る）
     if (takenBushes.size < bushCap) {
       const bush = world.bushes.filter((b) => b.ready && !takenBushes.has(b.id));
@@ -956,6 +965,14 @@ function stepDay(S) {
       c.target = c.target || b.id; L.targets.push(b.id);
       return finish('gb:' + b.id, 'light');
     }
+    if (a.action === 'apple') { // りんごの木から実をもぐ。とった木は regrowDays 日でまた実る
+      const t = a.o; takenApple.add(t.id); t.appleWait = AP.regrowDays ?? 3;
+      if (!L.appleTree) { L.appleTree = day; c.ev.push({ h, text: `${tm(h)}、りんごの木を見つけた。` }); }
+      first('apple_tree', `${v.display}が、島でりんごの木を見つけた。`, { who: [v.key], item: 'apple' });
+      give(c, [['apple', q(AP.pick[0], AP.pick[1], mult.food)]]);
+      c.target = c.target || t.id; L.targets.push(t.id); c.pos = t;
+      return finish('ga:' + t.id, 'light');
+    }
     if (a.action === 'guard') { c.guardH = (c.guardH || 0) + 1; return finish('w', 'light'); }
     // 野原のヒツジが落とした羊毛を、ときどき拾う（柵がなくてもベッドを作れるように。柵で世話するほうがずっと多くもらえる）
     const wildSheep = world.animals.some((an) => an.kind === 'sheep' && !an.pen);
@@ -986,7 +1003,8 @@ function stepDay(S) {
         const drop = who.reduce((a, x) => a + x.drop * (r.share[x.key] || 0), 0);
         const logs = Math.max(1, Math.round((o.logs || GA.treeLogs[0]) * drop * mult.wood * (H.logScale ?? 1)));
         for (const { w: x, k } of splitN(logs, who)) give(x.c, [['log', k]]);
-        if (R4.chance(0.12)) give(top.c, [['apple', 1]]);
+        if (o.fruit === 'apple' && AP) { if (!o.appleWait) give(top.c, [['apple', R4.int(AP.chop[0], AP.chop[1])]]); delete o.appleWait; } // りんごの木は、なっていた実も落ちる
+        else if (R4.chance(0.12)) give(top.c, [['apple', 1]]);
         if (R4.chance(0.1)) give(top.c, [['sapling', 1]]);
         o.state = 'stump'; o.regrow = RS2.stumpDays; o.cutDay = day; o.logs = 0; delete o.work;
         const dig = R3.chance(RS2.stumpDig ?? 0.5); // 切り株も掘る
@@ -1105,6 +1123,7 @@ function stepDay(S) {
           : [`${t0}${place}木を切った。${haul}。`, `${t0}斧をふって、${place}木を切った。${haul}。`],
       dig: [`${t0}${place}岩をたたいて掘った。${haul}。`, `${t0}つるはしで岩をくだいた。${haul}。`, `${t0}岩を何回もたたいて、かけらを掘り出した。${haul}。`],
       berry: [`${t0}草むらで木の実を集めた。${haul}。`, `${t0}赤い実をかごいっぱいにつんだ。${haul}。`],
+      apple: [`${t0}りんごの木から赤い実をもいだ。${haul}。`, `${t0}手をのばして、りんごをかごに入れた。${haul}。`],
       till: [`${t0}くわで土を起こして、${(FA0.crops[c.crop] || FA0.crops.wheat).name}の種をまいた。${haul}。`, `${t0}新しい畑を耕した。${haul}。`],
       tend: [`${t0}畑の世話をした。芽がのびてきた。${haul}。`, `${t0}畑に水をまいた。${haul}。`],
       harvest: [`${t0}畑で${(FA0.crops[c.crop] || FA0.crops.wheat).name}を収穫した。${haul}。`, `${t0}畑の作物をかりとった。${haul}。`],
@@ -1238,6 +1257,8 @@ function stepDay(S) {
     delete r.back; delete r.gone;
   }
   for (const b of world.bushes) if (!b.ready) { b.regrow -= 1; if (b.regrow <= 0) b.ready = true; }
+  // りんごの木：とってから regrowDays 日でまた実る（実っている木は appleWait を持たない）
+  for (const t of world.trees) if (t.appleWait) { t.appleWait -= 1; if (t.appleWait <= 0 || t.state !== 'tree') delete t.appleWait; }
   // 畑：毎日 1 段育つ。雨の日と、水路のそば（確率）はもう 1 段
   {
     const FA = config.farming;
@@ -1600,7 +1621,18 @@ if (gate && S.state.day === 0) { // 0 日目から始める：1 日目は今日�
   S.state.startedAt = NOW.toISOString();
 }
 S.now = NOW; // 拠点の投票を締める時刻
-for (let i = 0; i < days; i++) { stepDay(S); if (i === 0 && S.inbox) S.inbox = { ...S.inbox, joinComments: null }; }
+// 今建てている物の「いる数」と「あつまった数」を state.plan に書いておく（町の画面で「あと何個」を出す）。
+//   plan.need：{ wood, stone, food（部品にした分を引いた材料）, 柱などの部品: 数 }／plan.got：同じ形で、今あつまっている数（建て始めたら need と同じ）
+//   橋は state.expansion[id] の cost（いる数）と paid（使った数）でわかる
+function noteProjects(S) {
+  const pl = S.state.plan;
+  if (!pl || !pl.build || !S.config.buildings[pl.build]) return;
+  const nd = CON.needsOf(pl.build, S.config), res = S.state.resources || {}, store = S.state.store || {};
+  pl.need = { ...nd.raw, ...nd.parts };
+  pl.got = {};
+  for (const [k, n] of Object.entries(pl.need)) pl.got[k] = pl.started ? n : Math.max(0, Math.min(n, Math.floor((RES.includes(k) ? res[k] : store[k]) || 0)));
+}
+for (let i = 0; i < days; i++) { stepDay(S); noteProjects(S); if (i === 0 && S.inbox) S.inbox = { ...S.inbox, joinComments: null }; }
 write('villagers.json', S.villagers);
 ST.writeWorld(DATA, S.world, { clearR: ((S.config.terrain && S.config.terrain.clearBlocks) ?? 4) * 1.9 + 2.5 });
 write('state.json', S.state);

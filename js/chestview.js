@@ -40,8 +40,10 @@ export function goalProgress(state, config, hour) {
   const rows = [];
   // 材料（部品にした分を引いた残り）と部品（柱・石材・屋根板・扉）。建て始めたら全部そろった扱い
   const NEED = config.construction ? needsOf(plan.build, config) : { raw: b.cost || {}, parts: b.parts || {} };
-  for (const [r, n] of Object.entries(NEED.raw)) if (n > 0) rows.push({ key: r, name: RES_JA[r] || r, have: plan.started ? n : Math.min(res[r] || 0, n), need: n, res: true });
-  for (const [k, n] of Object.entries(NEED.parts)) rows.push({ key: k, name: (items[k] || {}).name || k, have: plan.started ? n : Math.min(store[k] || 0, n), need: n, icon: k, part: true });
+  const got = plan.got || null; // sim が書いた「あつまった数」（古いデータにはない → チェストから数える）
+  const haveOf = (k, n, live) => plan.started ? n : Math.min(got && Number.isFinite(got[k]) ? got[k] : live, n);
+  for (const [r, n] of Object.entries(NEED.raw)) if (n > 0) rows.push({ key: r, name: RES_JA[r] || r, have: haveOf(r, n, res[r] || 0), need: n, res: true });
+  for (const [k, n] of Object.entries(NEED.parts)) rows.push({ key: k, name: (items[k] || {}).name || k, have: haveOf(k, n, store[k] || 0), need: n, icon: k, part: true });
   let stage = 'gather', prog = 0;
   if (plan.started) {
     stage = 'build';
@@ -71,6 +73,48 @@ export function goalHtml(state, config, hour) {
   h += '<ul class="goallist">' + g.rows.map((x) => `<li${x.have >= x.need ? ' class="done"' : ''}>` +
     (x.icon ? `<img class="pixel" src="icons/${esc(x.icon)}.png" alt="" width="20" height="20" onerror="this.style.visibility='hidden'">` : `<i class="dot r-${esc(x.key)}"></i>`) +
     `<span class="gn">${esc(x.name)}</span><span class="gc">${Math.floor(x.have)}／${x.need}</span>${bar(x.have / x.need)}</li>`).join('') + '</ul>';
+  return h;
+}
+
+// ---- 建てている物・橋をタップした時の札（あと何個いるか） ----
+const RES_ICON = { wood: 'log', stone: 'cobble', food: 'apple' };
+// 今つくっている物の一覧：[{ id, kind: 'building'|'bridge', name, place, prog（0〜1）, stageText, rows: [{ key, name, icon, have, need, left }], who: [村人の key] }]
+//   建物：材料を集めている間の prog は「あつまった割合」、建て始めたら建てた割合。橋：使った木材・石の割合
+export function projectList(state, world, config, hour) {
+  const out = [];
+  const g = goalProgress(state, config, hour);
+  if (g) {
+    const rows = g.rows.map((x) => ({ key: x.key, name: x.name, icon: x.icon || RES_ICON[x.key] || null, have: Math.floor(x.have), need: x.need, left: Math.max(0, x.need - Math.floor(x.have)) }));
+    const sumN = rows.reduce((s, x) => s + x.need, 0), sumH = rows.reduce((s, x) => s + Math.min(x.have, x.need), 0);
+    const gather = sumN ? sumH / sumN : 0;
+    const CN = config.construction || {};
+    const stageText = g.stage === 'build' ? `建てている（${stageName(g.prog, CN.stages)}）` : g.stage === 'level' ? '建てる場所をならしている' : g.ready ? '材料と部品がそろった。あしたから建て始める' : '材料と部品を集めている';
+    const plan = state.plan;
+    out.push({ id: 'plan', kind: 'building', name: g.name, place: g.site, prog: g.stage === 'build' ? g.prog : gather, stageText, rows, who: (plan.started && plan.builders) || [] });
+  }
+  for (const br of (world && world.bridges) || []) {
+    const ex = (state.expansion || {})[br.id];
+    if (!ex || br.built || ex.built) continue;
+    const isl = ((world.islands) || []).find((i) => i.id === br.to) || {};
+    const rows = Object.entries(ex.cost || {}).filter(([, n]) => n > 0).map(([r, n]) => { const have = Math.min(n, Math.floor((ex.paid || {})[r] || 0)); return { key: r, name: RES_JA[r] || r, icon: RES_ICON[r] || null, have, need: n, left: n - have }; });
+    const sumN = rows.reduce((s, x) => s + x.need, 0), sumH = rows.reduce((s, x) => s + x.have, 0);
+    out.push({ id: 'bridge:' + br.id, kind: 'bridge', name: `${isl.name || 'となりの島'}への橋`, place: null, prog: Number.isFinite(ex.prog) ? ex.prog : sumN ? sumH / sumN : 0, stageText: '橋を作っている', rows, who: ex.crew || [] });
+  }
+  return out;
+}
+
+// その札の HTML。nameOf(key) で村人の名前を出す
+export function projectCardHtml(p, nameOf = (k) => k) {
+  const pct = Math.round(Math.max(0, Math.min(1, p.prog)) * 100);
+  let h = `<p class="pj-name"><b>${esc(p.name)}</b>${p.place ? `<span class="muted">（${esc(p.place)}）</span>` : ''}</p>`;
+  h += `<p class="pj-prog"><span>${esc(p.stageText)}</span><b>${pct}%</b></p>${bar(p.prog)}`;
+  const left = p.rows.filter((x) => x.left > 0);
+  h += `<p class="pj-sub">${left.length ? 'まだ いる物' : '材料はぜんぶ そろった'}</p>`;
+  h += '<ul class="pj-rows">' + left.concat(p.rows.filter((x) => !(x.left > 0))).map((x) => `<li${x.left > 0 ? '' : ' class="done"'}>` +
+    (x.icon ? `<img class="pixel" src="icons/${esc(x.icon)}.png" alt="" width="22" height="22" onerror="this.style.visibility='hidden'">` : `<i class="dot r-${esc(x.key)}"></i>`) +
+    `<span class="gn">${esc(x.name)}</span><span class="gc">${x.left > 0 ? `あと <b>${x.left}</b> 個` : 'そろった'}<small>（${x.have} / ${x.need}）</small></span></li>`).join('') + '</ul>';
+  const who = (p.who || []).map(nameOf).filter(Boolean);
+  if (who.length) h += `<p class="pj-who muted">${p.kind === 'bridge' ? '作っている人' : '建てている人'}：${esc(who.slice(0, 6).join('、'))}${who.length > 6 ? ` ほか ${who.length - 6} 人` : ''}</p>`;
   return h;
 }
 

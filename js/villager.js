@@ -81,11 +81,11 @@ async function main() {
   const ch = makeCharacter(skinSrc(v), { scale: 1, slim: skinSlim(v), chibi: chibiOf(v) });
   scene.add(ch);
   if (v.profile && v.profile.color) setAccent(ch, v.profile.color);
-  let tool = { level: 'hoe', chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', tend: 'hoe', berry: 'basket', harvest: 'basket', forage: 'basket', fish: 'rod', ranch: 'basket' }[L.action];
+  let tool = { level: 'hoe', chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', tend: 'hoe', berry: 'basket', apple: 'basket', harvest: 'basket', forage: 'basket', fish: 'rod', ranch: 'basket' }[L.action];
   if (tool && ['axe', 'pick', 'hoe', 'rod'].includes(tool)) tool += ':' + (L.toolTier && L.toolTier !== 'hand' ? L.toolTier : 'wood'); // 道具の素材で色と形を変える
   setTool(ch, tool || null);
   let mode = 'idle';
-  const pose = { chop: 'chop', dig: 'dig', dig_last: 'dig', till: 'dig', berry: 'gather', harvest: 'gather', tend: 'gather', forage: 'gather' }[L.action] || 'idle';
+  const pose = { chop: 'chop', dig: 'dig', dig_last: 'dig', till: 'dig', berry: 'gather', apple: 'gather', harvest: 'gather', tend: 'gather', forage: 'gather' }[L.action] || 'idle';
   renderer.domElement.addEventListener('click', () => { mode = mode === 'idle' ? pose : 'idle'; });
   function resize() { const w = el.clientWidth, h = el.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
   addEventListener('resize', resize); resize();

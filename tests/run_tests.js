@@ -1123,6 +1123,48 @@ t('町のチェスト：中身を 材料・食べ物・道具・その他 に分
   assert.strictEqual(CV.goalProgress({ plan: null }, cfg), null);
   assert.ok(CV.chestHtml({}, cfg).includes('空っぽ'));
 });
+t('建てている物・橋：sim が いる数／あつまった数 を残し、押した時の「あと何個」が日ごとに正しい', () => {
+  const CV = require('../js/chestview.js'), CON = require('../js/construction.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-proj-'));
+  fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+  const env = { ...process.env, TOWN_DATA: dir };
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js'), '--demo'], { env });
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  let seenGather = 0, seenBuild = 0;
+  const paidBefore = {};
+  for (let d = 0; d < 10; d++) {
+    execFileSync(process.execPath, [path.join(ROOT, 'tools/sim.js'), '--demo', '--days', '4'], { env });
+    const st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')), world = STORE.readWorld(dir);
+    const list = CV.projectList(st, world, cfg, 12);
+    const pl = st.plan;
+    if (pl && pl.build) {
+      const nd = CON.needsOf(pl.build, cfg), need = { ...nd.raw, ...nd.parts };
+      assert.deepStrictEqual(pl.need, need, 'plan.need は needsOf と同じ');
+      for (const [k, n] of Object.entries(need)) {
+        const live = ['wood', 'stone', 'food'].includes(k) ? st.resources[k] : (st.store[k] || 0);
+        assert.strictEqual(pl.got[k], pl.started ? n : Math.min(n, Math.floor(live || 0)), `plan.got.${k}`);
+      }
+      const p = list.find((x) => x.id === 'plan');
+      assert.ok(p && p.kind === 'building');
+      for (const r of p.rows) { assert.strictEqual(r.left, r.need - r.have, r.key); assert.ok(r.left >= 0 && r.have <= r.need); assert.strictEqual(r.need, need[r.key]); }
+      const html = CV.projectCardHtml(p);
+      for (const r of p.rows) assert.ok(html.includes(`（${r.have} / ${r.need}）`), '札に あつまった数 / いる数');
+      if (pl.started) { seenBuild++; assert.ok(p.rows.every((r) => r.left === 0)); } else if (p.rows.some((r) => r.left > 0)) { seenGather++; assert.ok(html.includes('あと <b>')); }
+    } else assert.ok(!list.some((x) => x.id === 'plan'));
+    for (const [id, ex] of Object.entries(st.expansion || {})) {
+      const br = (world.bridges || []).find((b) => b.id === id);
+      const p = list.find((x) => x.id === 'bridge:' + id);
+      if (ex.built || (br && br.built)) { assert.ok(!p, 'できた橋は出さない'); continue; }
+      assert.ok(p && p.kind === 'bridge', '作っている橋が出る');
+      for (const r of p.rows) {
+        assert.strictEqual(r.need, ex.cost[r.key]); assert.strictEqual(r.have, Math.min(r.need, ex.paid[r.key])); assert.strictEqual(r.left, r.need - r.have);
+        assert.ok(r.have >= (paidBefore[id + r.key] || 0), '橋に使った数は減らない'); paidBefore[id + r.key] = r.have;
+      }
+    }
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+  assert.ok(seenGather + seenBuild > 0, '40 日のうちに何か建てている日がある');
+});
 t('24 時間：2 人で同じ木を切ると 1 人より早い／木の斧 1 人でおよそ 1 時間', () => {
   const need = HC.treeWork;
   const one = HR.hoursToFinish(need, [HC.power.wood]), two = HR.hoursToFinish(need * 2, [HC.power.wood, HC.power.wood]);
@@ -1556,6 +1598,83 @@ t('拠点の投票：config の until を過ぎたら、0 日目のうちに受�
   assert.ok(st.day === 0 && st.base && st.base.key === 'A' && st.base.votes.A === 1, '締め切りのあとのコメントは数えず、A に決まる');
   assert.ok(w.square.x === cfg.baseVote.candidates[0].x && !w.chest.day, '拠点は決まり、チェストは 1 日目に置く');
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// ---------- りんごの木 ----------
+t('りんごの木：木のおよそ 10 本に 1 本（場所で決まる・新しい島も）', () => {
+  const TMa = require('../js/tilemap.js');
+  let n = 0, a = 0;
+  for (let j = -100; j < 100; j++) for (let i = -100; i < 100; i++) { n++; const tr = TMa.plainTree(i, j); if (tr.fruit === 'apple') a++; assert.deepStrictEqual(TMa.plainTree(i, j), tr, '同じマスは毎回同じ'); }
+  assert.ok(a / n > 0.09 && a / n < 0.11, `マス全体の割合 ${(a / n).toFixed(3)}`);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-apple0-'));
+  const env = { ...process.env, TOWN_DATA: dir };
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js')], { env });
+  const w = STORE.readWorld(dir), ap = w.trees.filter((x) => x.fruit === 'apple');
+  assert.ok(w.trees.length > 50 && ap.length / w.trees.length > 0.05 && ap.length / w.trees.length < 0.17, `島の木 ${w.trees.length} 本のうち りんご ${ap.length} 本`);
+  assert.ok(ap.every((x) => !x.appleWait && x.state === 'tree'), 'はじめは全部実っている');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+t('りんごの木：前の形の world.json（fruit を持たない）も読める。そのまま 10 本に 1 本がりんごの木になる', () => {
+  const TMa = require('../js/tilemap.js');
+  const trees = [];
+  for (let j = 0; j < 30; j++) for (let i = 0; i < 30; i += 2) trees.push({ ...TMa.plainTree(i, j), ...(i % 6 === 0 ? { size: 1.1 } : {}) });
+  const old = TMa.encodeWorld({ size: 120, seaZ: 200, trees, rocks: [], bushes: [], buildings: [], fields: [] });
+  for (const k in old.objs) delete old.objs[k].fruit; // 前の版は fruit を書かない
+  const w = TMa.decodeWorld(JSON.parse(JSON.stringify(old)));
+  assert.strictEqual(w.trees.length, trees.length, '木の数は同じ');
+  assert.deepStrictEqual(w.trees.map((x) => x.id).sort(), trees.map((x) => x.id).sort(), '木の id も同じ');
+  const ap = w.trees.filter((x) => x.fruit === 'apple').length;
+  assert.ok(ap > 0 && ap < trees.length * 0.2, `りんごの木 ${ap} / ${trees.length}`);
+  // もう一度保存しても、りんごの木のぶんで objs は増えない（場所から決まるので、書き足しは要らない）
+  const again = TMa.encodeWorld(w);
+  assert.deepStrictEqual(again.objs, TMa.encodeWorld({ size: 120, seaZ: 200, trees, rocks: [], bushes: [], buildings: [], fields: [] }).objs);
+  // 本物の data/world.json も読める（読むだけ）
+  const live = STORE.readWorld(path.join(ROOT, 'data'));
+  assert.ok(Array.isArray(live.trees) && live.trees.every((x) => x.fruit === undefined || x.fruit === 'apple'));
+});
+t('りんごの木：食べ物の村人がもぐ・りんごはチェストへ・日記「りんごの木を見つけた」・もいだ木は regrowDays 日でまた実る', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-apple-'));
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const RG = cfg.apples.regrowDays;
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
+  const env = { ...process.env, TOWN_DATA: dir };
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js'), '--demo'], { env });
+  const pickedOn = {}; // 木 → もいだ日
+  let apples = 0, chestApple = 0;
+  for (let d = 1; d <= 9; d++) {
+    execFileSync(process.execPath, [path.join(ROOT, 'tools/sim.js'), '--demo', '--days', '1'], { env });
+    const life = STORE.readLife(dir), w = STORE.readWorld(dir), st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
+    const today = new Set();
+    for (const L of Object.values(life)) for (const c of HR.decodeHours(L.hours)) if (c.startsWith('ga:')) today.add(c.slice(3));
+    assert.ok(today.size <= cfg.apples.perDay, '1 日に perDay 本まで');
+    for (const id of today) {
+      const tr = w.trees.find((x) => x.id === id);
+      assert.ok(tr && tr.fruit === 'apple', 'もいだのはりんごの木 ' + id);
+      if (tr.state === 'tree') assert.strictEqual(tr.appleWait, RG - 1, 'もいだ日の夜は、あと regrowDays-1 日');
+      for (const d0 of pickedOn[id] || []) assert.ok(st.day - d0 >= RG, `${id} は ${d0} 日目にもいで、${st.day} 日目にまたもいだ（早すぎる）`);
+      (pickedOn[id] = pickedOn[id] || []).push(st.day);
+    }
+    for (const L of Object.values(life)) apples = Math.max(apples, (L.items || {}).apple || 0);
+    chestApple = Math.max(chestApple, (st.store || {}).apple || 0);
+  }
+  const ids = Object.keys(pickedOn);
+  assert.ok(ids.length >= 2, 'りんごをもいだ木がある');
+  assert.ok(ids.some((id) => pickedOn[id].length >= 2), '実がまたなって、同じ木からもう一度もいだ');
+  assert.ok(apples > 0, 'もいだりんごが村人の記録にある');
+  assert.ok(chestApple > 0, 'りんごがチェストに入った');
+  const life = STORE.readLife(dir);
+  const finders = Object.values(life).filter((L) => L.diary.some((e) => /りんごの木を見つけた/.test(e.text)));
+  assert.ok(finders.length >= 1, '日記に「りんごの木を見つけた」');
+  for (const L of finders) assert.strictEqual(L.diary.filter((e) => /りんごの木を見つけた/.test(e.text)).length, 1, '見つけたと書くのは 1 回だけ');
+  assert.ok(JSON.parse(fs.readFileSync(path.join(dir, 'history.json'), 'utf8')).some((x) => /りんごの木を見つけた/.test(x.text)), '町の歴史にも');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+t('りんごの木：切ると原木（＋なっていたりんご）。実の数え方はほかの木と同じ', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'tools/sim.js'), 'utf8');
+  assert.ok(/o\.fruit === 'apple' && AP/.test(src) && /AP\.chop/.test(src), '切った時にりんごが落ちる');
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8')).apples;
+  assert.ok(cfg.note && cfg.pick[0] >= 1 && cfg.pick[1] >= cfg.pick[0] && cfg.regrowDays >= 1 && cfg.perDay >= 1, 'config.json の apples');
+  assert.strictEqual(HR.CODE_ACTION.ga, 'apple'); assert.ok(HR.WORK.has('apple')); assert.ok(HR.hourText({ action: 'apple' }).includes('りんご'));
 });
 
 console.log(`\nぜんぶ通りました（${ok} 件）`);
