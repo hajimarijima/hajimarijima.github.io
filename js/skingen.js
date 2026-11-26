@@ -196,6 +196,8 @@ export function makeSkin(seed, body = 'none') {
     return { c: tone(hair, f), amp: style.curly ? 0.07 : 0.04 };
   }
   const seedNum = hashStr(String(seed)) % 997;
+  // 長い髪とボブは、顔の両はしにも髪がかかる（正面から見ても長い髪と分かる）
+  const sideLen = style.id === 'long' || style.id === 'longbangs' ? 8 : style.id === 'bob' || style.id === 'bangs' ? 6 : (style.tail || style.bun) && female ? 5 : 0;
   S.paint(P.head, HEAD, (face, u, v) => {
     if (face === 'top') {
       if (style.bald) return tone(skin, 1.05);
@@ -209,8 +211,6 @@ export function makeSkin(seed, body = 'none') {
     const d = hairDepth(face, u);
     if (v < d) return hairPx(face, u, v, d);
     let c = skin, f = 1;
-    // 長い髪とボブは、顔の両はしにも髪がかかる（正面から見ても長い髪と分かる）
-    const sideLen = style.id === 'long' || style.id === 'longbangs' ? 8 : style.id === 'bob' || style.id === 'bangs' ? 6 : (style.tail || style.bun) && female ? 5 : 0;
     if (face === 'front' && sideLen && (u === 0 || u === 7) && v < sideLen) return hairPx(face, u, v, sideLen);
     if (v === d && d > 0) f *= 0.86;
     if (face === 'front') {
@@ -279,19 +279,66 @@ export function makeSkin(seed, body = 'none') {
       if (v === 4 && (u === 0 || u === 3 || u === 4 || u === 7)) return glassColor;
     }
     if (glasses && (face === 'left' || face === 'right') && v === 4) { const nearFront = face === 'right' ? u >= 5 : u <= 2; if (nearFront) return tone(glassColor, 0.9); }
-    if ((hat === 'none' || hat === 'ribbon' || hat === 'flower' || hat === 'headband') && !style.bald && !style.buzz) {
-      if (style.tufts && face === 'top' && (u + v) % 3 === 0) return tone(hair, 1.08);
-      if (style.tufts && face !== 'top' && v === 0 && u % 2 === 0) return tone(hair, 1.02);
-      if (style.curly && face === 'top') return { c: tone(hair, (u + v) % 2 ? 0.86 : 1.05), amp: 0.08 };
-      if (style.curly && face !== 'top' && v === 0) return tone(hair, 0.95);
-      if (style.bun && face === 'top' && u >= 3 && u <= 4 && v >= 2 && v <= 4) return tone(hair, v === 2 ? 1.12 : 0.92);
-      if (style.bun && face === 'back' && u >= 3 && u <= 4 && v <= 1) return tone(hair, 0.9);
-      if (style.tail && face === 'back' && (u === 3 || u === 4) && v >= 3 && v <= 5) return tone(hair, v === 3 ? 0.7 : 1.05);
-      // 長い髪は横にもふくらむ（重ね層の横の下側）
-      if ((style.id === 'long' || style.id === 'longbangs') && (face === 'left' || face === 'right') && v >= 5) return tone(hair, strand[u] * 0.92);
+    return overHair(face, u, v);
+  }, true);
+  // 重ね層の髪（マイクラの上手なスキンのように、頭の外側にもう 1 枚の髪をかぶせて厚みを出す）。
+  //   下の頭にも同じ所に髪があるので、浮いた点はできない。毛先は 1 マスおきに抜いて、下の髪が影のように見える。
+  //   正面は前髪だけ（上から 3 段まで。まゆ・目・口は見える）。帽子の所は帽子が先（帽子の下からのぞく髪だけ）。
+  //   色は 明（つや）・中・暗（毛先）の 3〜4 段と、列ごとの毛の束のむら
+  function overHair(face, u, v) {
+    if (style.bald || style.buzz) return null;
+    const capped = hat !== 'none' && hat !== 'ribbon' && hat !== 'flower' && hat !== 'headband';
+    const amp = style.curly ? 0.08 : 0.05;
+    const H = (f) => ({ c: tone(hair, f), amp });
+    const tipSkip = (k) => ((k + seedNum) % 2) === 0; // 毛先を抜くか（1 マスおき）
+    const long = style.id === 'long' || style.id === 'longbangs';
+    if (face === 'top') {
+      if (capped) return null;
+      if (style.bun && u >= 3 && u <= 4 && v >= 2 && v <= 4) return tone(hair, v === 2 ? 1.12 : 0.92);
+      let f = strand[(u * 3 + v * 5) % 32];
+      if (u + v >= 3 && u + v <= 5 && v <= 4) f *= 1.16; // つや（前寄りの斜めの帯）
+      else if (u === 0 || u === 7 || v === 7) f *= 0.9;
+      if (style.id === 'sidepart' && u === 5) f *= 0.72; // 分け目
+      if (style.curly && (u + v) % 2) f *= 0.86;
+      if (style.tufts && (u + v) % 3 === 0) f *= 1.1;
+      return H(f);
+    }
+    if (face === 'front') {
+      // 顔の両はしにかかる長い髪
+      if (sideLen && (u === 0 || u === 7) && v < sideLen) {
+        if (v === sideLen - 1 && tipSkip(u)) return null;
+        return H(strand[u + 3] * (v === 0 ? 1.08 : v >= sideLen - 1 ? 0.76 : v >= sideLen - 3 ? 0.9 : 1));
+      }
+      if (capped) return null;
+      const d = Math.min(3, style.fr[u]);
+      if (v >= d) return null;
+      if (d >= 2 && v === d - 1 && tipSkip(u + v)) return null; // 前髪の毛先はぎざぎざ
+      return H(strand[(u * 5 + 2) % 32] * (v === 0 ? 1.1 : v === d - 1 ? 0.78 : 0.95));
+    }
+    if (face === 'bottom') return null;
+    // 横とうしろ
+    let d = face === 'back' ? style.bk : hairDepth(face, u);
+    if (long) d = 8;
+    const k = face === 'back' ? u : u + 11;
+    if (v < d) {
+      if (d >= 3 && v === d - 1 && tipSkip(k)) return null;
+      let f = strand[(k * 3 + face.length) % 32];
+      if (v === 1 && (u + seedNum) % 3 !== 0) f *= 1.13; // つやの段
+      else if (v === 0) f *= 1.04;
+      if (v === d - 1) f *= 0.76; // 毛先は暗く
+      else if (v >= d - 3 && d >= 5) f *= 0.9;
+      if (style.curly && (u + v * 3) % 4 === 0) f *= 0.82;
+      if (style.tufts && v === 0 && u % 2 === 0) f *= 1.1;
+      return H(f);
+    }
+    if (face === 'back' && !capped && style.bun && u >= 3 && u <= 4 && v <= 1) return tone(hair, 0.9);
+    // ポニーテール：うしろの結び目と、下へたれる束
+    if (face === 'back' && style.tail && (u === 3 || u === 4)) {
+      if (v === d) return tone(hairDark, 0.9);
+      return H(strand[u + 20] * (v === 7 ? 0.8 : u === 3 ? 1.08 : 0.96));
     }
     return null;
-  }, true);
+  }
 
   // ---------- 胴 ----------
   const shirtAt = (u, v, face) => {
