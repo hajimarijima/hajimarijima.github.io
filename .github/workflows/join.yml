@@ -10,7 +10,7 @@ name: join
 on:
   workflow_dispatch:
   repository_dispatch:
-    types: [ig-comment]
+    types: [ig-comment, ig-dm]
   schedule:
     - cron: "*/15 * * * *"
 
@@ -52,6 +52,14 @@ jobs:
           IG_VOTE_MEDIA: ${{ secrets.IG_VOTE_MEDIA }}
           # Webhook が教えてくれた、コメントがついた投稿の ID（数字以外は instagram.js が捨てる）
           IG_HINT_MEDIA: ${{ github.event.client_payload.media }}
+      # DM の「住みたい」（config.dm.enabled が true で、Secrets に DM_QUEUE_URL・DM_QUEUE_TOKEN がある時だけ。docs/DMで入居する手順.md）
+      # 受け口（Cloudflare）に積んである DM を data/inbox/dm.json に置く（公開しない）。読めなくても受付は続ける
+      - name: DM を受け取る
+        continue-on-error: true
+        run: node tools/dm.js pull
+        env:
+          DM_QUEUE_URL: ${{ secrets.DM_QUEUE_URL }}
+          DM_QUEUE_TOKEN: ${{ secrets.DM_QUEUE_TOKEN }}
       - name: 住む人の受付
         run: node tools/join.js
         env:
@@ -66,6 +74,14 @@ jobs:
             if [ -e "$f" ]; then git add "$f"; fi
           done
           git diff --cached --quiet || (git commit -m "住む人の受付・入居" && git push)
+      # 入居がコミットできてから、DM に返事（「〇〇さん、はじまり島へようこそ！あなたの家はこちら → …?v=<村人>」）。送るのは受け口
+      - name: DM に返事をする
+        if: success()
+        continue-on-error: true
+        run: node tools/dm.js done
+        env:
+          DM_QUEUE_URL: ${{ secrets.DM_QUEUE_URL }}
+          DM_QUEUE_TOKEN: ${{ secrets.DM_QUEUE_TOKEN }}
       # 受付とコミットまで済んだ時だけ、覚え書きを残す（途中で止まったら、次は前の覚え書きでまた読む）
       - name: 覚え書きを残す
         if: success() && hashFiles('data/inbox/ig_cache.json') != ''

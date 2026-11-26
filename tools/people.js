@@ -53,7 +53,8 @@ function applyPrivacy(v, hidden) {
 }
 
 function findVillager(villagers, { igId, username }) {
-  if (igId) { const hit = villagers.find((v) => v.igId === igHash(igId)); if (hit) return hit; }
+  // igAlt：同じ人の、ちがう形のインスタの ID の印（コメントの from.id と DM の IGSID がちがう時。upsertVillager が足す）
+  if (igId) { const h = igHash(igId), hit = villagers.find((v) => v.igId === h || (v.igAlt || []).includes(h)); if (hit) return hit; }
   if (username) { const h = userHash(username); return villagers.find((v) => v.userHash === h); }
   return null;
 }
@@ -65,6 +66,7 @@ function upsertVillager(villagers, { igId, username, joined, joinedDay, source, 
   if (hit) {
     if (birthday || food) fillJoinProfile(hit, { birthday, food });
     if (igId && !hit.igId) hit.igId = igHash(igId);
+    else if (igId && hit.igId !== igHash(igId) && !(hit.igAlt || []).includes(igHash(igId))) hit.igAlt = [...(hit.igAlt || []), igHash(igId)].slice(-3); // 名前で見つけた同じ人（DM とコメントで ID の形がちがう）
     if (username && userHash(username) !== hit.userHash) { // 名前が変わった
       hit.userHash = userHash(username);
       hit.name = norm(username);

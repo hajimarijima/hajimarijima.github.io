@@ -78,7 +78,10 @@ export function startNote(state, config) {
 // 「住みたい」の案内（どの画面でも同じ言葉）
 export const joinText = (config) => `フォローして、インスタの投稿に「${(config && config.joinWord) || '住みたい'}」とコメントすると、すぐ町に住めます（15 分ほどで入居）。` +
   `道具・誕生日・好きな食べ物${mbtiOn(config) ? '・MBTI' : ''}もいっしょに書けます（例「${(config && config.joinWord) || '住みたい'} ピッケル 12/11 りんご${mbtiOn(config) ? ' INFP' : ''}」）。住んだあとも「誕生日 12/11」のようにコメントすれば変えられます。` +
-  (config && config.jobChange && config.jobChange.enabled === false ? '' : `仕事も「仕事 釣り」のようにコメントすると変えられます（1 日 ${(config && config.jobChange && config.jobChange.perDay) || 1} 回まで）。`);
+  (config && config.jobChange && config.jobChange.enabled === false ? '' : `仕事も「仕事 釣り」のようにコメントすると変えられます（1 日 ${(config && config.jobChange && config.jobChange.perDay) || 1} 回まで）。`) +
+  dmJoinText(config);
+// DM で入居（config.dm.enabled の時だけ config.dm.howTo を出す。docs/DMで入居する手順.md）
+export const dmJoinText = (config) => (config && config.dm && config.dm.enabled === true && config.dm.howTo ? String(config.dm.howTo) : '');
 // MBTI を出すか（config.mbtiOn）。村人の MBTI の文（書いていない人は ''）。例「MBTI：INFP-T」
 export const mbtiOn = (config) => !config || config.mbtiOn !== false;
 export const mbtiText = (v, config) => (mbtiOn(config) && v && v.mbti ? `MBTI：${v.mbti}${v.mbtiAT ? '-' + v.mbtiAT : ''}` : '');

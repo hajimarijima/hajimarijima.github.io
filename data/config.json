@@ -1,5 +1,9 @@
 {
   "title": "はじまり島",
+  "tagline": "コメント1つで、だれでも島の住人に",
+  "taglineNote": "町の画面の上のカードで、島の名前の下に出る橙色の短い一言。空にすると出さない",
+  "episodes": [],
+  "episodesNote": "町の画面の「年表」に出す、動画の話ごとのまとまり（古い順）。1 話は { \"no\": 1, \"date\": \"11/26\", \"title\": \"題\", \"icon\": \"🌱\", \"pop\": 20, \"url\": \"動画の URL（なくてよい）\", \"lines\": [\"🏠 20人が島に住んだ\", \"🗳 投票で拠点が決まった\", \"👑 はじまりの村人 @ユーザー名\"] }。lines は先頭の絵文字が印になり、@ユーザー名 は水色の丸いチップ（押すとその人の所へ）になる。pop は「● 住民 〇人」。空 [] のあいだは、歴史（history.json）を日ごとにまとめて自動で作る",
   "account": "@comment_de_sodatsu",
   "profileUrl": "https://www.instagram.com/comment_de_sodatsu/",
   "profileUrlNote": "投票の投稿の URL（votePostUrl）が空の時、投票のボタンはここ（インスタのプロフィール）へ飛ぶ",
@@ -17,6 +21,33 @@
   "joinScanDays": 60,
   "joinScanDaysNote": "最近の投稿のうち、何日前までの投稿を読むか。これより古い投稿は joinScanPosts の数に入っていても読まない。0 なら日にちで切らない",
   "joinExclude": ["comment_de_sodatsu"],
+  "dm": {
+    "note": "DM で入居する。インスタの DM に words の言葉（「住みたい」など）を送ると、コメントの「住みたい」と同じように町に住み、返事の DM で家のリンク（siteUrl の ?v=<村人>）が届く。もう住んでいる人には、新しい家は作らず元の家のリンクを返す。権限（instagram_business_manage_messages）が取れるまでは enabled を false のままにする。取れたら、docs/DMで入居する手順.md の設定をして true にするだけで動く（tools/dm.js・tools/webhook/worker.mjs）",
+    "enabled": false,
+    "words": ["住みたい", "すみたい", "入居", "入村"],
+    "wordsNote": "DM で入居の言葉として読む言葉。どれかが入っていれば受け付ける（「住みたくない」「入居しない」は読まない）。受け口（Cloudflare）もこの config を読んで、ほかの話の DM は積まない",
+    "readOptions": true,
+    "readOptionsNote": "true なら、コメントと同じ書き方（「住みたい ピッケル 12月11日 りんご INFP」）で、最初の道具・誕生日・好きな食べ物・MBTI もいっしょに読む。false なら言葉だけ見る",
+    "requireFollow": true,
+    "requireFollowNote": "true なら、町のアカウントをフォローしている人だけ住める（User Profile API の is_user_follow_business）。フォローしていない人には messages.notFollowing を返す。フォローしているか分からなかった時（API が読めない）は通す。もう住んでいる人は見ない",
+    "siteUrl": "https://hajimarijima.github.io/",
+    "houseUrl": "{site}?v={id}",
+    "houseUrlNote": "返事に入れる家のリンク。{site} は siteUrl、{id} は村人の番号（villagers.json の key）。サイトの ?v= で開くと、その村人の家にカメラが寄ってカードが開く",
+    "messages": {
+      "welcome": "{name}さん、はじまり島へようこそ！あなたの家はこちら → {url}",
+      "already": "{name}さんは、もうはじまり島に住んでいます！あなたの家はこちら → {url}",
+      "notFollowing": "フォローしてからもう一度「{word}」と送ってね",
+      "retry": "うまく受け付けられませんでした。少したってから、もう一度「{word}」と送ってね"
+    },
+    "messagesNote": "返事の DM の文。{name} は島での名前（名前をかくす人はあだ名）、{url} は家のリンク、{word} は送ってくれた言葉",
+    "howTo": "インスタの @comment_de_sodatsu をフォローして、DM で「住みたい」と送ると、すぐ島に住めます。返事の DM で、あなたの家のリンクが届きます。道具・誕生日・好きな食べ物もいっしょに書けます（例「住みたい ピッケル 12/11 りんご」）。",
+    "howToSteps": [
+      "インスタで @comment_de_sodatsu をフォローする",
+      "@comment_de_sodatsu に DM で「住みたい」と送る（「住みたい ピッケル 12/11 りんご」のように、道具・誕生日・好きな食べ物も書ける）",
+      "少しすると返事の DM が届く。リンクを開くと、あなたの家が見られる"
+    ],
+    "howToNote": "サイトの「住み方」の説明に使う文。enabled が true の時だけ、町のページの「村人になるには」の後ろに howTo を出す（js/common.js の joinText）"
+  },
   "startAt": null,
   "startAtNote": "町を始める日時（日本時間）。例 \"2026-11-28 06:00\"。null のあいだは 0 日目のまま（「住みたい」の人はすぐ住み始めるが、日は進まない）。この時刻を過ぎた最初の朝の daily で 1 日目になる。Actions の daily を start を選んで動かしても始まる",
   "baseVote": {

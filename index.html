@@ -13,41 +13,85 @@
 } }
 </script>
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#7cb342">
+<meta name="theme-color" content="#1e2a4f">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="はじまり島">
 <script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js"));</script>
 </head>
-<body>
+<body class="townpage">
 <main>
-  <section class="map">
+  <!-- 上のカード：島の名前・一言・住民数、村人さがし -->
+  <section class="topcard" aria-label="島と村人さがし">
+    <div class="tc-head">
+      <div class="tc-name">
+        <b id="islandname">はじまり島</b>
+        <span class="tc-tag" id="tagline"></span>
+      </div>
+      <span class="popbadge" id="popbadge">住民 <b>0</b> 人</span>
+    </div>
+    <form class="findbar" id="findform" role="search" autocomplete="off">
+      <label class="findbox"><span class="at" aria-hidden="true">@</span><input id="findq" type="search" enterkeyhint="search" placeholder="ユーザー名を入れる" aria-label="ユーザー名か名前"></label>
+      <button class="findbtn" type="submit">さがす</button>
+    </form>
+    <div class="tc-foot">
+      <button class="randbtn" id="randbtn" type="button">🎲 ランダムな人の家へ</button>
+      <p class="findmsg" id="findmsg" role="status" aria-live="polite"></p>
+    </div>
+  </section>
+  <section class="map" id="map">
     <div id="stage"></div>
     <div class="hud" id="hud"></div>
     <div class="vcard" id="card" hidden></div>
     <div class="hint">ドラッグで回す・つまんで寄る</div>
-    <a class="scroll-more" href="#info">町のようす</a>
+    <a class="scroll-more" href="#info">島のこと</a>
   </section>
-  <div class="wrap" id="info">
-    <h1 id="dayline"></h1>
-    <div class="grid2">
-      <div class="card">
-        <h2 style="margin-top:0">今日のできごと</h2>
-        <ul class="list" id="today"></ul>
-      </div>
-      <div class="card">
-        <h2 style="margin-top:0">次に建つもの</h2>
-        <p id="next"></p>
-        <h2>投票</h2>
-        <p id="votebox"></p>
-        <h2 id="chestcard">町のチェスト</h2>
-        <div id="chest"></div>
-        <p class="muted" id="nexttool"></p>
-        <h2>村人になるには</h2>
-        <p id="join"></p>
+  <!-- 下のパネル：せつめい・物語・年表・島のいま -->
+  <section class="sheet" id="info">
+    <div class="tabs" role="tablist" aria-label="島のこと">
+      <button role="tab" id="tb-howto" aria-controls="tab-howto" data-tab="howto" aria-selected="true">せつめい</button>
+      <button role="tab" id="tb-story" aria-controls="tab-story" data-tab="story" aria-selected="false">物語</button>
+      <button role="tab" id="tb-timeline" aria-controls="tab-timeline" data-tab="timeline" aria-selected="false">年表</button>
+      <button role="tab" id="tb-now" aria-controls="tab-now" data-tab="now" aria-selected="false">島のいま</button>
+    </div>
+    <div class="tabpane" role="tabpanel" id="tab-howto" aria-labelledby="tb-howto">
+      <h2 class="sh">遊び方</h2>
+      <ul class="howlist">
+        <li><span class="hi">👆</span>町はドラッグで回す・ホイールやつまむ指で寄る。</li>
+        <li><span class="hi">🏷</span>村人の頭の上の名札を押すと、その人のカードが出ます。</li>
+        <li><span class="hi">🔍</span>上の欄に @ユーザー名 か名前を入れて「さがす」と、その人の家へ飛びます。</li>
+        <li><span class="hi">🎲</span>「ランダムな人の家へ」で、だれかの所へ遊びに行けます。</li>
+      </ul>
+      <h2 class="sh">村人になるには</h2>
+      <p id="join"></p>
+      <h2 class="sh">コメントの書き方</h2>
+      <ul class="howlist" id="howcomment"></ul>
+    </div>
+    <div class="tabpane" role="tabpanel" id="tab-story" aria-labelledby="tb-story" hidden></div>
+    <div class="tabpane" role="tabpanel" id="tab-timeline" aria-labelledby="tb-timeline" hidden></div>
+    <div class="tabpane" role="tabpanel" id="tab-now" aria-labelledby="tb-now" hidden>
+      <h2 class="sh" id="dayline"></h2>
+      <div class="nowchips" id="nowchips"></div>
+      <div id="nowband"></div>
+      <div class="grid2">
+        <div class="card">
+          <h2 style="margin-top:0">今日のできごと</h2>
+          <ul class="list" id="today"></ul>
+          <h2>島の建物</h2>
+          <p id="bldlist"></p>
+        </div>
+        <div class="card">
+          <h2 style="margin-top:0">次に建つもの</h2>
+          <p id="next"></p>
+          <h2>投票</h2>
+          <p id="votebox"></p>
+          <h2 id="chestcard">町のチェスト</h2>
+          <div id="chest"></div>
+          <p class="muted" id="nexttool"></p>
+        </div>
       </div>
     </div>
-  </div>
+  </section>
 </main>
 <script type="module" src="js/town.js"></script>
 </body>

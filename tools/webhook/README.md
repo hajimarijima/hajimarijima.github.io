@@ -15,6 +15,7 @@
   - KV（`TOWN_KV`）があれば、`DEBOUNCE_SECONDS`（既定 30 秒）に 1 回だけ頼む。なくても、Actions の順番待ち（`town-join`）が 1 つにまとめる。
   - 2 分ごとの見回り（Cron Trigger・任意）：Webhook が届かない時の代わり。`IG_TOKEN`・`IG_USER_ID`・KV があれば、最近の投稿のコメントの数だけ見て、増えていたら頼む（1 回の見回りでインスタの API 1 回）。
   - 2 分ごとの見回りは、フォロワー数も読んで KV に置く（コメントの数も見る時は API 1 回で両方）。`GET /stats` が `{"followers":123,"at":"…"}` を返す（`Access-Control-Allow-Origin: https://hajimarijima.github.io`・`Cache-Control: max-age=60`）。サイトは `config.json` の `liveStatsUrl` にこの URL を入れると読む。
+  - DM で入居（`docs/DMで入居する手順.md`。サイトの `data/config.json` の `dm.enabled` が `true` の時だけ）：`messages` の Webhook で入居の言葉の DM だけ、User Profile API で username・フォローしているかを引いて KV に積み（23 時間）、GitHub に `ig-dm` を頼む（中身は送らない）。`GET /dm/queue`・`POST /dm/done` は `Authorization: Bearer DM_QUEUE_TOKEN` で join.yml（`tools/dm.js`）だけが使う。`/dm/done` で Send API の返事を送り、KV から消す。
 - `wrangler.toml.example`：コマンド（`npx wrangler deploy`）で置く人向けの見本。
 - コメントの中身・名前は、Worker のどこにも残さない（GitHub に渡すのは投稿の ID だけ）。
 
@@ -27,5 +28,6 @@
 | `IG_APP_SECRET` | インスタのログインのアプリの Instagram app secret | インスタのログインの時 |
 | `GH_DISPATCH_TOKEN` | GitHub の fine-grained token（このリポジトリだけ・Contents: Read and write） | 要る |
 | `IG_TOKEN` / `IG_USER_ID` | GitHub の Secrets と同じ | 2 分ごとの見回りを使う時だけ |
+| `DM_QUEUE_TOKEN` | 自分で決めた 16 字以上の合言葉（GitHub の Secrets にも同じ値）。DM の入居では `IG_TOKEN`（DM の権限入り）と KV も要る | DM で入居を使う時だけ |
 
 テスト：`node tests/run_tests.js`（署名・中身の読み取り・GET の確かめを、にせの値で確かめる）。

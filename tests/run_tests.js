@@ -2549,7 +2549,7 @@ at('Webhook の受け口（tools/webhook/worker.mjs）：署名を確かめる�
   const src = fs.readFileSync(path.join(ROOT, 'tools', 'webhook', 'worker.mjs'), 'utf8');
   assert.ok(!/ghp_|github_pat_/.test(src), '鍵をコードに書かない');
   const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'join.yml'), 'utf8');
-  assert.ok(/repository_dispatch:\s*\n\s*types: \[ig-comment\]/.test(wf) && /workflow_dispatch/.test(wf), 'join.yml は Webhook と手で動く');
+  assert.ok(/repository_dispatch:\s*\n\s*types: \[ig-comment(, ig-dm)?\]/.test(wf) && /workflow_dispatch/.test(wf), 'join.yml は Webhook と手で動く');
   assert.ok(/IG_HINT_MEDIA: \$\{\{ github\.event\.client_payload\.media \}\}/.test(wf) && !/run:.*client_payload/.test(wf), 'Webhook の値は env で渡す');
   assert.ok(/instagram\.js --cache/.test(wf), 'join は覚え書きを使う');
 });
@@ -2940,6 +2940,212 @@ at('対決投票：instagram.js は対決の投稿のコメントを versusComme
   assert.strictEqual(r3.data.versusComments, undefined);
   assert.ok(!calls.some((c) => /\/333\/comments/.test(c)));
   IG._setFetch(null);
+});
+at('町の画面：年表は config.episodes から、空なら歴史の日ごとに作る。@名前 はチップ', async () => {
+  const P = await import(require('url').pathToFileURL(path.join(ROOT, 'js', 'islandpanel.js')).href);
+  const V = [{ key: 'k1', name: 'aki_01', display: 'aki_01', joinedDay: 0 }, { key: 'k2', name: 'momo', display: 'momo', joinedDay: 1 }, { key: 'k3', name: 'secret', display: 'ないしょ', hidden: true, joinedDay: 1 }];
+  const H = [{ day: 0, date: '2026-11-26', type: 'start', text: '島が始まった' }, { day: 0, date: '2026-11-26', type: 'join', text: 'aki_01 が住んだ', who: ['k1'] },
+    { day: 1, date: '2026-11-27', type: 'join', text: 'momo が住んだ', who: ['k2', 'k3'] }, { day: 1, date: '2026-11-27', type: 'title', text: 'momo に称号', who: ['k2'] }];
+  const auto = P.buildEpisodes({ episodes: [] }, H, V);
+  assert.deepStrictEqual(auto.map((e) => [e.no, e.date, e.title, e.pop]), [[1, '11/26', '島のはじまり', 1], [2, '11/27', '2人が引っこしてきた', 3]]);
+  assert.strictEqual(auto[1].lines[0].text, '2人が島に住みはじめた');
+  const html = P.timelineHtml({}, H, V);
+  assert.ok(html.includes('data-key="k2"') && html.includes('第2話') && html.includes('● 住民 3人'));
+  assert.ok(!html.includes('secret'), 'かくしている人のユーザー名は出さない');
+  const cfg = { episodes: [{ no: 1, date: '11/19', title: 'はじめの島', icon: '🌱', pop: 0, lines: ['🏠 家が建った', '👑 店長 @aki_01'] }] };
+  const e = P.buildEpisodes(cfg, H, V);
+  assert.deepStrictEqual(e[0].lines.map((l) => l.icon), ['🏠', '👑']);
+  const h2 = P.timelineHtml(cfg, H, V);
+  assert.ok(h2.includes('class="vchip" data-key="k1"') && h2.includes('第1話 <span>11/19</span>'));
+  assert.ok(P.storyHtml(H, V).includes('1日目'));
+  assert.ok(!/マイクラ|マインクラフト/.test(fs.readFileSync(path.join(ROOT, 'js', 'islandpanel.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')));
+});
+
+// ---------- DM で入居（tools/dm.js・join.js・tools/webhook/worker.mjs。docs/DMで入居する手順.md） ----------
+t('DM で入居：言葉の読み取り・config は切ってある・返事の文', () => {
+  const DM = require('../tools/dm');
+  const cfg = liveCfg();
+  assert.strictEqual(cfg.dm.enabled, false, '権限が取れるまでは切っておく');
+  for (const w of ['住みたい', 'すみたい', '入居', '入村']) assert.ok(cfg.dm.words.includes(w), w);
+  for (const s of ['住みたい', '入居したいです！', '入村 ピッケル', 'わたしも住みたい 12/11 りんご']) assert.ok(DM.dmJoinWord(s, cfg.dm.words), s);
+  for (const s of ['住みたくない', '入居しない', 'こんにちは', '参加しない', '']) assert.strictEqual(DM.dmJoinWord(s, cfg.dm.words), null, s);
+  assert.strictEqual(DM.houseUrl(DM.dmConfig(cfg), 'abc123'), 'https://hajimarijima.github.io/?v=abc123');
+  assert.ok(/フォロー/.test(cfg.dm.messages.notFollowing) && /\{url\}/.test(cfg.dm.messages.welcome) && /\{url\}/.test(cfg.dm.messages.already));
+  assert.ok(/DM/.test(cfg.dm.howTo) && cfg.dm.howToSteps.length >= 2, 'サイトの住み方に使う文');
+  // 切ってある時は何もしない
+  const S = { villagers: [] };
+  const r = DM.dmJoins(S, [{ id: 'a'.repeat(32), igsid: '5551', username: 'dm_taro', follows: true, text: '住みたい', at: '2026-11-27T01:00:00Z' }], { config: cfg, hidden: new Set(), date: '2026-11-27', day: 0 });
+  assert.strictEqual(r.registered.length + r.replies.length, 0); assert.strictEqual(S.villagers.length, 0);
+});
+t('DM で入居：コメントと同じ人は二重にならない・フォローしていない人・道具と誕生日も読む・名前をかくす人はあだ名', () => {
+  const DM = require('../tools/dm');
+  const cfg = liveCfg(); cfg.dm.enabled = true;
+  const S = { villagers: [] };
+  // 先にコメントで住んだ人（from.id 9001）
+  P.upsertVillager(S.villagers, { igId: '9001', username: 'kaito_a', joined: '2026-11-27', joinedDay: 0, source: 'comment' }, new Set());
+  const id = (n) => String(n).repeat(32).slice(0, 32);
+  const hidden = new Set([P.userHash('secret_dm')]);
+  const dms = [
+    { id: id(1), igsid: '9001', username: 'kaito_a', follows: true, text: '住みたい', at: '2026-11-27T01:00:00Z' }, // 同じ ID
+    { id: id(2), igsid: '7777', username: 'kaito_a', follows: true, text: '入居', at: '2026-11-27T01:01:00Z' }, // ID の形がちがっても名前で同じ人
+    { id: id(3), igsid: '8001', username: 'new_mai', follows: true, text: '住みたい ピッケル 12月11日 りんご', at: '2026-11-27T01:02:00Z' },
+    { id: id(4), igsid: '8001', username: 'new_mai', follows: true, text: '入村', at: '2026-11-27T01:03:00Z' }, // 続けて送っても返事は 1 つ
+    { id: id(5), igsid: '8002', username: 'no_follow', follows: false, text: '住みたい', at: '2026-11-27T01:04:00Z' },
+    { id: id(6), igsid: '8003', username: 'secret_dm', follows: null, text: '住みたい', at: '2026-11-27T01:05:00Z' }, // フォローが分からない時は通す
+    { id: id(7), igsid: '8004', username: 'town_owner', follows: true, text: '住みたい', at: '2026-11-27T01:06:00Z' },
+    { id: id(8), igsid: '8005', username: 'chat_only', follows: true, text: 'こんにちは', at: '2026-11-27T01:07:00Z' },
+    { id: id(9), igsid: '8006', username: null, follows: true, text: '住みたい', at: '2026-11-27T01:08:00Z' }, // 名前が引けなかった
+  ];
+  const r = DM.dmJoins(S, dms, { config: cfg, owners: ['town_owner'], hidden, date: '2026-11-27', day: 0 });
+  assert.deepStrictEqual(r.registered.map((v) => v.display).sort(), [P.nickname(r.registered.find((v) => v.hidden).key), 'new_mai'].sort());
+  assert.strictEqual(S.villagers.filter((v) => v.name === 'kaito_a').length, 1, 'コメントと DM で二重にならない');
+  const kaito = S.villagers.find((v) => v.name === 'kaito_a');
+  assert.ok(kaito.igAlt && kaito.igAlt.includes(P.igHash('7777')), 'ちがう形の ID は印で覚える');
+  assert.strictEqual(P.findVillager(S.villagers, { igId: '7777' }), kaito, '次からは ID だけでも同じ人');
+  const mai = S.villagers.find((v) => v.name === 'new_mai');
+  assert.strictEqual(mai.startTool, 'pickaxe'); assert.strictEqual(mai.birthday, '12-11'); assert.strictEqual(mai.profile.food, 'りんご');
+  assert.strictEqual(mai.source, 'comment'); assert.strictEqual(mai.via, 'dm');
+  assert.ok(!S.villagers.some((v) => v.name === 'no_follow' || v.name === 'town_owner' || v.name === 'chat_only'));
+  for (const v of S.villagers) P.applyPrivacy(v, hidden);
+  const rep = DM.replyTexts(r, cfg);
+  const of = (n) => rep.find((x) => x.ids.includes(id(n)));
+  assert.strictEqual(rep.reduce((a, x) => a + x.ids.length, 0), 9, 'どの DM も消す');
+  assert.strictEqual(of(3), of(4)); assert.deepStrictEqual(of(3).ids, [id(3), id(4)]);
+  assert.strictEqual(of(3).text, `new_maiさん、はじまり島へようこそ！あなたの家はこちら → https://hajimarijima.github.io/?v=${mai.key}`);
+  assert.strictEqual(of(1).kind, 'already'); assert.ok(of(1).text.includes('?v=' + kaito.key) && of(2).text.includes('?v=' + kaito.key), '元の家のリンク');
+  assert.strictEqual(of(5).kind, 'notFollowing'); assert.ok(/フォローしてから/.test(of(5).text));
+  const sec = S.villagers.find((v) => v.hidden);
+  assert.ok(of(6).text.startsWith(sec.display + 'さん') && !of(6).text.includes('secret_dm'), 'かくす人はあだ名');
+  assert.strictEqual(of(7).text, null); assert.strictEqual(of(8).text, null);
+  assert.strictEqual(of(9).kind, 'retry');
+  assert.ok(!JSON.stringify(S.villagers).includes('secret_dm') && !JSON.stringify(S.villagers).includes('8003') && !JSON.stringify(S.villagers).includes('7777'), '公開データに IGSID・かくす名前を書かない');
+});
+t('DM で入居：join.js（一時フォルダ）で住み、返事のファイルを inbox/ に書く・公開ファイルに IGSID がない', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-dm-'));
+  const cfg = liveCfg(); cfg.startAt = null; cfg.dm.enabled = true;
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
+  const env = { ...process.env, TOWN_DATA: dir, TOWN_SALT: 'dm-test-salt', TOWN_SALT_QUIET: '1' };
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+  node('tools/init.js', '--seed', 'dm', '--start', '2026-11-01');
+  fs.mkdirSync(path.join(dir, 'inbox'));
+  fs.writeFileSync(path.join(dir, 'inbox', 'instagram.json'), JSON.stringify({ joinComments: [{ from: { id: '424242', username: 'comment_first' }, text: '住みたい', timestamp: '2026-11-27T00:00:00Z' }] }));
+  const id = (c) => c.repeat(32);
+  fs.writeFileSync(path.join(dir, 'inbox', 'dm.json'), JSON.stringify({ items: [
+    { id: id('a'), igsid: '31415926', username: 'dm_hana', follows: true, text: '住みたい 釣り 3/14', at: '2026-11-27T01:00:00Z' },
+    { id: id('b'), igsid: '424242', username: 'comment_first', follows: true, text: '入居', at: '2026-11-27T01:00:00Z' },
+  ] }));
+  const out = node('tools/join.js', '--now', '2026-11-27T10:00:00+09:00');
+  assert.ok(!/dm_hana|31415926/.test(out), 'ログに名前・IGSID を出さない');
+  const vs = JSON.parse(fs.readFileSync(path.join(dir, 'villagers.json'), 'utf8'));
+  assert.strictEqual(vs.length, 2, 'コメントの人と DM の人。二重にならない');
+  const hana = vs.find((v) => v.name === 'dm_hana');
+  assert.ok(hana && hana.joinedDay === 0 && hana.birthday === '03-14');
+  const life = STORE.readLife(dir);
+  assert.ok(life[hana.key], 'その場で町に迎える');
+  const rep = JSON.parse(fs.readFileSync(path.join(dir, 'inbox', 'dm_replies.json'), 'utf8')).items;
+  assert.ok(rep.find((x) => x.ids[0] === id('a')).text.includes('?v=' + hana.key));
+  assert.strictEqual(rep.find((x) => x.ids[0] === id('b')).kind, 'already');
+  const pub = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
+  assert.ok(!pub.includes('31415926') && !pub.includes('424242'), '公開ファイルに IGSID がない');
+  // 次の受付（dm.json がない）では、古い返事のファイルを消す
+  fs.unlinkSync(path.join(dir, 'inbox', 'dm.json'));
+  node('tools/join.js', '--now', '2026-11-27T10:15:00+09:00');
+  assert.ok(!fs.existsSync(path.join(dir, 'inbox', 'dm_replies.json')));
+  // サイトの受け口（?v=）と、住み方の文
+  const tj = fs.readFileSync(path.join(ROOT, 'js', 'town.js'), 'utf8');
+  assert.ok(/function focusVillagerFromUrl\(/.test(tj) && /focusVillagerFromUrl\(QS\.get\('v'\)/.test(tj), 'town.js の ?v= の受け口');
+  const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'join.yml'), 'utf8');
+  assert.ok(/node tools\/dm\.js pull/.test(wf) && /node tools\/dm\.js done/.test(wf) && /DM_QUEUE_TOKEN: \$\{\{ secrets\.DM_QUEUE_TOKEN \}\}/.test(wf), 'join.yml が DM を読んで返事する');
+  assert.ok(wf.indexOf('dm.js done') > wf.indexOf('git push'), '返事はコミットのあと');
+});
+at('DM で入居：受け口（worker.mjs）が messages の Webhook を積む・/dm/queue・/dm/done で返事', async () => {
+  const W = await import(require('url').pathToFileURL(path.join(ROOT, 'tools', 'webhook', 'worker.mjs')).href);
+  const crypto = require('crypto');
+  W._resetDmConfig();
+  const store = new Map();
+  const kv = {
+    get: async (k) => (store.has(k) ? store.get(k) : null), put: async (k, v, o) => { store.set(k, v); kv.ttl = o && o.expirationTtl; },
+    delete: async (k) => { store.delete(k); }, list: async ({ prefix }) => ({ keys: [...store.keys()].filter((k) => k.startsWith(prefix)).map((name) => ({ name })) }),
+  };
+  const TOKEN = 'q'.repeat(24);
+  const env = { META_APP_SECRET: 'APPSECRET', IG_TOKEN: 'IGtest', TOWN_KV: kv, GH_DISPATCH_TOKEN: 'gh', DM_QUEUE_TOKEN: TOKEN };
+  let dmEnabled = true;
+  const calls = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url); calls.push({ u, init });
+    if (u.endsWith('/data/config.json')) return new Response(JSON.stringify({ dm: { enabled: dmEnabled, words: ['住みたい', '入居'] } }), { status: 200 });
+    if (/graph\.instagram\.com\/v21\.0\/5001\?fields=username,name,is_user_follow_business/.test(u)) return new Response(JSON.stringify({ username: 'dm_user', name: 'DM', is_user_follow_business: true }), { status: 200 });
+    if (/\/me\/messages$/.test(u)) return new Response('{"message_id":"m"}', { status: 200 });
+    if (/api\.github\.com/.test(u)) return new Response(null, { status: 204 });
+    return new Response('{}', { status: 404 });
+  };
+  const post = async (payload) => {
+    const body = new TextEncoder().encode(JSON.stringify(payload));
+    const sig = 'sha256=' + crypto.createHmac('sha256', 'APPSECRET').update(body).digest('hex');
+    const waits = [];
+    const res = await W.default.fetch(new Request('https://w.example/', { method: 'POST', body, headers: { 'X-Hub-Signature-256': sig } }), env, { waitUntil: (p) => waits.push(p) });
+    await Promise.all(waits);
+    return res;
+  };
+  const msg = (sid, mid, text, extra = {}) => ({ sender: { id: sid }, recipient: { id: '17841' }, timestamp: Date.now(), message: { mid, text, ...extra } });
+  try {
+    // 偽の Webhook：ふつうの DM・入居の DM・自分の送った物（echo）・自分のアカウント
+    assert.deepStrictEqual(W.dmMessages({ object: 'instagram', entry: [{ id: '17841', messaging: [msg('5001', 'mA', '住みたい'), msg('5002', 'mE', '住みたい', { is_echo: true }), msg('17841', 'mO', '住みたい')] }] }).map((m) => m.mid), ['mA']);
+    assert.strictEqual(W.dmMessages({ object: 'instagram', entry: [{ id: '1', changes: [{ field: 'messages', value: msg('5003', 'mC', '入居') }] }] }).length, 1, 'テスト送信の形も読む');
+    let res = await post({ object: 'instagram', entry: [{ id: '17841', messaging: [msg('5001', 'mid.1', '住みたい ピッケル'), msg('5001', 'mid.2', 'こんにちは')] }] });
+    assert.strictEqual(res.status, 200);
+    const keys = [...store.keys()].filter((k) => k.startsWith('dmq:'));
+    assert.strictEqual(keys.length, 1, '入居の言葉の DM だけ積む');
+    const item = JSON.parse(store.get(keys[0]));
+    assert.deepStrictEqual({ u: item.username, f: item.follows, s: item.igsid }, { u: 'dm_user', f: true, s: '5001' });
+    assert.ok(kv.ttl <= 24 * 3600, '24 時間で消える');
+    const gh = calls.filter((c) => /api\.github\.com/.test(c.u));
+    assert.strictEqual(gh.length, 1);
+    const ghBody = JSON.parse(gh[0].init.body);
+    assert.strictEqual(ghBody.event_type, 'ig-dm');
+    assert.ok(!/5001|dm_user|住みたい/.test(gh[0].init.body), 'GitHub には中身を送らない');
+    assert.ok(calls.every((c) => !/access_token=/.test(c.u) || !/IGtest/.test(c.u)), 'トークンは URL に入れない');
+    // Meta の送り直しは積み直さない
+    await post({ object: 'instagram', entry: [{ id: '17841', messaging: [msg('5001', 'mid.1', '住みたい ピッケル')] }] });
+    assert.strictEqual([...store.keys()].filter((k) => k.startsWith('dmq:')).length, 1);
+    // /dm/queue：合言葉がないと読めない
+    res = await W.default.fetch(new Request('https://w.example/dm/queue'), env, { waitUntil() {} });
+    assert.strictEqual(res.status, 403);
+    res = await W.default.fetch(new Request('https://w.example/dm/queue', { headers: { Authorization: 'Bearer ' + TOKEN } }), env, { waitUntil() {} });
+    const q = await res.json();
+    assert.strictEqual(q.items.length, 1); assert.strictEqual(q.items[0].text, '住みたい ピッケル');
+    // tools/dm.js の pull / done も同じ受け口で
+    const DM = require('../tools/dm');
+    const fetchFn = (u, init) => W.default.fetch(new Request(u, init), env, { waitUntil() {} });
+    const pulled = await DM.pull({ env: { DM_QUEUE_URL: 'https://w.example/', DM_QUEUE_TOKEN: TOKEN }, fetchFn });
+    assert.strictEqual(pulled[0].id, q.items[0].id);
+    calls.length = 0;
+    const r = await DM.done([{ ids: [pulled[0].id], text: 'ようこそ → https://hajimarijima.github.io/?v=k1' }], { env: { DM_QUEUE_URL: 'https://w.example', DM_QUEUE_TOKEN: TOKEN }, fetchFn });
+    assert.deepStrictEqual(r, { sent: 1, removed: 1 });
+    const send = calls.find((c) => /\/me\/messages$/.test(c.u));
+    assert.ok(send && /graph\.instagram\.com/.test(send.u));
+    assert.deepStrictEqual(JSON.parse(send.init.body), { recipient: { id: '5001' }, message: { text: 'ようこそ → https://hajimarijima.github.io/?v=k1' } });
+    assert.strictEqual(send.init.headers.Authorization, 'Bearer IGtest');
+    assert.strictEqual([...store.keys()].filter((k) => k.startsWith('dmq:')).length, 0, '返したら消す');
+    // 24 時間を過ぎた DM には返事しない（消すだけ）
+    store.set('dmq:' + 'c'.repeat(32), JSON.stringify({ igsid: '5009', text: '住みたい', at: new Date(Date.now() - 25 * 3600e3).toISOString() }));
+    calls.length = 0;
+    res = await W.default.fetch(new Request('https://w.example/dm/done', { method: 'POST', headers: { Authorization: 'Bearer ' + TOKEN }, body: JSON.stringify({ items: [{ ids: ['c'.repeat(32)], text: 'x' }] }) }), env, { waitUntil() {} });
+    assert.deepStrictEqual(await res.json(), { sent: 0, removed: 1 });
+    assert.ok(!calls.some((c) => /messages$/.test(c.u)));
+    // /dm/done も合言葉がないと使えない・合言葉が短い時は使えない
+    res = await W.default.fetch(new Request('https://w.example/dm/done', { method: 'POST', body: '{}' }), env, { waitUntil() {} });
+    assert.strictEqual(res.status, 403);
+    res = await W.default.fetch(new Request('https://w.example/dm/queue', { headers: { Authorization: 'Bearer short' } }), { ...env, DM_QUEUE_TOKEN: 'short' }, { waitUntil() {} });
+    assert.strictEqual(res.status, 403);
+    // サイトの config で切ってある時は積まない
+    W._resetDmConfig(); dmEnabled = false;
+    await post({ object: 'instagram', entry: [{ id: '17841', messaging: [msg('5001', 'mid.3', '住みたい')] }] });
+    assert.strictEqual([...store.keys()].filter((k) => k.startsWith('dmq:')).length, 0, 'dm.enabled が false なら積まない');
+  } finally { globalThis.fetch = realFetch; W._resetDmConfig(); }
+  const src = fs.readFileSync(path.join(ROOT, 'tools', 'webhook', 'worker.mjs'), 'utf8') + fs.readFileSync(path.join(ROOT, 'tools', 'dm.js'), 'utf8');
+  assert.ok(!/ghp_|github_pat_|IGQ|EAA[A-Za-z0-9]{10}/.test(src), '鍵をコードに書かない');
 });
 
 (async () => {

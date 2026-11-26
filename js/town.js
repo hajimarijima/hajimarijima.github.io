@@ -14,7 +14,8 @@ import { makeField, makePond, animatePond, makeBobber, makeAnimal, animateAnimal
 import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote, startNote, joinText, titleBadges, bestFishText, mbtiText } from './common.js';
 import { makeSky, jstHour, parseTime, phaseName } from './daynight.js';
 import { hourOf, hourText, isNight } from './hours.js';
-import { tagName, igUrl } from './search.js';
+import { tagName, igUrl, searchVillagers, findExact } from './search.js';
+import { taglineOf, timelineHtml, storyHtml, howCommentHtml, buildingsText, setupTabs } from './islandpanel.js'; // 上のカードと下のパネル
 import { goalHtml, chestHtml, projectList, projectCardHtml } from './chestview.js';
 import { bandHtml as versusBand } from './versus.js'; // 一週間の対決投票の赤と青の割合バー
 // 動画の書き出し（?video=1）で開いた時
@@ -156,10 +157,38 @@ async function main() {
   const markZoom = () => { cam.zoomUntil = performance.now() + 450; };
   renderer.domElement.addEventListener('wheel', markZoom, { passive: true });
   renderer.domElement.addEventListener('touchmove', (e) => { if (e.touches.length > 1) markZoom(); }, { passive: true });
-  controls.addEventListener('start', () => { if (cam.intro >= 0) cam.intro = -1; });
+  controls.addEventListener('start', () => { if (cam.intro >= 0) cam.intro = -1; cam.fly = null; });
   const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
   const _off = new THREE.Vector3();
+  // さがした人・ランダムの人の所へカメラを飛ばす。to() は行き先 {x, z}（動く人なら毎回その時の位置）。dist は寄った時の距離
+  const _ft = new THREE.Vector3(), _fp = new THREE.Vector3();
+  function flyTo(to, dist = 24) {
+    cam.intro = -1;
+    _off.copy(camera.position).sub(controls.target);
+    const az = Math.atan2(_off.x, _off.z), pol = 0.62; // 上から見下ろす（木にかくれにくい）
+    const p0 = to();
+    const len = Math.min(2.2, 0.9 + Math.hypot(p0.x - controls.target.x, p0.z - controls.target.z) / 90);
+    const narrow = stage.clientWidth < 600;
+    if (narrow) dist *= 1.3;
+    cam.fly = { t: 0, len, to, shift: narrow ? dist * 0.14 : dist * 0.06, fromT: controls.target.clone(), fromP: camera.position.clone(), off: new THREE.Vector3(Math.sin(az) * Math.sin(pol), Math.cos(pol), Math.cos(az) * Math.sin(pol)).multiplyScalar(dist) };
+  }
+  function flyStep(dt) {
+    const f = cam.fly; f.t += dt;
+    const k = easeInOut(Math.min(1, f.t / f.len));
+    const p = f.to();
+    // 細い画面はカードが下半分にかぶるので、見る所を手前にずらして、その人を画面の上のほうに出す
+    _ft.set(p.x, 0, p.z).addScaledVector(_fp.set(f.off.x, 0, f.off.z).normalize(), f.shift);
+    _fp.copy(_ft).add(f.off);
+    // 遠い所へは、途中で少し高く上がってから降りる
+    const lift = Math.sin(Math.PI * k) * Math.min(30, f.fromT.distanceTo(_ft) * 0.25);
+    controls.target.lerpVectors(f.fromT, _ft, k);
+    camera.position.lerpVectors(f.fromP, _fp, k); camera.position.y += lift;
+    controls.update();
+    cam.last = cam.want = camera.position.distanceTo(controls.target);
+    if (k >= 1) cam.fly = null;
+  }
   function camStep(dt) {
+    if (cam.fly) return flyStep(dt);
     if (cam.intro >= 0) {
       cam.intro += dt;
       const k = easeInOut(Math.min(1, cam.intro / cam.introLen));
@@ -2123,7 +2152,54 @@ async function main() {
     const hh = Math.floor(h), mm = Math.floor((h - hh) * 60);
     el.textContent = `${phaseName(h)} ${hh}:${String(mm).padStart(2, '0')}`;
     el.classList.toggle('nightchip', sky.n > 0.6);
+    const el2 = document.getElementById('clocknow'); if (el2) el2.textContent = el.textContent;
   }
+
+  // ---------- 村人さがし・ランダムな人の家へ ----------
+  // 家（建物）がある人はその家へ、ない人はその時いる所へ（歩いていればついて行く）
+  const findMsg = document.getElementById('findmsg');
+  const findSay = (t, warn) => { if (!findMsg) return; findMsg.textContent = t; findMsg.classList.toggle('warn', !!warn); };
+  function goVillager(v, how) {
+    const p = people.find((q) => q.v.key === v.key);
+    if (!p) return false;
+    const hb = p.homeB;
+    if (hb) flyTo(() => ({ x: hb.x, z: hb.z }), 42);
+    else flyTo(() => ({ x: p.ch.position.x, z: p.ch.position.z }), 38);
+    openCard(v);
+    findSay(`${tagName(v)} ${hb ? 'さんの家' : 'さんのいる所'}へ${how === 'rand' ? '遊びに来ました' : '来ました'}`);
+    const map = document.getElementById('map');
+    if (map && map.getBoundingClientRect().top < -40) map.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return true;
+  }
+  window.TOWN.goVillager = (q) => { const v = findExact(active, q) || searchVillagers(active, q, 1)[0]; return v ? goVillager(v) : false; }; // 確かめ用
+  const findForm = document.getElementById('findform');
+  if (findForm) findForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const inp = document.getElementById('findq'), q = inp.value;
+    if (!q.trim()) { findSay('ユーザー名か名前を入れてね', true); inp.focus(); return; }
+    const v = findExact(active, q) || searchVillagers(active, q, 1)[0];
+    if (v && goVillager(v)) { inp.blur(); return; }
+    findSay(`「${q.trim().replace(/^@+/, '')}」さんは、まだ島で見つかりませんでした。つづりを確かめるか、コメントで住みに来てね`, true);
+  });
+  let lastRand = '';
+  const randBtn = document.getElementById('randbtn');
+  if (randBtn) {
+    if (!people.length) randBtn.disabled = true;
+    randBtn.addEventListener('click', () => {
+      const pool = people.filter((p) => p.v.key !== lastRand);
+      const p = (pool.length ? pool : people)[Math.floor(Math.random() * (pool.length || people.length))];
+      if (!p) return findSay('まだだれも住んでいません', true);
+      lastRand = p.v.key; goVillager(p.v, 'rand');
+    });
+  }
+  // 年表・物語の名前のチップ：押すとその人の所へ
+  document.getElementById('info')?.addEventListener('click', (e) => {
+    const b = e.target.closest('.vchip[data-key]'); if (!b) return;
+    const v = active.find((x) => x.key === b.dataset.key);
+    if (v) goVillager(v); else findSay('その人は、今は島にいません', true);
+  });
+  // ?who=名前 で開いた時は、その人の所へ
+  if (QS.get('who')) { const v = findExact(active, QS.get('who')); if (v) setTimeout(() => goVillager(v), 300); }
 
   // ---------- 村人カード ----------
   const card = document.getElementById('card');
@@ -2161,6 +2237,35 @@ async function main() {
     x.onclick = closeCard;
     card.append(x);
   }
+  focusVillagerFromUrl(QS.get('v'), { people, camera, controls, cam, openCard }); // ?v=<村人>：その人の家へ寄る（DM の返事のリンク。カードを作り終えてから）
+}
+
+// ?v=<村人の key>（DM で入居した時の返事のリンク）：その村人の家（家がなければテント・寝る所）へカメラをなめらかに寄せて、村人カードを開く。
+// 開いた時の空からの寄りはやめる。触ったらすぐやめる。知らない key なら何もしない（ふつうの開き方）。寄せたら true
+function focusVillagerFromUrl(key, { people, camera, controls, cam, openCard }) {
+  if (!key) return false;
+  const p = people.find((x) => x.v.key === key);
+  if (!p) return false;
+  const at = p.homeB ? { x: p.homeB.x, z: p.homeB.z } : p.home;
+  if (!at) return false;
+  cam.intro = -1;
+  const t0 = controls.target.clone(), c0 = camera.position.clone();
+  const t1 = new THREE.Vector3(at.x, 0, at.z), c1 = t1.clone().add(new THREE.Vector3(0, 15, 18));
+  const start = performance.now(), len = 1800;
+  let stop = false;
+  controls.addEventListener('start', () => { stop = true; });
+  const ease = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+  const step = (now) => {
+    if (stop) return;
+    const k = ease(Math.min(1, (now - start) / len));
+    controls.target.lerpVectors(t0, t1, k);
+    camera.position.lerpVectors(c0, c1, k);
+    cam.last = 0; // camStep のなめらかなズームに、この動きを戻されないように
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+  openCard(p.v);
+  return true;
 }
 
 // 拠点の場所の投票中の帯（地図の上）。票はコメントを数えた数（15 分ごとの受付で数え直す）
@@ -2208,6 +2313,22 @@ function renderPanel(D) {
   const nt = state.nextTool;
   document.getElementById('nexttool').textContent = nt ? `次に作る道具：${(IT[nt.item] || {}).name || nt.item}（${nt.text}）` : '';
   document.getElementById('join').textContent = joinText(config);
+  // 上のカード：島の名前・一言・住民数
+  const nm = document.getElementById('islandname'); if (nm) nm.textContent = config.title || state.title || 'はじまり島';
+  const tg = document.getElementById('tagline'); if (tg) { tg.textContent = taglineOf(config); tg.hidden = !tg.textContent; }
+  const pb = document.getElementById('popbadge'); if (pb) pb.innerHTML = `住民 <b>${active.length.toLocaleString('ja-JP')}</b> 人`;
+  // 下のパネル
+  const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+  set('howcomment', howCommentHtml(config));
+  set('tab-story', storyHtml(history, D.villagers));
+  set('tab-timeline', timelineHtml(config, history, D.villagers));
+  set('nowchips', `<span class="chip day">${state.day}日目</span><span class="chip" id="clocknow"></span><span class="chip">${esc(state.weather)}</span><span class="chip">住民 <b>${active.length}</b></span>` +
+    (state.followers != null ? `<span class="chip">フォロワー <b>${esc(state.followers)}</b></span>` : ''));
+  const bv = (state.votes || []).find((v) => v.kind === 'base');
+  const bvOn = bv && (!(config.baseVote || {}).needPost || /instagram\.com\//.test(String(config.votePostUrl || ''))); // 地図の帯と同じ決まり
+  set('nowband', versusBand(state, config) + (bvOn ? baseBanner(bv, config) : ''));
+  set('bldlist', esc(buildingsText(world, config)));
+  const info = document.getElementById('info'); if (info) setupTabs(info);
 }
 
 main().catch(showError);

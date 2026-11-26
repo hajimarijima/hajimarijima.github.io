@@ -47,11 +47,19 @@ for (const r of P.registrationsFrom(comments, config.joinWord, config.startTools
   const v = P.upsertVillager(S.villagers, { igId: r.igId, username: r.username, joined: date, joinedDay: day, source: 'comment', startTool: r.startTool, birthday: r.birthday, food: r.food }, hidden);
   if (v) registered++;
 }
+// DM の「住みたい」（config.dm.enabled の時だけ。tools/dm.js pull が置いた data/inbox/dm.json）。コメントと同じ関数で入居（同じ人は二重にしない）
+const DM = require('./dm');
+const dmFile = opt('--dm', path.join(DATA, 'inbox', 'dm.json'));
+const dmRepliesFile = path.join(path.dirname(dmFile), 'dm_replies.json');
+const dmItems = fs.existsSync(dmFile) ? (JSON.parse(fs.readFileSync(dmFile, 'utf8')).items || []) : [];
+const dmRes = DM.dmJoins(S, dmItems, { config, owners, hidden, date, day, enemies });
+registered += dmRes.registered.length;
+if (dmItems.length) console.log(`DM：${dmItems.length} 件・新しく住んだ人 ${dmRes.registered.length} 人・もう住んでいた人 ${dmRes.known.length} 人`);
 for (const v of S.villagers) P.applyPrivacy(v, hidden);
 // コメントで書いた誕生日・好きな食べ物・MBTI（「住みたい ピッケル 12/11 りんご INFP」、住んでいる人の「誕生日 12/11」「MBTI ENFP」）。
 // 見ている投稿のコメントをぜんぶ見る。あとから書いた値が勝つ。道具・仕事は変えない（config.mbtiOn が false なら MBTI は読まない）
 const profComments = [...comments, ...((inbox && inbox.voteComments) || [])].filter((c) => !owners.includes(String(P.commentUser(c).username || '').toLowerCase()));
-const profUpdated = P.applyCommentProfiles(S.villagers, profComments, { word: config.joinWord, startTools: config.startTools, mbti: config.mbtiOn !== false, enemies });
+const profUpdated = P.applyCommentProfiles(S.villagers, profComments, { word: config.joinWord, startTools: config.startTools, mbti: config.mbtiOn !== false, enemies }) + dmRes.profUpdated;
 if (profUpdated) console.log(`コメントのプロフィール：${profUpdated} 人`);
 // 役職（仕事）の変更：住んでいる人の「仕事 釣り」「転職 きこり」など（config.jobChange。1 人 1 日 perDay 回まで。tools/jobs.js）
 const jobChanges = require('./jobs').applyJobChanges(S, profComments, { day, date, enemies, owners });
@@ -127,4 +135,8 @@ if (removed || registered || added.length || titled.length || jobChanges.length 
   write('social.json', S.social);
   if (worldChanged) ST.writeWorld(DATA, S.world, { clearR: ((config.terrain && config.terrain.clearBlocks) ?? 4) * 1.9 + 2.5 });
 } else if (changed) write('villagers.json', S.villagers); // 名前が変わった人だけ
+// DM の返事（町に迎えて表示名が決まったあとで作る）。コミットのあと tools/dm.js done が受け口に渡す（公開しない inbox/ に置く）
+if (dmItems.length) {
+  fs.writeFileSync(dmRepliesFile, JSON.stringify({ items: DM.replyTexts(dmRes, config) }) + '\n');
+} else if (fs.existsSync(dmRepliesFile)) fs.unlinkSync(dmRepliesFile);
 console.log(`受付：新しく ${registered} 人・町に来た人 ${added.length} 人（${day} 日目${day === 0 ? '・町が始まる前' : ''}）`);
