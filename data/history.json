@@ -30,5 +30,18 @@
    "51dd020030"
   ],
   "title": "first_villager"
+ },
+ {
+  "day": 0,
+  "date": "2026-11-26",
+  "type": "join",
+  "text": "one_sunny0327、korokke5.5、nao648074、tatsuomi06080608、kbokn0219 が村に住むことになった。",
+  "who": [
+   "78d8bb424b",
+   "c34edc2cfa",
+   "876bd80b63",
+   "aa20ae47bb",
+   "23aa0db579"
+  ]
  }
 ]
