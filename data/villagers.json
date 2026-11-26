@@ -303,5 +303,59 @@
   "hidden": false,
   "display": "toa.1029",
   "joinedAt": "19:07"
+ },
+ {
+  "key": "4e90987092",
+  "igId": "5323f84b0545289f",
+  "name": "hamduck.gwa98",
+  "userHash": "e60c6f377854608d",
+  "skin": 149,
+  "joined": "2026-11-26",
+  "joinedDay": 0,
+  "source": "comment",
+  "startTool": "pickaxe",
+  "birthday": "07-06",
+  "profile": {
+   "food": "ミルク"
+  },
+  "hidden": false,
+  "display": "hamduck.gwa98",
+  "joinedAt": "22:51"
+ },
+ {
+  "key": "65d68ad0b1",
+  "igId": "7ad3663fa85b1392",
+  "name": "zhentian852",
+  "userHash": "57c8fb3885815994",
+  "skin": 135,
+  "joined": "2026-11-26",
+  "joinedDay": 0,
+  "source": "comment",
+  "startTool": "pickaxe",
+  "birthday": "05-09",
+  "profile": {
+   "food": "じゃがいも"
+  },
+  "hidden": false,
+  "display": "zhentian852",
+  "joinedAt": "22:51"
+ },
+ {
+  "key": "fcea4cfde3",
+  "igId": "bfec5209c868d25c",
+  "name": "chocolatecookie1212",
+  "userHash": "1f6198b0e4f01c07",
+  "skin": 64,
+  "joined": "2026-11-26",
+  "joinedDay": 0,
+  "source": "comment",
+  "startTool": "pickaxe",
+  "birthday": "12-12",
+  "profile": {
+   "food": "にんじん"
+  },
+  "hidden": false,
+  "display": "chocolatecookie1212",
+  "joinedAt": "22:51"
  }
 ]
