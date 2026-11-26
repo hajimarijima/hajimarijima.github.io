@@ -434,7 +434,8 @@ export function makeSkin(seed, body = 'none') {
   S.paint(P.rleg, LIMB, legFn(false));
   S.paint(P.lleg, LIMB, legFn(true));
 
-  return { px: S.px, traits, style: style.id, slim, body, seed };
+  // bottom・dress・hat・facial は、見た目が男性・女性のどちらに見えるかの仕分け（tools/skin_gender.js）に使う
+  return { px: S.px, traits, style: style.id, slim, body, seed, bottom, dress, hat, facial };
 }
 // プロフィールに入れる値（"female:12345"）を読む。だめなら null
 export function parseLook(s) {

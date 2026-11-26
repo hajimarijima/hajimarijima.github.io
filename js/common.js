@@ -127,8 +127,10 @@ export function lookDataUrl(look) {
   }
   return lookCache[k];
 }
-export const skinSrc = (v) => (v && typeof v === 'object' ? (v.look ? lookDataUrl(v.look).url : skinUrl(v.skin)) : skinUrl(v));
-export const skinSlim = (v) => !!(v && typeof v === 'object' && v.look && lookDataUrl(v.look).slim);
+// 名前やコメントで女性・男性に合わせた人（v.skinBody = 'female' / 'male'）は、同じ番号をシードにしてその体の種類で作る（tools/people.js の fitGenderSkin）
+const autoLook = (v) => v.look || (v.skinBody ? { body: v.skinBody, seed: v.skin } : null);
+export const skinSrc = (v) => (v && typeof v === 'object' ? (autoLook(v) ? lookDataUrl(autoLook(v)).url : skinUrl(v.skin)) : skinUrl(v));
+export const skinSlim = (v) => !!(v && typeof v === 'object' && autoLook(v) && lookDataUrl(autoLook(v)).slim);
 export const villagerUrl = (v) => 'villager.html?k=' + encodeURIComponent(v.key);
 export const fmtDate = (iso) => { if (!iso) return ''; const [y, m, d] = iso.slice(0, 10).split('-'); return `${y}年${+m}月${+d}日`; };
 export const shortDate = (iso) => { const [, m, d] = iso.slice(0, 10).split('-'); return `${+m}/${+d}`; };

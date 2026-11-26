@@ -1316,6 +1316,16 @@ t('すぐの入居：join.js で 0 日目に住み始め、daily（--gate）は�
   assert.strictEqual(read('villagers.json').length, 1);
   assert.strictEqual(STORE.readLife(dir)[v.key].diary.length, 1);
   assert.strictEqual(read('history.json').filter((h) => h.type === 'join').length, 1);
+  // フォロワー数：受付のたびに state.followers を新しくする（変わった時だけ state.json を書く）
+  fs.writeFileSync(inbox, JSON.stringify({ owner: 'town_owner', followers: 321, joinComments: [] }));
+  node('tools/join.js', '--now', '2026-11-27T10:30:00+09:00');
+  assert.strictEqual(read('state.json').followers, 321, 'join でフォロワー数が変わる');
+  const stTxt = fs.readFileSync(path.join(dir, 'state.json'), 'utf8');
+  node('tools/join.js', '--now', '2026-11-27T10:45:00+09:00');
+  assert.strictEqual(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'), stTxt, '同じ数なら書かない');
+  fs.writeFileSync(inbox, JSON.stringify({ owner: 'town_owner', joinComments: [] }));
+  node('tools/join.js', '--now', '2026-11-27T11:00:00+09:00');
+  assert.strictEqual(read('state.json').followers, 321, '数がない時はそのまま');
   // daily（--gate）：始める日が決まっていないので進まない
   node('tools/sim.js', '--gate', '--now', '2026-11-28T06:05:00+09:00');
   assert.strictEqual(read('state.json').day, 0, 'まだ 0 日目');
@@ -2435,10 +2445,20 @@ at('覚え書き：コメントの数が同じ投稿は読まない・Webhook �
   let r = await IG.collect({ cfg, userId: 'U1', token: 'T', now: new Date(NOW_IG.getTime() + 10 * 60e3), cache: first.cache, log: () => {} });
   assert.ok(!calls.some((c) => /\/111\/comments/.test(c)), '数が同じ投稿は読まない');
   assert.ok(calls.some((c) => /\/222\/comments/.test(c)), '投票の投稿は毎回読む');
-  assert.ok(!calls.some((c) => /\/U1\?/.test(c)), 'フォロワー数は 1 時間覚えておく');
-  assert.strictEqual(r.calls, 1 + 2, '一覧 1・投票の投稿 2 ページ');
+  assert.strictEqual(calls.filter((c) => /\/U1\?/.test(c)).length, 1, 'フォロワー数は毎回読む（1 回）');
+  assert.strictEqual(r.calls, 1 + 1 + 2, '一覧 1・フォロワー 1・投票の投稿 2 ページ');
   assert.strictEqual(r.data.followers, 42);
   assert.strictEqual(r.stats.skipped, 1);
+  // フォロワー数が読めない時は、前の値を使う
+  IG._setFetch(async (url) => {
+    const u = new URL(url), ok = (b) => ({ ok: true, json: async () => b, text: async () => '' });
+    if (/\/media$/.test(u.pathname)) return ok({ data: MEDIA });
+    const m = /\/(\d+)\/comments$/.exec(u.pathname);
+    if (m) return ok({ data: CM[m[1]] || [] });
+    return { ok: false, status: 500, text: async () => 'x' };
+  });
+  r = await IG.collect({ cfg, userId: 'U1', token: 'T', now: new Date(NOW_IG.getTime() + 10 * 60e3), cache: first.cache, log: () => {} });
+  assert.strictEqual(r.data.followers, 42, '読めない時は前の数'); assert.strictEqual(r.data.owner, 'town_owner');
   // Webhook が教えた投稿は、数が同じでも読む（数字以外は捨てる）
   assert.deepStrictEqual(IG.hintIds('111, abc,222;x,'), ['111']);
   calls = fakeIG(MEDIA, CM);
@@ -2493,6 +2513,39 @@ at('Webhook の受け口（tools/webhook/worker.mjs）：署名を確かめる�
   res = await W.default.fetch(new Request('https://w.example/', { method: 'POST', body, headers: { 'X-Hub-Signature-256': sig } }), env, { waitUntil: (p) => waits.push(p) });
   assert.strictEqual(res.status, 200);
   assert.strictEqual(waits.length, 0, 'GH_DISPATCH_TOKEN がない時は GitHub に頼まない');
+  // 2 分ごとの見回り：フォロワー数を KV に置き、GET /stats で返す（サイトだけ・60 秒キャッシュ）
+  const kvStore = new Map(); let puts = 0;
+  const kv = { get: async (k) => (kvStore.has(k) ? kvStore.get(k) : null), put: async (k, v) => { puts++; kvStore.set(k, v); } };
+  const realFetch = globalThis.fetch, igUrls = [];
+  let fol = 120;
+  globalThis.fetch = async (url) => { igUrls.push(String(url)); return new Response(JSON.stringify({ followers_count: fol }), { status: 200 }); };
+  try {
+    const penv = { IG_TOKEN: 'IGtok', IG_USER_ID: '77', TOWN_KV: kv };
+    let res0 = await W.default.fetch(new Request('https://w.example/stats'), penv, { waitUntil() {} });
+    assert.strictEqual(res0.status, 404, 'まだ数がない');
+    const t0 = Date.parse('2026-11-26T03:00:00Z');
+    await W.poll(penv, t0);
+    assert.strictEqual(igUrls.length, 1, 'GH_DISPATCH_TOKEN がない時はフォロワー数だけ（API 1 回）');
+    assert.ok(/graph\.instagram\.com\/v21\.0\/77\?fields=followers_count&/.test(igUrls[0]));
+    await W.poll(penv, t0 + 2 * 60e3);
+    assert.strictEqual(puts, 1, '同じ数なら KV に書かない');
+    fol = 125; await W.poll(penv, t0 + 4 * 60e3);
+    assert.strictEqual(puts, 2, '変わったら書く');
+    const res = await W.default.fetch(new Request('https://w.example/stats', { headers: { Origin: 'https://hajimarijima.github.io' } }), penv, { waitUntil() {} });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.headers.get('Access-Control-Allow-Origin'), 'https://hajimarijima.github.io', 'サイトだけ読める');
+    assert.ok(/max-age=60/.test(res.headers.get('Cache-Control')));
+    const js = await res.json();
+    assert.strictEqual(js.followers, 125); assert.strictEqual(js.at, new Date(t0 + 4 * 60e3).toISOString());
+    assert.deepStrictEqual(Object.keys(js).sort(), ['at', 'followers'], 'フォロワー数と時刻だけ');
+    // コメントの数も見る時は 1 回で両方読む
+    igUrls.length = 0;
+    await W.poll({ ...penv, GH_DISPATCH_TOKEN: 'x' }, t0 + 6 * 60e3);
+    assert.strictEqual(igUrls.length, 1); assert.ok(/fields=followers_count,media\.limit\(10\)/.test(igUrls[0]));
+  } finally { globalThis.fetch = realFetch; }
+  const vh = fs.readFileSync(path.join(ROOT, 'vote.html'), 'utf8');
+  assert.ok(/config\.liveStatsUrl/.test(vh) && /state\.followers\.toLocaleString/.test(vh), '投票のページ：liveStatsUrl があれば読む・なければ state.followers');
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8')).liveStatsUrl, '', 'liveStatsUrl は空にしておく');
   const src = fs.readFileSync(path.join(ROOT, 'tools', 'webhook', 'worker.mjs'), 'utf8');
   assert.ok(!/ghp_|github_pat_/.test(src), '鍵をコードに書かない');
   const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'join.yml'), 'utf8');
@@ -2528,6 +2581,79 @@ t('投稿の URL を変える（set_post.js）：その値だけ書きかえ・�
   assert.ok(r.text.includes('"list": [1, 2]'));
   const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'set-post.yml'), 'utf8');
   assert.ok(/VOTE_URL: \$\{\{ inputs\.vote_url \}\}/.test(wf) && !/run:.*\$\{\{ inputs/.test(wf), '貼った文字は env で渡す（run に直接入れない）');
+});
+
+t('名前から女性・男性：分かる名前だけ当てる（どちらにもある名前・分からない名前は null）', () => {
+  const GD = require('../tools/gender');
+  const cases = { mayu: 'f', ryusei: 'm', yuki: null, mayu_0312: 'f', 'kenta.official': 'm', yui_chan: 'f', takuya: 'm', _mayu1030: 'f', 'ayano.ay.0907': 'f', naoto68483: 'm',
+    hikaru_k: null, sora: null, nao648074: null, peco_1019: null, 'korokke5.5': null, mayuchan: 'f', 'まゆ': 'f', 'ユイ': 'f', kentaro23: 'm', 'mayu_kenta': null };
+  for (const [n, g] of Object.entries(cases)) assert.strictEqual(GD.confidentGender(n), g, n);
+  // コメントの言葉：「女の子」「女性」「女」「♀」/「男の子」「男性」「男」「♂」。男前・女王などは読まない。両方あれば null
+  const W = { '住みたい 女の子': 'f', '住みたい 女性です': 'f', '住みたい 女': 'f', '住みたい♀': 'f', '住みたい 男の子': 'm', '住みたい 男性': 'm', '住みたい 男です': 'm', '住みたい ♂': 'm',
+    '住みたい 男前になりたい': null, '住みたい 女王': null, '住みたい 男の子と女の子': null, '住みたい ピッケル': null };
+  for (const [t0, g] of Object.entries(W)) assert.strictEqual(GD.parseGenderWord(t0), g, t0);
+  // あとからのコメントは、ほぼその言葉だけの時だけ
+  assert.strictEqual(GD.parseGenderWord('女の子です', { strict: true }), 'f');
+  assert.strictEqual(GD.parseGenderWord('男の子が釣りしてる', { strict: true }), null);
+});
+t('名前・コメントの性別でスキンの体の種類を合わせる（選んだ見た目は変えない・同じ人はいつも同じ）', () => {
+  // 新しく来た人：名前で分かれば skinBody（シードは今の番号のまま）
+  const vs = [];
+  const a = P.upsertVillager(vs, { igId: 'g1', username: 'mayu_0312', joinedDay: 1, source: 'comment' }, new Set());
+  const a2 = P.upsertVillager([], { igId: 'g1', username: 'mayu_0312', joinedDay: 1, source: 'comment' }, new Set());
+  assert.ok(P.skinTag(a.skin) === 'f' || a.skinBody === 'female', 'まゆは女性に見える');
+  assert.deepStrictEqual([a.skin, a.skinBody], [a2.skin, a2.skinBody], '同じ人は同じ');
+  const y = P.upsertVillager(vs, { igId: 'g2', username: 'yuki', joinedDay: 1, source: 'comment' }, new Set());
+  assert.ok(!y.skinBody, '分からない人はそのまま');
+  // 男性：女性っぽいスキンの時だけ変える。どちらとも・男性っぽいスキンはそのまま（ryusei01040505 の 197 番）
+  const r = { key: '51dd020030', name: 'ryusei01040505', skin: 197, source: 'comment' };
+  assert.strictEqual(P.fitGenderSkin(r), false); assert.ok(!r.skinBody);
+  const fSkin = JSON.parse(fs.readFileSync(path.join(ROOT, 'skins', 'gender.json'), 'utf8')).f[0];
+  const k = { key: 'kk', name: 'kenta', skin: fSkin };
+  assert.strictEqual(P.fitGenderSkin(k), true); assert.strictEqual(k.skinBody, 'male');
+  // プロフィールで選んだ見た目（look）は変えない
+  const chose = { key: 'c1', name: 'mayu', skin: 197, look: { body: 'male', seed: 5 } };
+  const snap = JSON.stringify(chose);
+  assert.strictEqual(P.fitGenderSkin(chose), false); assert.strictEqual(JSON.stringify(chose), snap);
+  // コメントの「男の子」が名前より勝つ。あとからのコメントで直せる。選んだ見た目の人は性別だけ残してスキンは変えない
+  const cm = (id, text, ts) => ({ from: { id, username: 'mayu' }, text, timestamp: ts });
+  const vs2 = []; P.upsertVillager(vs2, { igId: '71', username: 'mayu', joinedDay: 1, source: 'comment' }, new Set());
+  P.applyCommentProfiles(vs2, [cm('71', '住みたい 男の子', '2026-11-01T00:00:00Z')], {});
+  assert.deepStrictEqual([vs2[0].gender, vs2[0].skinBody || (P.skinTag(vs2[0].skin) !== 'f' ? 'male' : '')], ['m', 'male']);
+  P.fitGenderSkin(vs2[0]); assert.strictEqual(vs2[0].gender, 'm', '次の回も名前に戻らない');
+  P.applyCommentProfiles(vs2, [cm('71', '住みたい 男の子', '2026-11-01T00:00:00Z'), cm('71', '女の子です', '2026-11-02T00:00:00Z')], {});
+  assert.deepStrictEqual([vs2[0].gender, vs2[0].skinBody], ['f', 'female']);
+  vs2[0].look = { body: 'male', seed: 3 }; delete vs2[0].skinBody;
+  P.applyCommentProfiles(vs2, [cm('71', '男性', '2026-11-03T00:00:00Z')], {});
+  assert.ok(vs2[0].gender === 'm' && !vs2[0].skinBody && vs2[0].look.seed === 3);
+  // 「住みたい 女の子」の「女の子」を好きな食べ物にしない
+  const p = P.parseCommentProfile('住みたい 女の子', { join: true });
+  assert.ok(!p.food, JSON.stringify(p));
+  // プロフィールの見た目の初めの値（体の種類）も skinBody に合わせる：体の種類を変えないなら引き直しにならない
+  const PR = require('../tools/profiles');
+  const f = { id: 'look', type: 'skin', public: true };
+  const w = [{ key: 'w1', joinedDay: 1, skin: 12, skinBody: 'female' }];
+  const rr = PR.applyProfiles(w, { w1: { look: 'female:12:0' } }, {}, [f], { day: 1 });
+  assert.ok(!rr.report.rejected.length && !w[0].lookRerolls);
+});
+t('ユーザー名の数字から誕生日（コメントの誕生日が勝つ・読めない数字は使わない）', () => {
+  const B = { '20001018': '10-18', '28514': '05-14', mayu_0312: '03-12', kenta1990: null, abc230: null, user_12: null, '514': '05-14', ryusei01040505: '05-05', 'a19991231b': '12-31', '991231': '12-31' };
+  for (const [n, d] of Object.entries(B)) assert.strictEqual(P.nameBirthday(n), d, n);
+  const vs = [];
+  const v = P.upsertVillager(vs, { igId: 'b1', username: 'mayu_0312', joinedDay: 1, source: 'comment' }, new Set());
+  assert.strictEqual(v.birthday, '03-12');
+  const w = P.upsertVillager(vs, { igId: 'b2', username: 'mayu_0312x', joinedDay: 1, source: 'comment', birthday: '07-07' }, new Set());
+  assert.strictEqual(w.birthday, '07-07', 'コメントの誕生日が勝つ');
+  // 数字から決めた日も、あとのコメント「誕生日 1/2」で直せる
+  P.applyCommentProfiles(vs, [{ from: { id: 'b1', username: 'mayu_0312' }, text: '誕生日 1/2', timestamp: '2026-11-02T00:00:00Z' }], {});
+  assert.strictEqual(v.birthday, '01-02');
+  P.fillJoinProfile(v); assert.strictEqual(v.birthday, '01-02', '直した日は戻さない');
+  // 前に名前の印から決めた人は、数字の日に変わる（1 回だけ）
+  const old = { key: '51dd020030', name: 'ryusei01040505', source: 'comment', birthday: P.autoBirthday('51dd020030') };
+  assert.strictEqual(P.fillJoinProfile(old), true); assert.strictEqual(old.birthday, '05-05');
+  assert.strictEqual(P.fillJoinProfile(old), false);
+  const n0 = P.upsertVillager([], { igId: 'b3', username: 'kenta1990', joinedDay: 1, source: 'comment' }, new Set());
+  assert.strictEqual(n0.birthday, P.autoBirthday(n0.key), '読めない人は今まで通り');
 });
 
 (async () => {

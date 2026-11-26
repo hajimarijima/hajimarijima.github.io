@@ -60,7 +60,7 @@ async function main() {
     ['最初の道具', startToolText(v, L, D.config)],
     ['体力', gaugeHtml('heart', L.hp, (D.config.needs || {}).max || 20) + (L.restWhy === 'weak' ? ' <small class="muted">休んで戻している</small>' : '')],
     ['おなか', gaugeHtml('food', L.hunger, (D.config.needs || {}).max || 20)],
-    ['スキン', v.look ? `${esc(BODY_LABEL[v.look.body] || '')}・${v.look.seed} 番（プロフィールで選んだ見た目）` : `${v.skin} 番`],
+    ['スキン', v.look ? `${esc(BODY_LABEL[v.look.body] || '')}・${v.look.seed} 番（プロフィールで選んだ見た目）` : v.skinBody ? `${esc(BODY_LABEL[v.skinBody] || '')}・${v.skin} 番` : `${v.skin} 番`],
     ['体型', v.body === 'chibi' ? '2 頭身' : '通常'],
     ...(bestFishText(L, D.config) ? [['釣り', bestFishText(L, D.config)]] : []),
   ].map(([k, val]) => `<dt>${k}</dt><dd>${k === 'スキン' || k === '体力' || k === 'おなか' ? val : esc(val)}</dd>`).join('') + (v.hidden ? '<dt>表示</dt><dd>名前をかくしてあだ名で出しています</dd>' : '');
@@ -197,7 +197,7 @@ function renderAuth(v, config, ctx = {}) {
     box.innerHTML = tag + '<p>この村人とつながっています。下で書きかえて「保存」を押すと、次の毎日の更新で町に反映されます。</p>' + out;
     box.querySelector('#gout').onclick = () => A.signOut();
     const cur = startOpt(config, v.startTool || (ctx.L && ctx.L.startTool));
-    const vals0 = { look: 'none:' + v.skin + ':' + (v.lookRerolls || 0),...profileValues(v), ...(cur ? { startTool: cur.label } : {}) };
+    const vals0 = { look: (v.skinBody || 'none') + ':' + v.skin + ':' + (v.lookRerolls || 0),...profileValues(v), ...(cur ? { startTool: cur.label } : {}) };
     const locked = new Set(fields.filter((f) => f.once === 'joinDay' && startLocked(v, ctx.day)).map((f) => f.id));
     // 見た目の引き直しを使った回数：村人の記録（毎日の更新）と、保存したプロフィールの大きい方（開き直しても戻らない）
     Promise.resolve(A.load ? A.load(v.key) : {}).catch(() => ({})).then((saved) => {

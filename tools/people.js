@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { skinFor, hashStr } = require('./rand');
+const G = require('./gender');
 
 // 名前やインスタの ID から作る印は、秘密の塩（env TOWN_SALT、GitHub Secrets）入りの HMAC-SHA256 にする。
 // 塩なしの sha256 だと、ユーザー名を知っている人が同じ計算をして、名前をかくした人まで見つけられてしまうため。
@@ -77,6 +78,7 @@ function upsertVillager(villagers, { igId, username, joined, joinedDay, source, 
   if (!v.igId) delete v.igId;
   if (startTool) v.startTool = startTool;
   fillJoinProfile(v, { birthday, food });
+  fitGenderSkin(v); // 名前で女性・男性と分かる人は、そう見えるスキンに（名前をかくす前に見る）
   applyPrivacy(v, hidden);
   villagers.push(v);
   return v;
@@ -127,9 +129,61 @@ function registrationsFrom(comments, word, startTools, opts = {}) {
     if (p.birthday) { r.birthday = p.birthday; r.bdAt = c.timestamp; }
     if (p.food) { r.food = p.food; r.foodAt = c.timestamp; }
     if (p.mbti) { r.mbti = p.mbti; r.mbtiAT = p.mbtiAT || null; r.mbtiAt = c.timestamp; }
+    const g = G.parseGenderWord(c.text); // 「住みたい 女の子」「住みたい 男性」
+    if (g) { r.gender = g; r.genderAt = c.timestamp; }
     byUser.set(id, r);
   }
   return [...byUser.values()];
+}
+
+// ---------- 女性・男性に見えるスキン ----------
+// skins/gender.json（tools/skin_gender.js が作る）
+//   f / m：ふだんのスキン（体の種類「指定なし」）が、もう女性 / 男性に見える番号
+//   ff / mm：makeSkin(番号, 'female' / 'male') がはっきり女性 / 男性に見える番号（体の種類を変える時のシード）
+let SKIN_TAGS = null;
+function skinTags() {
+  if (!SKIN_TAGS) {
+    let j = {};
+    try { j = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'skins', 'gender.json'), 'utf8')); } catch { /* ないなら何もしない */ }
+    SKIN_TAGS = { f: new Set(j.f || []), m: new Set(j.m || []), ff: j.ff || [], mm: j.mm || [] };
+  }
+  return SKIN_TAGS;
+}
+const skinTag = (n) => (skinTags().f.has(n) ? 'f' : skinTags().m.has(n) ? 'm' : null);
+// コメントで書いた性別（v.gender）か、名前から確かに分かる性別に合わせて、スキンの体の種類（v.skinBody：'female' / 'male'）を決める。
+// 今のスキンがもうそう見える人はそのまま。そうでなければ、今の番号をシードにして体の種類を変える（js/skingen.js の makeSkin(v.skin, v.skinBody)）。
+// その体の種類でもはっきりそう見えない番号なら、ff / mm の中から名前の印（key）で決まった番号に変える（同じ人はいつも同じ）。
+// プロフィールで見た目を選んだ人（v.look）・分からない人は変えない。変えたら true
+function fitGenderSkin(v) {
+  if (!v || v.look) return false;
+  const g = v.gender || (v.name ? G.confidentGender(v.name) : null);
+  if (!g) return false;
+  const body = g === 'f' ? 'female' : 'male';
+  if (v.skinBody === body) return false;
+  if (!v.skinBody && skinTag(v.skin) === g) return false;
+  const ok = skinTags()[g === 'f' ? 'ff' : 'mm'];
+  if (!ok.length) return false;
+  if (!ok.includes(v.skin)) v.skin = ok[hashStr('gskin:' + v.key) % ok.length];
+  v.skinBody = body;
+  return true;
+}
+
+// ---------- ユーザー名の数字から誕生日（「mayu_0312」→ 3/12、「20001018」→ 10/18、「28514」→ 5/14） ----------
+// 数字のかたまりを後ろから見て、読めた最初の日付。8 けた 19xx/20xx は YYYYMMDD、6 けたは YYMMDD、4 けたは MMDD。
+// それ以外（と読めなかった時）は後ろ 4 けたの MMDD、だめなら後ろ 3 けたの M+DD。1〜2 けた・年っぽい 4 けた（1990〜2030）は使わない
+function digitsBirthday(d) {
+  const n = d.length, mmdd = (s) => md(+s.slice(0, 2), +s.slice(2, 4)), mdd = (s) => md(+s[0], +s.slice(1, 3));
+  if (n < 3) return null;
+  if (n === 3) return mdd(d);
+  if (n === 4) return mmdd(d) || (+d >= 1990 && +d <= 2030 ? null : mdd(d.slice(1)));
+  if (n === 8 && /^(19|20)/.test(d)) { const r = mmdd(d.slice(4)); if (r) return r; }
+  if (n === 6) { const r = mmdd(d.slice(2)); if (r) return r; }
+  return mmdd(d.slice(-4)) || mdd(d.slice(-3));
+}
+function nameBirthday(name) {
+  const chunks = norm(name).match(/\d+/g) || [];
+  for (let i = chunks.length - 1; i >= 0; i--) { const r = digitsBirthday(chunks[i]); if (r) return r; }
+  return null;
 }
 
 // ---------- 誕生日と好きな食べ物（「住みたい 誕生日3月14日 好きな食べ物りんご」「住みたい 3/14 りんご」） ----------
@@ -244,7 +298,7 @@ function parseCommentProfile(text, { word = null, startTools = null, mbti = true
 // 住みたい・道具・日付・MBTI・名札の言葉を区切りにして分け（続けて書いてもよい）、あいさつや呼びかけを除いて、残りがちょうど 1 語の時だけ使う
 const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function looseFood(t, { word = null, startTools = null } = {}) {
-  const words = [...JOIN_WORDS, ...(word ? [norm(word)] : []), ...((startTools && startTools.options) || []).flatMap((o) => o.words || []).map(norm)]
+  const words = [...JOIN_WORDS, ...G.GENDER_WORDS, ...(word ? [norm(word)] : []), ...((startTools && startTools.options) || []).flatMap((o) => o.words || []).map(norm)]
     .filter(Boolean).sort((a, b) => b.length - a.length);
   let s = t
     .replace(/\d{1,2}\s*月\s*\d{1,2}\s*日?/g, ' ')
@@ -256,7 +310,7 @@ function looseFood(t, { word = null, startTools = null } = {}) {
   const rest = [];
   for (const raw of s.split(/[\s、,，。・/／!！?？~〜]+/)) {
     const w = raw.replace(/[^\p{L}\p{N}ー々]/gu, '');
-    if (!w || /^(月|日|は|に|で|の|と|も|が|を|です|ます)$/.test(w) || NOT_FOOD.test(w)) continue;
+    if (!w || /^(月|日|は|に|で|の|と|も|が|を|です|ます|女|男)$/.test(w) || NOT_FOOD.test(w)) continue;
     rest.push(w);
   }
   if (rest.length !== 1) return null;
@@ -272,7 +326,8 @@ function profileUpdatesFrom(comments, word, { mbti = true } = {}) {
   for (const c of [...(comments || [])].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))) {
     if (!c || isJoin(c.text, word)) continue;
     const p = parseCommentProfile(c.text, { word, mbti, join: false });
-    if (!p.birthday && !p.food && !p.mbti) continue;
+    const g = G.parseGenderWord(c.text, { strict: true }); // あとからは「女の子です」「男性」のような、ほぼその言葉だけのコメントだけ
+    if (!p.birthday && !p.food && !p.mbti && !g) continue;
     const u = commentUser(c);
     if (!u.igId && !u.username) continue;
     const id = u.igId ? 'ig:' + u.igId : 'user:' + norm(u.username).toLowerCase();
@@ -280,6 +335,7 @@ function profileUpdatesFrom(comments, word, { mbti = true } = {}) {
     if (p.birthday) { r.birthday = p.birthday; r.bdAt = c.timestamp; }
     if (p.food) { r.food = p.food; r.foodAt = c.timestamp; }
     if (p.mbti) { r.mbti = p.mbti; r.mbtiAT = p.mbtiAT || null; r.mbtiAt = c.timestamp; }
+    if (g) { r.gender = g; r.genderAt = c.timestamp; }
     byUser.set(id, r);
   }
   return [...byUser.values()];
@@ -295,7 +351,7 @@ function applyCommentProfiles(villagers, comments, { word = null, startTools = n
     const v = findVillager(villagers, r);
     if (!v) continue;
     const cur = latest.get(v) || {};
-    for (const [f, at] of [['birthday', 'bdAt'], ['food', 'foodAt'], ['mbti', 'mbtiAt']]) {
+    for (const [f, at] of [['birthday', 'bdAt'], ['food', 'foodAt'], ['mbti', 'mbtiAt'], ['gender', 'genderAt']]) {
       if (r[f] && r[at] && (!cur[at] || Date.parse(r[at]) >= Date.parse(cur[at]))) { cur[f] = r[f]; cur[at] = r[at]; if (f === 'mbti') cur.mbtiAT = r.mbtiAT; }
     }
     latest.set(v, cur);
@@ -311,6 +367,11 @@ function applyCommentProfiles(villagers, comments, { word = null, startTools = n
       if (v.mbti !== s.mbti || (v.mbtiAT || null) !== (s.mbtiAT || null)) { v.mbti = s.mbti; if (s.mbtiAT) v.mbtiAT = s.mbtiAT; else delete v.mbtiAT; ch = true; }
       newest = Math.max(newest, Date.parse(s.mbtiAt));
     }
+    if (fresh(s.genderAt)) { // 「女の子」「男性」：スキンの体の種類も合わせる（プロフィールで選んだ見た目は変えない）
+      if (v.gender !== s.gender) { v.gender = s.gender; ch = true; }
+      if (fitGenderSkin(v)) ch = true;
+      newest = Math.max(newest, Date.parse(s.genderAt));
+    }
     if (newest > since) { v.profileAt = new Date(newest).toISOString(); ch = true; } // 時刻も書き残す（次から古いコメントを使わない）
     if (ch) changed++;
   }
@@ -324,10 +385,14 @@ function fillJoinProfile(v, said = {}) {
   if (v.source !== 'comment' && !said.birthday && !said.food) return false;
   let changed = false;
   const prof = v.profile || {};
-  if (said.birthday && v.birthday !== said.birthday && (!v.birthday || v.birthday === autoBirthday(v.key))) { v.birthday = said.birthday; changed = true; }
+  // 自動で入れた誕生日：ユーザー名の数字から読んだ日（nameBirthday）か、それがなければ名前の印から決めた日（autoBirthday）
+  const nameBd = v.name ? nameBirthday(v.name) : null;
+  const autoBd = (b) => b === autoBirthday(v.key) || (nameBd && b === nameBd);
+  if (said.birthday && v.birthday !== said.birthday && (!v.birthday || autoBd(v.birthday))) { v.birthday = said.birthday; changed = true; }
   if (said.food && prof.food !== said.food && (!prof.food || prof.food === autoFood(v.key))) { v.profile = { ...prof, food: said.food }; changed = true; }
   if (v.source === 'comment') {
-    if (!v.birthday) { v.birthday = autoBirthday(v.key); changed = true; }
+    if (!v.birthday) { v.birthday = nameBd || autoBirthday(v.key); changed = true; }
+    else if (nameBd && v.birthday !== nameBd && v.birthday === autoBirthday(v.key)) { v.birthday = nameBd; changed = true; } // 前に印から決めた人も、名前の数字の日に
     if (!(v.profile && v.profile.food)) { v.profile = { ...(v.profile || {}), food: autoFood(v.key) }; changed = true; }
   }
   return changed;
@@ -392,4 +457,4 @@ function readFollowerExport(json) {
 // hidden.json に書く印（hmac:...）
 const hiddenEntry = (username) => 'hmac:' + userHash(username);
 
-module.exports = { saltIsDev, hiddenEntry, norm, igHash, userHash, keyFor, nickname, loadHidden, applyPrivacy, findVillager, upsertVillager, registrationsFrom, isJoin, JOIN_WORDS, parseStartTool, startToolByLabel, startToolById, parseBirthday, parseFood, parseMbti, parseCommentProfile, profileUpdatesFrom, applyCommentProfiles, FOODS, autoBirthday, autoFood, fillJoinProfile, parseChoice, tallyVote, readFollowerExport, commentUser };
+module.exports = { saltIsDev, hiddenEntry, norm, igHash, userHash, keyFor, nickname, loadHidden, applyPrivacy, findVillager, upsertVillager, registrationsFrom, isJoin, JOIN_WORDS, parseStartTool, startToolByLabel, startToolById, parseBirthday, parseFood, parseMbti, parseCommentProfile, profileUpdatesFrom, applyCommentProfiles, FOODS, autoBirthday, autoFood, fillJoinProfile, nameBirthday, fitGenderSkin, skinTag, parseChoice, tallyVote, readFollowerExport, commentUser };

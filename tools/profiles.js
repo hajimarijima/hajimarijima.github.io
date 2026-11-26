@@ -42,7 +42,7 @@ function applyProfiles(villagers, pubDocs, privDocs, fields, { day = null, start
       else if (f.type === 'skin') {
         // 見た目：体の種類はいつでも変えられる。シードが変わる（引き直し）のは、体の種類を変えた時に 1 回だけ。回数は v.lookRerolls に残す
         const nw = PF.parseLookValue(ok[f.id]);
-        const cur = v.look || { body: 'none', seed: v.skin || 0 };
+        const cur = v.look || { body: v.skinBody || 'none', seed: v.skin || 0 }; // skinBody：名前・コメントで女性・男性に合わせたスキン（tools/people.js の fitGenderSkin）
         if (nw.seed !== cur.seed) {
           if ((v.lookRerolls || 0) >= 1 || nw.body === cur.body) { report.rejected.push({ key, field: f.id, reason: '見た目の引き直しは、体の種類を変えた時に 1 回だけです' }); continue; }
           v.lookRerolls = (v.lookRerolls || 0) + 1;
