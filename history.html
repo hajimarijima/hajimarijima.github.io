@@ -25,6 +25,9 @@
 import { loadAll, nav, esc, fmtDate, buildingLabel, showError } from './js/common.js';
 nav('history.html');
 loadAll().then((D) => {
+  // 拠点の投票は、投票の投稿の URL を貼るまで始まっていない（baseVote.needPost）。それまで「投票が始まった」の行は出さない
+  const cfg = D.config || {};
+  if ((cfg.baseVote || {}).needPost && !/instagram\.com\//.test(String(cfg.votePostUrl || ''))) D.history = D.history.filter((h) => !(h.kind === 'base' && h.type === 'vote_open'));
   const types = [['all', 'すべて'], ['build', '建物'], ['vote', '投票'], ['join', '村人'], ['social', '関係・誕生日'], ['night', '夜'], ['event', 'そのほか']];
   let cur = 'all';
   const f = document.getElementById('filter');
