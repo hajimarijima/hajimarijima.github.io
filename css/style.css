@@ -84,6 +84,9 @@ h2 { font-size: 17px; margin: 22px 0 10px; }
 .btag.new { background: #ffe08a; font-weight: 700; }
 .titlebadge { display: inline-block; font-size: 11px; line-height: 1.5; padding: 0 7px; margin: 2px 4px 2px 0; border-radius: 999px; background: #f6d77a; color: #5a3d00; border: 1px solid #d9b247; font-weight: 700; white-space: nowrap; vertical-align: middle; }
 .titles { margin: -4px 0 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.cardtitles { display: block; margin: 1px 0 2px; }
+.cardbtns { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.cardbtns .btn.ig { background: linear-gradient(45deg, #f09433, #dc2743 50%, #bc1888); color: #fff; border-color: transparent; text-align: center; }
 .titles .titlebadge { font-size: 13px; padding: 1px 10px; }
 .person .titlebadge { display: block; width: max-content; margin: 1px 0; }
 .nametag .tstar { color: #ffd34d; margin-left: 2px; font-size: 9px; }

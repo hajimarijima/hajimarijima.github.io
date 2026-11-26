@@ -10,10 +10,10 @@ const setCarry = (ch, k) => { if (ch.userData.parts) setCarry0(ch, k); };
 const setShield = (ch, on) => { if (ch.userData.parts) setShield0(ch, on); };
 import { mat, box, hash, rnd, makeTree, makeRock, makeBush, makeBuilding, makeHouse, obstaclesFor, routeAround as routeAround0, declutter, makeRoads, setTownCenter } from './world3d.js';
 import { makeField, makePond, animatePond, makeBobber, makeAnimal, animateAnimal, animalPos } from './farm3d.js';
-import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote, startNote, joinText } from './common.js';
+import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote, startNote, joinText, titleBadges } from './common.js';
 import { makeSky, jstHour, parseTime, phaseName } from './daynight.js';
 import { hourOf, hourText, isNight } from './hours.js';
-import { tagName } from './search.js';
+import { tagName, igUrl } from './search.js';
 import { goalHtml, chestHtml, projectList, projectCardHtml } from './chestview.js';
 // 動画の書き出し（?video=1）で開いた時
 let IS_VIDEO = false;
@@ -1686,13 +1686,17 @@ async function main() {
     const who = document.createElement('div');
     who.className = 'who';
     const now = hourOf(L, curHour);
-    who.innerHTML = `<b>${esc(v.display)}</b><span class="muted">${esc((now && `${curHour}時・${hourText(now)}`) || ACTION[L.action] || JOB[L.job] || '')}・${esc(homeName(L, world, config))}</span><span class="lvline">Lv${L.level || 1}・枠 ${L.slots || config.inventory.base}/${config.inventory.max}</span><span class="gauges">${gaugeHtml('heart', L.hp, (config.needs || {}).max || 20)}${gaugeHtml('food', L.hunger, (config.needs || {}).max || 20)}</span>`;
+    const tb = titleBadges(v, config);
+    who.innerHTML = `<b>${esc(v.display)}</b>${tb ? `<span class="cardtitles">${tb}</span>` : ''}<span class="muted">${esc((now && `${curHour}時・${hourText(now)}`) || ACTION[L.action] || JOB[L.job] || '')}・${esc(homeName(L, world, config))}</span><span class="lvline">Lv${L.level || 1}・枠 ${L.slots || config.inventory.base}/${config.inventory.max}</span><span class="gauges">${gaugeHtml('heart', L.hp, (config.needs || {}).max || 20)}${gaugeHtml('food', L.hunger, (config.needs || {}).max || 20)}</span>`;
     const a = document.createElement('a');
     a.className = 'btn'; a.href = villagerUrl(v); a.textContent = 'くわしく';
     const x = document.createElement('button');
     x.className = 'close'; x.setAttribute('aria-label', '閉じる'); x.textContent = '×';
     x.onclick = closeCard;
-    card.append(face, who, a, x);
+    const btns = document.createElement('div'); btns.className = 'cardbtns'; btns.append(a);
+    const ig = igUrl(v);
+    if (ig) { const b = document.createElement('a'); b.className = 'btn ig'; b.href = ig; b.target = '_blank'; b.rel = 'noopener'; b.textContent = 'インスタ'; btns.append(b); }
+    card.append(face, who, btns, x);
   }
   function closeCard() { card.hidden = true; card.classList.remove('pjcard'); }
   // 建てている物・橋の札：名前・進み・あと何個（あつまった数 / いる数）・作っている人
