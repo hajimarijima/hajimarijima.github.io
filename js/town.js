@@ -454,7 +454,7 @@ async function main() {
   for (const [k, s] of Object.entries(tentOf)) tentPos[k] = tentFront(s.t, s.i, tentP.perTent);
   homeless.filter((v) => !tentOf[v.key]).forEach((v, i) => { const a = 0.6 + i * 0.9; tentPos[v.key] = { x: camp.x + Math.cos(a) * 3.2, z: camp.z + Math.sin(a) * 3.2 }; });
   // テントの形：ブロックを組んだ作り。羊毛ブロック（ドット絵の織り目、赤と白）と、原木の柱。
-  //   横の低い壁 → 両がわから段々に上がる三角屋根（4 段）→ てっぺんの原木の棟木。奥と前の三角の壁も段々で閉じる。
+  //   横の低い壁 → 両がわから階段ブロックで上がる三角屋根（4 段）→ てっぺんの原木の棟木。奥と前の三角の壁も同じ段々で閉じる。
   //   前の壁のまん中に入口（はば TENT.door・高さ TENT.doorH。村人の背より高い）。寝床は奥に寄せて並べ、足の先と前の壁の間が通り道。
   //   壁の厚みは内がわへ TENT.wall だけ（寝床は ±len/2 - pad - 0.9 の内側なので、壁にかからない）
   //   屋根の部品には userData.tentRoof（屋根をはずして中を見る時に使う）
@@ -493,26 +493,43 @@ async function main() {
       const o = new THREE.Mesh(blockGeo(w, h, d, BU), m); o.position.set(x, y, z);
       o.castShadow = !LITE; o.receiveShadow = true; if (roof) o.userData.tentRoof = true; g.add(o); return o;
     };
-    // 段 k（0 が軒、N-1 がてっぺん）の横の範囲と、てっぺんの高さ
-    const stepX = (k) => (k < N - 1 ? [hw - (k + 1) * sw, hw - k * sw] : [0, top]);
-    const stepTop = (k) => WH + (k + 1) * sh;
+    // 屋根は階段ブロック（断面が L 字：下半分は 1 段のはば全部、上半分はてっぺん側の半分だけ）を両がわから 4 段。
+    //   段 k（0 が軒、N-1 がてっぺん）。半分ずつ上がるので、斜めの面がなめらかに見える。
+    //   面ごとに明暗：上の面がいちばん明るく、外を向いた立ち上がりの面は暗く、ほかは少し暗く（材質は屋根だけ自分の物。半透明にもする）
+    const shadeOf = (m, f) => { const c = m.clone(); c.color.setScalar(f); return c; };
+    const stairMats = [M.red, M.cream].map((m) => ({ top: roofMats[m === M.red ? 'red' : 'cream'], mid: shadeOf(m, 0.86), dark: shadeOf(m, 0.7) }));
+    roofMats.more = stairMats.flatMap((q) => [q.mid, q.dark]);
+    const stair = (w, h, x, y, k, side) => { // side：外を向いた面（+1 は +x、-1 は -x、0 はどちらも少し暗く）
+      const q = stairMats[k % 2], mats = [side > 0 ? q.dark : q.mid, side < 0 ? q.dark : q.mid, q.top, q.mid, q.mid, q.mid];
+      const o = blk(w, h, D + 0.6, mats, x, y, 0, true); return o;
+    };
+    const lo = (k) => WH + k * sh, h2 = sh / 2;
     blk(Lt - 0.1, 0.06, D - 0.1, M.rug, 0, 0.03, 0);                                     // 床の敷物
-    for (const s of [-1, 1]) blk(TW, WH, D, M.cream, s * (hw - TW / 2), WH / 2, 0);        // 横の低い壁
-    for (let k = 0; k < N; k++) {                                                         // 段々の三角屋根（赤と白を交互に）
-      const [a, b] = stepX(k), m = k % 2 ? roofMats.cream : roofMats.red, y = WH + k * sh + sh / 2;
-      if (k < N - 1) for (const s of [-1, 1]) blk(b - a + 0.02, sh + 0.04, D + 0.6, m, s * (a + b) / 2, y, 0, true);
-      else blk(2 * top, sh + 0.04, D + 0.6, m, 0, y, 0, true);
+    for (const sd of [-1, 1]) blk(TW, WH, D, M.cream, sd * (hw - TW / 2), WH / 2, 0);      // 横の低い壁
+    for (let k = 0; k < N; k++) {
+      if (k < N - 1) for (const sd of [-1, 1]) {
+        const a = hw - (k + 1) * sw, b = hw - k * sw;
+        stair(b - a + 0.02, h2 + 0.02, sd * (a + b) / 2, lo(k) + h2 / 2, k, sd);                  // 下半分（はば全部）
+        stair(sw / 2 + 0.02, h2 + 0.02, sd * (a + sw / 4), lo(k) + h2 * 1.5, k, sd);              // 上半分（てっぺん側の半分）
+      } else {
+        stair(2 * top, h2 + 0.02, 0, lo(k) + h2 / 2, k, 0);
+        for (const sd of [-1, 1]) stair(top / 2 + 0.01, h2 + 0.02, sd * top / 4, lo(k) + h2 * 1.5, k, sd); // 上半分（まん中）
+      }
     }
     blk(0.4, 0.4, D + 0.9, roofMats.log, 0, RH + 0.18, 0, true);                                // てっぺんの棟木（原木）
-    for (const zs of [-1, 1]) {                                                           // 奥と前の三角の壁（段々）
+    // 奥と前の三角の壁：屋根の階段と同じ形（半分ずつの段）。前のまん中は入口（はば DW・高さ DH）をあける
+    const cols = []; // [内がわの |x|, 外がわの |x|, 高さ]
+    for (let k = 0; k < N - 1; k++) { const a = hw - (k + 1) * sw; cols.push([a + sw / 2, a + sw, lo(k) + h2], [a, a + sw / 2, lo(k) + sh]); }
+    cols.push([top / 2, top, lo(N - 1) + h2], [0, top / 2, RH]);
+    for (const zs of [-1, 1]) {
       const z = zs * (D / 2 - TW / 2);
-      for (let k = 0; k < N - 1; k++) { const [a, b] = stepX(k), h = stepTop(k); for (const s of [-1, 1]) blk(b - a, h, TW, M.cream, s * (a + b) / 2, h / 2, z); }
-      const h = stepTop(N - 1);
-      if (zs < 0) blk(2 * top, h, TW, M.cream, 0, h / 2, z);
-      else {                                                                              // 前のまん中は入口（はば DW・高さ DH）
-        for (const s of [-1, 1]) blk(top - DW / 2, h, TW, M.cream, s * (top + DW / 2) / 2, h / 2, z);
-        blk(DW, h - DH, TW, M.cream, 0, (h + DH) / 2, z);
-        for (const s of [-1, 1]) blk(0.3, DH, 0.4, M.log, s * (DW / 2 + 0.15), DH / 2, z + 0.06); // 入口の原木の柱
+      for (const [a, b, h] of cols) for (const sd of [-1, 1]) {
+        const part = (p, q, y0) => { if (q - p > 1e-3 && h - y0 > 1e-3) blk(q - p, h - y0, TW, M.cream, sd * (p + q) / 2, (h + y0) / 2, z); };
+        if (zs < 0 || b <= a || a >= DW / 2) { part(a, b, 0); continue; }
+        part(Math.max(a, DW / 2), b, 0); part(a, Math.min(b, DW / 2), DH); // 入口のところは上だけ
+      }
+      if (zs > 0) {
+        for (const sd of [-1, 1]) blk(0.3, DH, 0.4, M.log, sd * (DW / 2 + 0.15), DH / 2, z + 0.06); // 入口の原木の柱
         blk(DW + 0.6, 0.3, 0.4, M.log, 0, DH + 0.15, z + 0.06);                                  // 入口の上の横木
         blk(DW + 0.6, 0.1, 0.24, M.red, 0, DH + 0.35, z + 0.08);                                 // 巻き上げた入口の幕
       }
@@ -525,7 +542,7 @@ async function main() {
     box(0.32, 0.4, 0.32, LAMP_GLASS, 0, -0.2, 0, lamp);
     lamp.position.set(0, RH - sh - 0.65, 0.4); g.add(lamp);
     const light = new THREE.PointLight(0xffb45a, 0, 9, 1.6); light.position.set(0, RH - sh - 1.2, 0.6); g.add(light);
-    g.userData.roofMats = [roofMats.red, roofMats.cream, roofMats.log]; g.userData.light = light; g.userData.fade = 1;
+    g.userData.roofMats = [roofMats.red, roofMats.cream, roofMats.log, ...roofMats.more]; g.userData.light = light; g.userData.fade = 1;
     g.position.set(t.x, 0, t.z); g.rotation.y = t.yaw;
     return g;
   }
@@ -540,7 +557,7 @@ async function main() {
       if (ch) inst.instanceMatrix.needsUpdate = true;
     }
     if (debrisObj) debrisObj.traverse((o) => { if (o !== debrisObj && o.parent === debrisObj) { o.getWorldPosition(v3); if (inAny(v3.x, v3.z, 0.4)) o.visible = false; } });
-    for (const T of torchObjs) for (let k = 1; k < 60 && inAny(T.g.position.x, T.g.position.z, 0.8); k++) {
+    for (const T of torchObjs) for (let k = 1; k < 60 && inAny(T.g.position.x, T.g.position.z, 1.3); k++) {
       const a = T.a + Math.ceil(k / 2) * 0.12 * (k % 2 ? 1 : -1);
       T.g.position.set(T.cx + Math.cos(a) * T.R0, 0, T.cz + Math.sin(a) * T.R0); T.la.x = T.g.position.x; T.la.z = T.g.position.z;
     }
@@ -1880,8 +1897,22 @@ async function main() {
   // ---------- 動物：種や作物を持っている村人（life の lure）には、近くの野の動物がついてくる ----------
   const LURE_R = (((config.animals && config.animals.followRange) || 12) * 1.9);
   // 動物が入ってよい所か（木・岩・建物・畑・池に重ならない）
-  const animalOk = (x, z) => isFree(x, z, 0.55) && !(world.pond && Math.hypot(x - world.pond.x, z - world.pond.z) < world.pond.r + 0.7);
+  const animalOk = (x, z) => isFree(x, z, 0.55) && !(world.pond && Math.hypot(x - world.pond.x, z - world.pond.z) < world.pond.r + 0.7) && !tents.some((t) => inTent(t, x, z, 1.2));
+  // 歩く輪のまん中がテントにかかる動物は、テントの外（近いほうのふち）へ出しておく（見るだけ。data は変えない）
+  let animalsOut = false;
+  const moveAnimalsOut = () => {
+    animalsOut = true;
+    for (const A of animals) for (const t of tents) {
+      if (!inTent(t, A.a.x, A.a.z, 4)) continue;
+      const s = Math.sin(t.yaw), c = Math.cos(t.yaw), dx = A.a.x - t.x, dz = A.a.z - t.z;
+      let u = dx * s + dz * c, v = dx * c - dz * s;
+      const mu = t.depth / 2 + 4 - Math.abs(u), mv = t.len / 2 + 4 - Math.abs(v);
+      if (mu < mv) u = Math.sign(u || 1) * (t.depth / 2 + 4); else v = Math.sign(v || 1) * (t.len / 2 + 4);
+      const p = tentPoint(t, u, v); A.a = { ...A.a, x: p.x, z: p.z }; A.o.userData.cur = null;
+    }
+  };
   function updateAnimals(time, dt) {
+    if (!animalsOut) moveAnimalsOut();
     const taken = new Map();
     for (const { a, o } of animals) {
       const q = animalPos(a, time, !!a.pen);
