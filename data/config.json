@@ -2,6 +2,7 @@
   "title": "はじまり島",
   "account": "@your_account",
   "joinWord": "住みたい",
+  "joinExclude": ["comment_de_sodatsu"],
   "startAt": null,
   "startAtNote": "町を始める日時（日本時間）。例 \"2026-11-28 06:00\"。null のあいだは 0 日目のまま（「住みたい」の人はすぐ住み始めるが、日は進まない）。この時刻を過ぎた最初の朝の daily で 1 日目になる。Actions の daily を start を選んで動かしても始まる",
   "startTools": {
