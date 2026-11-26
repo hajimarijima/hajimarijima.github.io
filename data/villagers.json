@@ -11,7 +11,7 @@
   "startTool": "pickaxe",
   "hidden": false,
   "display": "ryusei01040505",
-  "birthday": "07-19",
+  "birthday": "05-05",
   "profile": {
    "food": "ミルク"
   },
@@ -29,7 +29,7 @@
   "joinedDay": 0,
   "source": "comment",
   "startTool": "fishing_rod",
-  "birthday": "07-16",
+  "birthday": "03-27",
   "profile": {
    "food": "ミルク"
   },
@@ -82,7 +82,7 @@
   "profile": {
    "food": "竿"
   },
-  "birthday": "07-19",
+  "birthday": "06-08",
   "hidden": false,
   "display": "tatsuomi06080608",
   "profileAt": "2026-11-26T07:16:11.000Z"
@@ -97,7 +97,7 @@
   "joinedDay": 0,
   "source": "comment",
   "startTool": "fishing_rod",
-  "birthday": "06-12",
+  "birthday": "02-19",
   "profile": {
    "food": "魚"
   },
@@ -114,7 +114,7 @@
   "joinedDay": 0,
   "source": "comment",
   "startTool": "axe",
-  "birthday": "06-18",
+  "birthday": "10-07",
   "profile": {
    "food": "たまご"
   },
@@ -132,7 +132,7 @@
   "joinedDay": 0,
   "source": "comment",
   "startTool": "axe",
-  "birthday": "06-07",
+  "birthday": "10-19",
   "profile": {
    "food": "魚"
   },
@@ -150,13 +150,14 @@
   "joinedDay": 0,
   "source": "comment",
   "startTool": "fishing_rod",
-  "birthday": "01-20",
+  "birthday": "10-30",
   "profile": {
    "food": "じゃがいも"
   },
   "hidden": false,
   "display": "_mayu1030",
-  "joinedAt": "17:45"
+  "joinedAt": "17:45",
+  "skinBody": "female"
  },
  {
   "key": "90b16eb3df",
@@ -168,7 +169,7 @@
   "joinedDay": 0,
   "source": "comment",
   "startTool": "pickaxe",
-  "birthday": "10-28",
+  "birthday": "11-11",
   "profile": {
    "food": "魚"
   },
@@ -222,7 +223,7 @@
   "joinedDay": 0,
   "source": "comment",
   "startTool": "fishing_rod",
-  "birthday": "12-10",
+  "birthday": "03-31",
   "profile": {
    "food": "きのこ"
   },
@@ -235,17 +236,18 @@
   "igId": "1e894427dafad5a6",
   "name": "ayano.ay.0907",
   "userHash": "e2e4467cac31684f",
-  "skin": 166,
+  "skin": 70,
   "joined": "2026-11-26",
   "joinedDay": 0,
   "source": "comment",
-  "birthday": "02-06",
+  "birthday": "09-07",
   "profile": {
    "food": "魚"
   },
   "hidden": false,
   "display": "ayano.ay.0907",
-  "joinedAt": "17:45"
+  "joinedAt": "17:45",
+  "skinBody": "female"
  },
  {
   "key": "fecbebe3e7",
@@ -265,5 +267,41 @@
   "display": "chunchun_diary_01",
   "profileAt": "2026-11-26T08:21:43.000Z",
   "joinedAt": "17:45"
+ },
+ {
+  "key": "b88fde425a",
+  "igId": "d8b62f7a889e311b",
+  "name": "seiryu.0322",
+  "userHash": "c9176d59e0a49051",
+  "skin": 101,
+  "joined": "2026-11-26",
+  "joinedDay": 0,
+  "source": "comment",
+  "startTool": "pickaxe",
+  "birthday": "03-22",
+  "profile": {
+   "food": "木の実"
+  },
+  "hidden": false,
+  "display": "seiryu.0322",
+  "joinedAt": "19:07"
+ },
+ {
+  "key": "cef1e22a99",
+  "igId": "ce701905b4d444d8",
+  "name": "toa.1029",
+  "userHash": "4c8ecfc1476b082f",
+  "skin": 111,
+  "joined": "2026-11-26",
+  "joinedDay": 0,
+  "source": "comment",
+  "startTool": "fishing_rod",
+  "birthday": "10-29",
+  "profile": {
+   "food": "じゃがいも"
+  },
+  "hidden": false,
+  "display": "toa.1029",
+  "joinedAt": "19:07"
  }
 ]
