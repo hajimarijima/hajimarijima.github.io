@@ -383,7 +383,7 @@ export function setArmor(ch, look) {
     const jacket = P.torso.children[1];
     if (jacket && jacket.isMesh) {
       const hair = new THREE.Mesh(jacket.geometry, jacket.material); hair.castShadow = true;
-      hair.scale.set(9.8 / 8.5, 1, 5.9 / 4.5); hair.position.copy(jacket.position);
+      hair.scale.set(9.8 / 8.5, 1, 6.2 / 4.5); // 前と後ろは腕の防具（奥行き 5.8）よりも外（ちらつかない） hair.position.copy(jacket.position);
       P.torso.add(hair); P.armor.push(hair);
     }
     // 両腕の上側（肩から 5px）を 0.75 ふくらませた層。細い腕（3px）は細く
@@ -394,14 +394,6 @@ export function setArmor(ch, look) {
       // 内側（胴の側）へはふくらませない（肩の上で頭の角に入らない）。外・前後・上へ 0.6〜0.9。奥行きは胴の層より少し大きく（前の面が重なってちらつかない）
       const out = Math.sign(arm.position.x) || 1;
       add(arm, A, aw + 0.75, 5.6, 5.8, out * 0.375, -2.2, 0);
-      // 袖の層（skingen では髪だけ：ツインテールの房・肩にかかる毛先）も、腕の防具の外側にもう 1 枚
-      const sl = arm.children[1];
-      if (sl && sl.isMesh) {
-        const hair = new THREE.Mesh(sl.geometry, sl.material); hair.castShadow = true;
-        // 高さも少しのばして、上の面（肩の上の房）が防具の上（肩から 0.6px）より上に出るように
-        hair.scale.set(1, 1.08, 6.1 / 4.5); // 横には広げない（房が肩当てのように太く見えないように） hair.position.copy(sl.position);
-        arm.add(hair); P.armor.push(hair);
-      }
     }
   }
   if (look.feet) {
