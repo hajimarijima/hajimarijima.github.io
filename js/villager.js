@@ -128,7 +128,7 @@ function startToolText(v, L, config) {
   return `木の${o.label}（${o.job}が得意）${!v.startTool && L.startAuto ? '・自動で決まった' : ''}`;
 }
 // 「最初の道具」を変えられるのは、参加した日の間に 1 回だけ
-const startLocked = (v, day) => !!v.startToolChanged || (day != null && day > v.joinedDay);
+const startLocked = (v, day) => !!v.startToolChanged || (day != null && day > Math.max(1, v.joinedDay)); // 0 日目に来た人は 1 日目まで
 function showValue(f, val) {
   if (f.type === 'monthday') return esc(mdText(val));
   if (f.type === 'color') return `<span class="swatch" style="background:${/^#[0-9a-f]{6}$/i.test(val) ? val : '#ccc'}"></span>`;

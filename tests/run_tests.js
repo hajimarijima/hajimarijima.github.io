@@ -1209,4 +1209,91 @@ t('名前札：かくしていない人は @ユーザー名・かくした人は
   assert.strictEqual(SR.tagName(taro, { video: true, cfg: { nameTags: { video: false } } }), taro.display, 'video を false にすると動画ではあだ名');
 });
 
+// ---------- 町を始める日（0 日目の待ち）と、すぐの入居 ----------
+const W = require('../tools/welcome');
+t('町を始める日：startAt の読み方と、gate のあいだは 0 日目のまま', () => {
+  assert.strictEqual(W.parseStartAt('2026-11-28 06:00'), Date.parse('2026-11-28T06:00:00+09:00'));
+  assert.strictEqual(W.parseStartAt('2026-11-28'), Date.parse('2026-11-28T06:00:00+09:00'), '日だけなら朝 6 時');
+  assert.strictEqual(W.parseStartAt('2026-11-28T06:00:00+09:00'), Date.parse('2026-11-28T06:00:00+09:00'));
+  assert.strictEqual(W.parseStartAt(null), null);
+  const s0 = { day: 0 }, s1 = { day: 1 }, at = { startAt: '2026-11-28 06:00' };
+  const before = new Date('2026-11-28T05:59:00+09:00'), after = new Date('2026-11-28T06:07:00+09:00');
+  assert.strictEqual(W.shouldAdvance(s0, {}, {}), true, 'gate なし（手で・テスト）はいつも進める');
+  assert.strictEqual(W.shouldAdvance(s0, { startAt: null }, { gate: true, now: after }), false, '始める日が決まっていなければ進めない');
+  assert.strictEqual(W.shouldAdvance(s0, at, { gate: true, now: before }), false);
+  assert.strictEqual(W.shouldAdvance(s0, at, { gate: true, now: after }), true);
+  assert.strictEqual(W.shouldAdvance(s0, {}, { gate: true, start: true, now: before }), true, 'Actions の start で始める');
+  assert.strictEqual(W.shouldAdvance(s1, {}, { gate: true, now: before }), true, '1 日目より後は毎朝進む');
+});
+t('すぐの入居：join.js で 0 日目に住み始め、daily（--gate）は始めるまで進まない・始めたら 1 日目', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-join-'));
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  cfg.startAt = null; cfg.joinExclude = ['town_owner2'];
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
+  const env = { ...process.env, TOWN_DATA: dir };
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+  node('tools/init.js', '--seed', 'jt', '--start', '2026-11-01');
+  fs.mkdirSync(path.join(dir, 'inbox'));
+  const inbox = path.join(dir, 'inbox', 'instagram.json');
+  const cm = (id, u, text, ts) => ({ from: { id, username: u }, text, timestamp: ts });
+  fs.writeFileSync(inbox, JSON.stringify({ owner: 'town_owner', joinComments: [cm('9001', 'kaito_a', '住みたい ピッケル', '2026-11-27T01:00:00Z'), cm('9002', 'town_owner', '住みたい', '2026-11-27T01:00:00Z'), cm('9003', 'town_owner2', '住みたい', '2026-11-27T01:00:00Z')] }));
+  node('tools/join.js', '--now', '2026-11-27T10:00:00+09:00');
+  const read = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+  let vs = read('villagers.json'), st = read('state.json');
+  assert.strictEqual(st.day, 0, 'join.js は日を進めない');
+  assert.strictEqual(vs.length, 1, '持ち主（inbox.owner・joinExclude）は村人にならない');
+  const v = vs[0];
+  assert.strictEqual(v.joinedDay, 0, '今の日（0 日目）の村人');
+  assert.strictEqual(v.joined, '2026-11-27', '参加した日は本当の日付（日本時間）');
+  let life = STORE.readLife(dir), L = life[v.key];
+  assert.ok(L, 'その場で暮らしの入れ物ができる');
+  assert.ok(L.inv.some((s) => s && s.item === 'wood_pickaxe'), '選んだ木の道具を持ってくる');
+  assert.strictEqual(L.startTool, 'pickaxe');
+  assert.strictEqual(L.home, null, '家がないのでテント');
+  assert.strictEqual(L.hp, 20); assert.ok(L.slots >= 3 && L.next);
+  assert.ok(L.hours && L.hours.includes('sp') && L.hours.includes('sg'), 'その日の 24 時間（見て回る・夜は寝る）');
+  assert.ok(L.diary.length === 1 && L.diary[0].day === 0 && L.diary[0].text.startsWith('今日から村に住むことになった。'), '日記の 1 行目');
+  let hist = read('history.json');
+  assert.ok(hist.some((h) => h.type === 'join' && h.day === 0 && h.who.includes(v.key)), '町の歴史に残る');
+  assert.ok(!STORE.readWorld(dir).chest.day,'0 日目はまだチェストを置かない（1 日目の朝）');
+  // もう一度動かしても、同じ人は増えない・日記も増えない
+  node('tools/join.js', '--now', '2026-11-27T10:15:00+09:00');
+  assert.strictEqual(read('villagers.json').length, 1);
+  assert.strictEqual(STORE.readLife(dir)[v.key].diary.length, 1);
+  assert.strictEqual(read('history.json').filter((h) => h.type === 'join').length, 1);
+  // daily（--gate）：始める日が決まっていないので進まない
+  node('tools/sim.js', '--gate', '--now', '2026-11-28T06:05:00+09:00');
+  assert.strictEqual(read('state.json').day, 0, 'まだ 0 日目');
+  // startAt を決めた：その前は進まない、過ぎたら 1 日目（1 日目の日付はその日）
+  cfg.startAt = '2026-11-29 06:00'; fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
+  node('tools/sim.js', '--gate', '--now', '2026-11-28T06:05:00+09:00');
+  assert.strictEqual(read('state.json').day, 0);
+  node('tools/sim.js', '--gate', '--now', '2026-11-29T06:04:00+09:00');
+  st = read('state.json');
+  assert.strictEqual(st.day, 1, '始まった'); assert.strictEqual(st.date, '2026-11-29', '1 日目は始めた日');
+  life = STORE.readLife(dir); L = life[v.key];
+  assert.strictEqual(L.diary.length, 2, '1 日目の日記が足される');
+  assert.ok(!L.diary[1].text.includes('今日から村に住む'), '1 日目に「今日から住む」をくり返さない');
+  assert.strictEqual(read('history.json').filter((h) => h.type === 'join').length, 1, '入居の歴史は 1 回だけ');
+  assert.ok(STORE.readWorld(dir).chest.day === 1, '1 日目にチェストを置く');
+  // 1 日目より後に来た人も、その日のうちに住む（チェストはもうある）
+  fs.writeFileSync(inbox, JSON.stringify({ owner: 'town_owner', joinComments: [cm('9004', 'mio_b', '住みたい 釣り', '2026-11-29T03:00:00Z')] }));
+  node('tools/join.js', '--now', '2026-11-29T12:00:00+09:00');
+  vs = read('villagers.json');
+  const m = vs.find((x) => x.joinedDay === 1);
+  assert.ok(m && STORE.readLife(dir)[m.key].diary[0].day === 1, '1 日目に来た人は 1 日目の村人');
+  // 次の朝：2 日目。その人もふつうに働く
+  node('tools/sim.js', '--gate', '--now', '2026-11-30T06:03:00+09:00');
+  assert.strictEqual(read('state.json').day, 2);
+  assert.strictEqual(STORE.readLife(dir)[m.key].diary.length, 2);
+  // 前の受付（joinedDay ＝ 次の日）で待っていた人も、次の join.js でその場に入居する
+  vs = read('villagers.json');
+  P.upsertVillager(vs, { igId: '9005', username: 'old_wait', joined: 'x', joinedDay: 3, source: 'comment' }, new Set());
+  fs.writeFileSync(path.join(dir, 'villagers.json'), JSON.stringify(vs));
+  fs.writeFileSync(inbox, JSON.stringify({ joinComments: [] }));
+  node('tools/join.js', '--now', '2026-11-30T09:00:00+09:00');
+  const ow = read('villagers.json').find((x) => x.name === 'old_wait');
+  assert.strictEqual(ow.joinedDay, 2); assert.ok(STORE.readLife(dir)[ow.key]);
+});
+
 console.log(`\nぜんぶ通りました（${ok} 件）`);

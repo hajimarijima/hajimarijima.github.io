@@ -16,7 +16,8 @@ const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const demo = args.includes('--demo');
 const seed = opt('--seed', 'machi-12');
-const start = opt('--start', '2026-11-01');
+// 1 日目の日付（0 日目はその前の日）。既定は「明日」（日本時間）＝今日が 0 日目。町を始めた時に sim.js --gate が始めた日へ合わせ直す
+const start = opt('--start', new Date(Date.now() + 9 * 3600e3 + 24 * 3600e3).toISOString().slice(0, 10));
 const R = makeRng('world:' + seed);
 
 let ORES = null; try { ORES = JSON.parse(fs.readFileSync(path.join(DATA, 'config.json'), 'utf8')).ores; } catch (e) { /* なければ既定の確率 */ }
@@ -160,3 +161,9 @@ fs.rmSync(path.join(DATA, 'diary'), { recursive: true, force: true }); // 日記
 write('social.json', { pairs: {}, talks: [] });
 write('history.json', [{ day: 0, date: state.date, type: 'start', text: '何もない平地に、木と岩だけがある。ここから町づくりが始まる。' }]);
 console.log('0 日目にしました（' + (demo ? '見本の村人 ' + villagers.length + ' 人' : '村人なし') + '）');
+// 町を始める日時（config.json の startAt）が、もう過ぎた時刻のままだと、次の朝すぐ 1 日目になる
+try {
+  const cfg = JSON.parse(fs.readFileSync(path.join(DATA, 'config.json'), 'utf8'));
+  const at = require('./welcome').parseStartAt(cfg.startAt);
+  if (at != null && at <= Date.now()) console.log(`注意：config.json の startAt（${cfg.startAt}）はもう過ぎています。次の朝の daily で 1 日目になります。待つなら null か新しい日時にしてください`);
+} catch (e) { /* config がなければ何もしない */ }

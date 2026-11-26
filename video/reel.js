@@ -175,8 +175,10 @@ function natureFor(snap, skip = () => false) {
 const TG = treeGeo(TREE, TREE_PICK.side);
 const inClearing = (o, rock) => { if (rock) { const dx = o.x - TREE.x, dz = o.z - TREE.z; return Math.hypot(dx, dz) < 18 && dx * TG.toC.x + dz * TG.toC.z > -2; } // 手前の岩もどける
   const dx = o.x - TREE.x, dz = o.z - TREE.z, d = Math.hypot(dx, dz), along = dx * TG.toC.x + dz * TG.toC.z; return d < 20 && along < 3 && (d > 4 || along < 0) || (d < 9 && along >= 3); };
-const NAT = [natureFor(D.days[0]), natureFor(D.days[1]), natureFor(D.days[2]), natureFor(D.days[0], inClearing)];
-const natIdx = (t) => (t >= T.tree && t < T.night ? 3 : t < T.night + 0.7 ? 0 : t < T.build ? 1 : 2);
+// これからの畑と柵（イメージ）の場面も、手前の木と岩をどけて撮る（木の幹がカメラの前をふさいだり、名札に葉がかぶったりしないように）
+const nearFarm = (o) => o.x > -50 && o.x < -21 && o.z > -16 && o.z < 13;
+const NAT = [natureFor(D.days[0]), natureFor(D.days[1]), natureFor(D.days[2]), natureFor(D.days[0], inClearing), natureFor(D.days[2], nearFarm)];
+const natIdx = (t) => (t >= T.tree && t < T.night ? 3 : t < T.night + 0.7 ? 0 : t < T.build ? 1 : t >= T.farm && t < T.end ? 4 : 2);
 for (const b of D.bushes) scene.add(makeBush({ ...b, ready: true }));
 const treeObj = makeTree({ ...TREE, state: 'tree' }); scene.add(treeObj);
 const rockObj = makeRock({ ...ROCK0, hp: 99 }); scene.add(rockObj);
@@ -535,10 +537,18 @@ function farmScene(t) {
   const c = farmG.userData.canal; for (const m of c.userData.flow) { const q = (t * 0.25 + m.userData.ph) % 1; m.position.z = -c.userData.len / 2 + q * c.userData.len; }
 }
 const CAM_PEN = [PN.x + 10.5, 6.4, PN.z + 4.5, PN.x, 0.6, PN.z];
+// 柵の中の動物は、重ならない決まった場所で草を食べる（歩き回ると、動物どうしや村人とめりこむ）。
+// [penAnimals の番号, 柵のまん中からの x, z, 向き]。牛・羊・豚は体が x 向きに長いので、向きは 0 か π だけ
+const PEN_LAYOUT = [[0, 1.8, -1.9, 0], [1, -0.6, -1.6, Math.PI], [2, 1.4, 0.5, 0], [3, 0.7, 1.9, 0.6], [5, -2.0, 2.1, Math.PI], [7, 2.5, 2.4, -0.8]];
 function ranchScene(t) {
-  for (const { a, o } of penAnimals) { const q = animalPos(a, t, true); o.visible = true; o.position.set(q.x, 0, q.z); o.rotation.y = q.face; animateAnimal(o, t, q.move, q.graze); }
-  const hen = penAnimals[3], hp = animalPos(hen.a, t, true); // カメラに近い列のニワトリ
-  const key = CREW[2], wp = { x: PN.x - 3.0, z: PN.z - 1.6 }; // 柵の奥（カメラから遠い側）。動物の後ろに立つ
+  for (const { o } of penAnimals) o.visible = false;
+  for (const [i, x, z, face] of PEN_LAYOUT) {
+    const { o } = penAnimals[i];
+    o.visible = true; o.position.set(PN.x + x, 0, PN.z + z); o.rotation.y = face;
+    animateAnimal(o, t, 0, clamp01(Math.sin(t * 1.1 + i * 1.9) * 2)); // その場で頭を下げて草を食べる
+  }
+  const hp = { x: PN.x + PEN_LAYOUT[3][1], z: PN.z + PEN_LAYOUT[3][2] }; // カメラに近い列のニワトリ（たまごを産む）
+  const key = CREW[2], wp = { x: PN.x - 2.9, z: PN.z - 0.4 }; // 柵の奥（カメラから遠い側）。どの動物からも 1.5 以上はなれ、動物の陰にかくれない所
   put(key, wp, faceTo(wp, hp), 'gather', t, 'basket');
   const a = t - T.ranch - 0.9;
   if (a > 0 && a < 1.0) { const d = dropPos({ x: hp.x, y: 0.4, z: hp.z }, 'egg', a, unit(CAM_PEN[0] - hp.x, CAM_PEN[2] - hp.z)); fx.item('egg', d.x, d.y, d.z, d.rot, 2.0); }
@@ -620,7 +630,8 @@ const CAP = SAFE_BOTTOM - 190;
 const RB0 = RK.t1 + breakTime(0, VD, RK.hits), RB1 = RK.t1 + breakTime(1, VD, RK.hits);
 const CAPS = [
   [0.4, T.join, ['まだ、だれもいない'], { y: H / 2 + 330, size: 84 }],
-  [T.join + 0.2, T.pick, ['「住みたい」のコメントで、', '村人が 1 人ずつ']],
+  [0.8, T.join, ['フォロワーといっしょに作る', '島づくり'], { y: H / 2 + 490, size: 60 }],
+  [T.join + 0.2, T.pick, ['フォローして「住みたい」で、', 'すぐ村人に']],
   [T.rock + 0.1, RB0 + 0.2, ['つるはしを選んだ人は、', 'まず岩を掘る']],
   [RB0 + 0.2, RB1 + 0.6, ['決まった回数たたくと、1 つ落ちる']],
   [RB1 + 0.6, T.level, ['最後は、くだけて消える']],
@@ -981,7 +992,8 @@ window.renderFrame = (t) => {
     const k = ease((t - T.end) / 0.6);
     ctx.fillStyle = `rgba(12, 20, 14, ${0.22 * k})`; ctx.fillRect(0, 0, W, H);
     caption(['あなたも', '村人に。'], SAFE_TOP + 250, 100, clamp01((t - T.end - 0.2) / 0.35));
-    caption(['コメントに', '『住みたい』'], SAFE_BOTTOM - 210, 94, clamp01((t - T.end - 0.9) / 0.35), { color: '#ffe08a' });
+    caption(['始まる日は、アカウントでお知らせ'], H / 2 + 20, 56, clamp01((t - T.end - 1.5) / 0.35));
+    caption(['フォローして『住みたい』', 'とコメントで、すぐ住める'], SAFE_BOTTOM - 230, 76, clamp01((t - T.end - 0.9) / 0.35), { color: '#ffe08a' });
   }
 };
 

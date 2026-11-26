@@ -10,7 +10,7 @@ const setCarry = (ch, k) => { if (ch.userData.parts) setCarry0(ch, k); };
 const setShield = (ch, on) => { if (ch.userData.parts) setShield0(ch, on); };
 import { mat, box, hash, rnd, makeTree, makeRock, makeBush, makeBuilding, makeHouse, obstaclesFor, routeAround, declutter, makeRoads } from './world3d.js';
 import { makeField, makePond, animatePond, makeBobber, makeAnimal, animateAnimal, animalPos } from './farm3d.js';
-import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote } from './common.js';
+import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote, startNote, joinText } from './common.js';
 import { makeSky, jstHour, parseTime, phaseName } from './daynight.js';
 import { hourOf, hourText, isNight } from './hours.js';
 import { tagName } from './search.js';
@@ -1571,11 +1571,12 @@ function renderPanel(D) {
   // 上の帯は 日目・時刻・天気・村人の数 だけ（木材・石・食べ物の数は「町のチェスト」へ）
   hud.innerHTML = `<span class="chip day">${state.day}日目</span><span class="chip" id="clockchip"></span><span class="chip">${esc(state.weather)}</span>` +
     `<span class="chip">村人 <b>${active.length}</b></span>`;
-  document.getElementById('dayline').textContent = `${fmtDate(state.date)}（${state.day}日目）`;
+  const sn = startNote(state, config); // 0 日目（町が始まる前）の案内
+  document.getElementById('dayline').textContent = sn || `${fmtDate(state.date)}（${state.day}日目）`;
   const t = state.today || { jobs: {}, built: [] };
   const builtNames = (t.built || []).map((id) => { const b = world.buildings.find((x) => x.id === id); return b ? config.buildings[b.type].name : ''; }).filter(Boolean);
   document.getElementById('today').innerHTML =
-    `<li>木を切った人 ${t.jobs.wood || 0} 人・岩を掘った人 ${t.jobs.stone || 0} 人・食べ物を集めた人 ${t.jobs.food || 0} 人</li>` +
+    (sn ? `<li>${esc(sn)}</li>` : `<li>木を切った人 ${(t.jobs || {}).wood || 0} 人・岩を掘った人 ${(t.jobs || {}).stone || 0} 人・食べ物を集めた人 ${(t.jobs || {}).food || 0} 人</li>`) +
     (builtNames.length ? `<li>${esc(builtNames.join('、'))}ができた</li>` : '') +
     history.slice(-5).reverse().map((h) => `<li><span class="muted">${h.day}日目</span> ${esc(h.text)}</li>`).join('');
   const plan = state.plan;
@@ -1597,7 +1598,7 @@ function renderPanel(D) {
     chestHtml(state.store || {}, config);
   const nt = state.nextTool;
   document.getElementById('nexttool').textContent = nt ? `次に作る道具：${(IT[nt.item] || {}).name || nt.item}（${nt.text}）` : '';
-  document.getElementById('join').innerHTML = `インスタの投稿に「<b>${esc(config.joinWord)}</b>」とコメントすると、次の日から村人になります。`;
+  document.getElementById('join').textContent = joinText(config);
 }
 
 main().catch(showError);

@@ -1,43 +1,63 @@
 #!/usr/bin/env node
 'use strict';
-// 「住みたい」コメントの受付だけをする（15 分ごとに動かす。町は進めない）。
-// 新しい人は「次の日」（state.day + 1）の村人として villagers.json に入れる。
-// 朝 6 時の sim.js は joinedDay がその日の人を「今日来た人」として迎えるので、ここで入れた人もいつもどおり町に来る。
-// 使い方: node tools/join.js [--inbox ファイル]（既定: data/inbox/instagram.json）
+// 「住みたい」コメントの受付をして、その場で町に迎える（15 分ごとに動かす。日は進めない）。
+// 新しい人は「今の日」（state.day）の村人になり、すぐに町に住む（日記の 1 行目・家かテント・最初の道具・町の歴史）。
+// 0 日目（町が始まる前）でも同じように住み始める。次の朝からは sim.js でふつうに働く。
+// 迎える中身は tools/welcome.js（sim.js と同じ決まり）。
+// 使い方: node tools/join.js [--inbox ファイル] [--now 日時]（既定: data/inbox/instagram.json）
 const fs = require('fs');
 const path = require('path');
 const P = require('./people');
+const W = require('./welcome');
+const ST = require('./store');
 
 const ROOT = path.join(__dirname, '..');
 const DATA = process.env.TOWN_DATA || path.join(ROOT, 'data');
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
-const read = (f) => JSON.parse(fs.readFileSync(path.join(DATA, f), 'utf8'));
-const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const readJ = (f, d) => { const p = path.join(DATA, f); return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : d; };
+const write = (f, o) => fs.writeFileSync(path.join(DATA, f), JSON.stringify(o, null, 1) + '\n');
+if (process.env.GITHUB_ACTIONS && P.saltIsDev) { console.error('TOWN_SALT がありません（Secrets を join.yml の env で渡してください）。公開データは書きません'); process.exit(1); }
 
 const inboxFile = opt('--inbox', path.join(DATA, 'inbox', 'instagram.json'));
-if (!fs.existsSync(inboxFile)) { console.log('コメントのファイルがないので、何もしません'); process.exit(0); }
-const inbox = JSON.parse(fs.readFileSync(inboxFile, 'utf8'));
-const config = read('config.json');
-const state = read('state.json');
-let villagers = read('villagers.json');
-// 町のアカウントの持ち主は村人にしない（前に入ってしまった分も外す）
-const owners = [inbox.owner, ...((config.joinExclude) || [])].filter(Boolean).map((s) => String(s).toLowerCase());
-const before = villagers.length;
-villagers = villagers.filter((v) => !owners.includes(String(v.name || '').toLowerCase()));
-if (villagers.length !== before) { fs.writeFileSync(path.join(DATA, 'villagers.json'), JSON.stringify(villagers, null, 1) + '\n'); console.log(`持ち主のアカウントを村人から ${before - villagers.length} 人外しました`); }
-if (!inbox.joinComments || !inbox.joinComments.length) { console.log('「住みたい」コメントはありません'); process.exit(0); }
+let inbox = fs.existsSync(inboxFile) ? JSON.parse(fs.readFileSync(inboxFile, 'utf8')) : null;
+if (inbox && inbox.sample) inbox = null; // 見本ファイルは使わない
+const nowArg = opt('--now', process.env.TOWN_NOW || null);
+const NOW = nowArg ? new Date(nowArg) : new Date();
 
+const config = readJ('config.json');
+const S = {
+  config, state: readJ('state.json'), villagers: readJ('villagers.json', []), world: ST.readWorld(DATA),
+  life: ST.readLife(DATA), history: readJ('history.json', []), social: readJ('social.json', { pairs: {}, talks: [] }),
+};
 const hidden = P.loadHidden(DATA);
-const day = state.day + 1;
-const date = addDays(state.startDate, day - 1);
+const day = S.state.day;
+const date = day >= 1 ? S.state.date : W.jstToday(NOW);
 const enemies = !!(config.enemies && config.enemies.enabled);
 
-let added = 0;
-for (const r of P.registrationsFrom(inbox.joinComments, config.joinWord, config.startTools, { enemies })) {
-  const v = P.upsertVillager(villagers, { igId: r.igId, username: r.username, joined: date, joinedDay: day, source: 'comment', startTool: r.startTool }, hidden);
-  if (v) added++;
+// 町のアカウントの持ち主は村人にしない（前に入ってしまった分も外す。コメントも受け付けない）
+const owners = W.ownerNames(inbox, config);
+const removed = W.removeOwners(S, owners);
+if (removed) console.log(`持ち主のアカウントを村人から ${removed} 人外しました`);
+
+let registered = 0;
+const comments = (inbox && inbox.joinComments) || [];
+for (const r of P.registrationsFrom(comments, config.joinWord, config.startTools, { enemies })) {
+  if (owners.includes(String(r.username || '').toLowerCase())) continue;
+  const v = P.upsertVillager(S.villagers, { igId: r.igId, username: r.username, joined: date, joinedDay: day, source: 'comment', startTool: r.startTool }, hidden);
+  if (v) registered++;
 }
-for (const v of villagers) P.applyPrivacy(v, hidden);
-fs.writeFileSync(path.join(DATA, 'villagers.json'), JSON.stringify(villagers, null, 1) + '\n');
-console.log(`受付：新しく ${added} 人（${day} 日目の朝に町へ来る）`);
+for (const v of S.villagers) P.applyPrivacy(v, hidden);
+
+// その場で町に迎える（前の受付で「次の朝」にしていた人も、今日来たことにする）
+const { added, worldChanged } = W.welcomeNow(S, { now: NOW });
+
+const changed = removed || registered || added.length || comments.length;
+if (removed || registered || added.length) {
+  write('villagers.json', S.villagers);
+  ST.writeLife(DATA, S.life);
+  write('history.json', S.history);
+  write('social.json', S.social);
+  if (worldChanged) ST.writeWorld(DATA, S.world, { clearR: ((config.terrain && config.terrain.clearBlocks) ?? 4) * 1.9 + 2.5 });
+} else if (changed) write('villagers.json', S.villagers); // 名前が変わった人だけ
+console.log(`受付：新しく ${registered} 人・町に来た人 ${added.length} 人（${day} 日目${day === 0 ? '・町が始まる前' : ''}）`);

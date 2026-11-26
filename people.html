@@ -72,7 +72,7 @@ function setupSearch(D) {
     // 15 分ごとの受付（tools/join.js）で登録されて、まだ町に来ていない人
     const waiting = D.villagers.filter((v) => v.joinedDay > D.state.day);
     const wait = hits.length ? null : (exact ? findExact(waiting, text) : searchVillagers(waiting, text, 1)[0]);
-    if (wait) { msg.textContent = `${wait.display} さん、受付ずみです。次の朝 6 時に町へ引っ越してきます。`; return; }
+    if (wait) { msg.textContent = `${wait.display} さん、受付ずみです。まもなく（15 分ほどで）町に住み始めます。`; return; }
     msg.textContent = hits.length ? (hits.length === 1 ? '見つかりました。' : `${hits.length} 人見つかりました。`) : '見つかりませんでした。名前を少し短くして、もう一度さがしてください。（コメントしてから 15 分ほどで受付されます）';
     for (const v of hits) res.append(await card(v));
   }

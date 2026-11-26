@@ -4,6 +4,8 @@
 // 使い方: node tools/sim.js [--days N] [--demo] [--inbox ファイル]
 //   --demo      フォロワー数と投票コメントを見本で作る（インスタにつなぐ前の確かめ用）
 //   --inbox     instagram.js が書いた JSON（既定: data/inbox/instagram.json があれば使う）
+//   --gate      daily.yml 用。0 日目のあいだは、config.json の startAt を過ぎた時か --start（環境変数 TOWN_START=true）の時だけ進める
+//   --now 日時  テスト用（今の時刻を決める）
 // 乱数は state.seed と日付で決まるので、同じ入力なら同じ結果になる。
 const fs = require('fs');
 const path = require('path');
@@ -19,6 +21,7 @@ const CR = require('./craft');
 const HR = require('../js/hours.js');
 const CON = require('../js/construction.js'); // 材料 → 部品 → 建てる（土台・壁・屋根）
 const CB = require('../js/combat.js'); // 夜の戦い・バッジの段 // 1 日 24 時間の行動の記号と数の決まり
+const W = require('./welcome'); // 新しく来た人を迎える決まり・町を始める日の決まり（join.js と共通）
 
 const ROOT = path.join(__dirname, '..');
 const DATA = process.env.TOWN_DATA || path.join(ROOT, 'data');
@@ -135,8 +138,7 @@ function stepDay(S) {
     }
   }
   // 町のアカウントの持ち主は村人にしない（join.js と同じ）
-  const owners = [inbox && inbox.owner, ...(config.joinExclude || [])].filter(Boolean).map((s) => String(s).toLowerCase());
-  for (let i = villagers.length - 1; i >= 0; i--) if (owners.includes(String(villagers[i].name || '').toLowerCase())) { delete life[villagers[i].key]; villagers.splice(i, 1); }
+  W.removeOwners(S, W.ownerNames(inbox, config));
   for (const v of villagers) P.applyPrivacy(v, hidden);
   // 公開しない項目（firestore_sync.js が data/inbox/ に書く）は、書き出さない形で持つ
   for (const v of villagers) if (S.priv && S.priv[v.key]) Object.defineProperty(v, '_priv', { value: S.priv[v.key], enumerable: false, configurable: true });
@@ -350,42 +352,12 @@ function stepDay(S) {
   const FAR = config.hours.far || { near: 28, homeR: 28, treeR: 15 };
 
   const daysIn = (v) => day - v.joinedDay + 1;
+  // 体力・持ち物・最初の道具（tools/welcome.js。15 分ごとの受付で迎える時と同じ決まり）
   const ensureLife = (L, v) => {
-    L.hp = L.hp ?? NE.max; L.hunger = L.hunger ?? NE.max;
-    L.inv = L.inv || []; L.xp = L.xp || 0; L.trips = L.trips || 0; L.items = L.items || {}; L.debt = L.debt || 0;
-    L.level = I.levelFor(L.xp, IC); L.slots = I.slotCount(L.level, daysIn(v), IC);
-    I.ensureSize(L.inv, L.slots);
-    // 前の形の道具（axe / pickaxe / hoe）は木の道具として読む
-    for (const s of L.inv) if (s && (s.item === 'axe' || s.item === 'pickaxe' || s.item === 'hoe')) s.item = 'wood_' + s.item;
-    giveStartTool(L, v);
+    const note = W.ensureLife(L, v, { day, life, config });
+    if (note) diaryExtra[v.key] = (diaryExtra[v.key] || '') + note;
   };
-  // 最初の道具：参加した時に選んだ木の道具を 1 つ持たせる（持ち物 3 つのうち 1 つ）。
-  // 選んでいない人は、それまでに選ばれた数がいちばん少ない仕事の道具（同じ数なら名前から決まる順）。乱数は使わない
   const ST = config.startTools || { options: [] };
-  const stOpts = ST.options.filter((o) => !o.needsEnemies || (config.enemies && config.enemies.enabled));
-  const autoOpts = ST.options.filter((o) => !o.needsEnemies);
-  const startCount = () => { const n = Object.fromEntries(autoOpts.map((o) => [o.id, 0])); for (const k in life) { const t = life[k] && life[k].startTool; if (t in n) n[t]++; } return n; };
-  const giveStartTool = (L, v) => {
-    if (!ST.options.length) return;
-    const want = v.startTool && stOpts.find((o) => o.id === v.startTool);
-    if (L.startTool && (!want || want.id === L.startTool)) return;
-    const dur = CC.tiers.wood.durability;
-    if (L.startTool) { // プロフィールで道具を変えた（参加した日の間に 1 回だけ。確かめは profiles.js）
-      const old = ST.options.find((o) => o.id === L.startTool);
-      const cur = old && I.getTool(L.inv, old.id);
-      if (cur && I.toolTier(cur.item) === 'wood') I.removeTool(L.inv, old.id);
-      if (I.addTool(L.inv, L.slots, want.item, dur)) { L.startTool = want.id; L.startAuto = false; diaryExtra[v.key] = (diaryExtra[v.key] || '') + `最初の道具を${ITEMS[want.item].name}にかえた。`; }
-      return;
-    }
-    let pick = want;
-    if (!pick) {
-      const n = startCount(), h = hashStr('start:' + v.key);
-      pick = autoOpts.map((o, i) => ({ o, n: n[o.id], r: (i + h) % autoOpts.length })).sort((a, b) => a.n - b.n || a.r - b.r)[0].o;
-    }
-    L.startTool = pick.id; L.startAuto = !want;
-    if (!I.getTool(L.inv, pick.id)) I.addTool(L.inv, L.slots, pick.item, dur);
-    diaryExtra[v.key] = (diaryExtra[v.key] || '') + `${ITEMS[pick.item].name}を持ってきた。`;
-  };
   const startJob = (L) => { const o = ST.options.find((x) => x.id === L.startTool); return o ? o.job : null; };
   const haulText = (got) => Object.entries(got).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).slice(0, 3)
     .map(([it, n]) => `${ITEMS[it].name}${n}`).join('・');
@@ -430,8 +402,7 @@ function stepDay(S) {
     ensureLife(L, v);
     L.targets = [];
     // 朝型・夜型（プロフィールで選べる。なければ名前から決まる）と、その人の寝る時刻
-    const pc = (v.profile && v.profile.chrono) || (v._priv && v._priv.chrono);
-    L.chrono = CHRONO.includes(pc) ? pc : (hashStr('chrono:' + v.key) % 100) < (H.nightShare ?? 0.3) * 100 ? '夜型' : '朝型';
+    L.chrono = W.chronoOf(v, H);
     const [b0, b1] = H.bedtime[L.chrono];
     const bedH = (b0 + (hashStr('bed:' + v.key) % (b1 - b0 + 1))) % 24;
     if (L.sleepy == null) { // はじめての日：寝る時刻から、0 時の眠気を決める
@@ -1393,22 +1364,14 @@ function stepDay(S) {
   for (const v of active) {
     const L = life[v.key];
     const before = { level: L.level, slots: L.slots };
-    L.level = I.levelFor(L.xp, IC);
-    L.slots = I.slotCount(L.level, daysIn(v), IC);
-    I.ensureSize(L.inv, L.slots);
-    L.xpNext = I.xpForLevel(L.level + 1, IC); L.xpBase = I.xpForLevel(L.level, IC);
-    const perDay = L.xp / Math.max(1, daysIn(v));
-    L.locks = I.lockList(L.level, L.xp, daysIn(v), perDay, IC);
-    const nx = L.locks[0];
-    L.next = !nx ? '枠はぜんぶ開いた' : nx.type === 'level' ? `次の枠：Lv${nx.at} まであと ${I.xpForLevel(nx.at, IC) - L.xp} 経験値` : `次の枠：在籍 ${nx.at} 日まであと ${nx.at - daysIn(v)} 日`;
+    W.refreshLevel(L, daysIn(v), IC);
     const d = L.diary[L.diary.length - 1];
     if (L.level > before.level) d.text += `レベルが${L.level}になった。`;
     if (L.slots > before.slots) d.text += `持ち物の枠がふえた（${L.slots}枠）。`;
   }
 
   // ---- 9. 住む家 ----
-  const homes = world.buildings.filter((b) => B(b.type).cap).flatMap((b) => Array(B(b.type).cap).fill(b.id));
-  active.sort((a, b) => a.joinedDay - b.joinedDay).forEach((v, i) => { life[v.key].home = homes[i] || null; });
+  W.assignHomes(active, life, world, config);
 
   // ---- 10. 誕生日（月日だけ） ----
   const md = date.slice(5);
@@ -1530,6 +1493,22 @@ S.inbox = fs.existsSync(inboxFile) ? JSON.parse(fs.readFileSync(inboxFile, 'utf8
 if (S.inbox && S.inbox.sample) S.inbox = null; // 見本ファイルは使わない
 // 建物のリクエスト（「温泉ほしい」など）を数える。投票は変えない、うらの集計（data/requests.json）
 const reqComments = S.inbox ? [...(S.inbox.joinComments || []), ...(S.inbox.voteComments || [])] : [];
+// 町を始める日の決まり（daily.yml は --gate を付けて動かす）。0 日目のあいだは、持ち主が始めるまで日を進めない
+//   始める：config.json の startAt の日時を過ぎた時、または --start（Actions の「Run workflow」で start を選んだ時）
+//   手で `node tools/sim.js` を動かす時（--gate なし）は、今までどおりいつも進める
+const gate = args.includes('--gate');
+const startNow = args.includes('--start') || /^(1|true|yes)$/i.test(process.env.TOWN_START || '');
+const nowArg = opt('--now', process.env.TOWN_NOW || null); // テスト用：今の時刻を決める
+const NOW = nowArg ? new Date(nowArg) : new Date();
+if (!W.shouldAdvance(S.state, config, { gate, start: startNow, now: NOW })) {
+  const at = W.parseStartAt(config.startAt);
+  console.log(`町はまだ 0 日目です（${at ? '始まる日時 ' + new Date(at + 9 * 3600e3).toISOString().slice(0, 16).replace('T', ' ') + '（日本時間）' : '始まる日はまだ決まっていません'}）。日は進めません`);
+  process.exit(0);
+}
+if (gate && S.state.day === 0) { // 0 日目から始める：1 日目は今日（日本時間）にする
+  S.state.startDate = W.jstToday(NOW);
+  S.state.startedAt = NOW.toISOString();
+}
 for (let i = 0; i < days; i++) { stepDay(S); if (i === 0 && S.inbox) S.inbox = { ...S.inbox, joinComments: null }; }
 write('villagers.json', S.villagers);
 ST.writeWorld(DATA, S.world, { clearR: ((S.config.terrain && S.config.terrain.clearBlocks) ?? 4) * 1.9 + 2.5 });

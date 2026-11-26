@@ -53,7 +53,7 @@ function applyProfiles(villagers, pubDocs, privDocs, fields, { day = null, start
       else if (f.id === 'startTool') {
         const o = P.startToolByLabel(startTools, ok.startTool);
         if (!o || o.id === v.startTool) continue;
-        if (v.startToolChanged || (day != null && day > v.joinedDay)) { report.rejected.push({ key, field: 'startTool', reason: '最初の道具は、参加した日に 1 回だけ変えられます' }); continue; }
+        if (v.startToolChanged || (day != null && day > Math.max(1, v.joinedDay))) { report.rejected.push({ key, field: 'startTool', reason: '最初の道具は、参加した日に 1 回だけ変えられます' }); continue; }
         v.startTool = o.id; v.startToolChanged = day != null ? day : true;
       }
       else prof[f.id] = ok[f.id];

@@ -53,8 +53,29 @@ export function nav(current) {
 }
 
 // 村人が 0 人の時の案内（どの画面でも同じ言葉）
-export const emptyText = (config) => `まだだれもいません。コメントに『${(config && config.joinWord) || '住みたい'}』で村人に`;
+export const emptyText = (config) => `まだだれもいません。フォローしてコメントに『${(config && config.joinWord) || '住みたい'}』で、すぐ村人に`;
 export function emptyNote(config) { return `<p class="empty">${esc(emptyText(config))}</p>`; }
+
+// 0 日目（町が始まる前）の案内。config.startAt（日本時間）が決まっていれば、その日時も出す。1 日目より後は ''
+export function startAtMs(s) {
+  if (!s) return null;
+  let t = String(s).trim().replace(' ', 'T');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) t += 'T06:00';
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(t)) t += ':00';
+  if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(t)) t += '+09:00';
+  const ms = Date.parse(t);
+  return Number.isFinite(ms) ? ms : null;
+}
+export function startNote(state, config) {
+  if (!state || state.day >= 1) return '';
+  const ms = startAtMs(config && config.startAt);
+  if (ms == null) return '町はまだ始まっていません（0日目）。始まる日は、町のアカウントでお知らせします。';
+  const d = new Date(ms + 9 * 3600e3);
+  const when = `${d.getUTCMonth() + 1}月${d.getUTCDate()}日 ${d.getUTCHours()}時${d.getUTCMinutes() ? String(d.getUTCMinutes()).padStart(2, '0') + '分' : ''}`;
+  return `町はまだ始まっていません（0日目）。${when}から1日目が始まります。`;
+}
+// 「住みたい」の案内（どの画面でも同じ言葉）
+export const joinText = (config) => `フォローして、インスタの投稿に「${(config && config.joinWord) || '住みたい'}」とコメントすると、すぐ町に住めます（15 分ほどで入居）。`;
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const skinUrl = (n) => 'skins/skin_' + String(n).padStart(3, '0') + '.png';

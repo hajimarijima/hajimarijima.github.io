@@ -1,4 +1,5 @@
-# 15 分ごとに「住みたい」コメントだけを読んで、村人の受付をする（町は進めない。進めるのは daily.yml）。
+# 15 分ごとに「住みたい」コメントを読んで、その場で町に住んでもらう（日は進めない。進めるのは daily.yml）。
+# 0 日目（町が始まる前）でも、受け付けた人はすぐ町に住み始める。
 # GitHub の混み具合で、実際には 15〜30 分おきくらいになることがある。
 name: join
 
@@ -38,5 +39,8 @@ jobs:
         run: |
           git config user.name "town-bot"
           git config user.email "town-bot@users.noreply.github.com"
-          git add data/villagers.json
-          git diff --cached --quiet || (git commit -m "住む人の受付" && git push)
+          # 入居で変わるファイル（村人・暮らし・日記・歴史・関係・地図のチェスト）。data/inbox/ は .gitignore で除外
+          for f in data/villagers.json data/world.json data/state.json data/life.json data/history.json data/social.json data/diary; do
+            if [ -e "$f" ]; then git add "$f"; fi
+          done
+          git diff --cached --quiet || (git commit -m "住む人の受付・入居" && git push)

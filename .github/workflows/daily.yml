@@ -7,8 +7,18 @@
 #   TOWN_HIDDEN（任意。あだ名で出す人のユーザー名をカンマ区切りで。hidden.json に書かずに済む）
 name: daily
 
+#
+# 町を始める（0 日目 → 1 日目）：
+#   ・data/config.json の "startAt" に始める日時を書く（例 "2026-11-28 06:00"、日本時間）。その時刻を過ぎた最初の朝の実行で 1 日目になる
+#   ・または Actions → daily →「Run workflow」で start を true にして押す（その場で 1 日目になる）
+#   0 日目のあいだは、毎朝動いても日は進めない（「住みたい」の受付とその場の入居だけ）
 on:
   workflow_dispatch:
+    inputs:
+      start:
+        description: "町を始める（0 日目のとき、この実行で 1 日目にする）"
+        type: boolean
+        default: false
   schedule:
     - cron: "0 21 * * *"   # 毎朝 6 時（日本時間）
 
@@ -40,16 +50,22 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           TOWN_SALT: ${{ secrets.TOWN_SALT }}
-      - name: 町を 1 日進める
-        run: node tools/sim.js
+      - name: 住む人の受付（すぐ町に迎える）
+        run: node tools/join.js
         env:
           TOWN_SALT: ${{ secrets.TOWN_SALT }}
           TOWN_HIDDEN: ${{ secrets.TOWN_HIDDEN }}
+      - name: 町を 1 日進める（0 日目のあいだは、始める時だけ）
+        run: node tools/sim.js --gate
+        env:
+          TOWN_SALT: ${{ secrets.TOWN_SALT }}
+          TOWN_HIDDEN: ${{ secrets.TOWN_HIDDEN }}
+          TOWN_START: ${{ github.event_name == 'workflow_dispatch' && inputs.start && 'true' || 'false' }}
       - name: 結果をコミット
         # data/inbox/（生のコメント・名前が入る）は .gitignore で除外。ここで足すのは公開してよいファイルだけ
         run: |
           git config user.name "town-bot"
           git config user.email "town-bot@users.noreply.github.com"
           git add data/villagers.json data/world.json data/state.json data/life.json data/history.json data/social.json data/diary data/requests.json data/requests_seen.json
-          git diff --cached --quiet || git commit -m "町が $(node -p "require('./data/state.json').day") 日目になった"
+          git diff --cached --quiet || git commit -m "町は $(node -p "require('./data/state.json').day") 日目"
           git push

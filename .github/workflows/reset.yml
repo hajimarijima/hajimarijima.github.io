@@ -1,0 +1,39 @@
+# 町を本番の 0 日目に戻す（木と岩だけ・村人 0・建物 0）。手で動かす時だけ。
+# Actions → reset →「Run workflow」で、confirm に「0日目にする」と入れて押す（ちがう言葉なら何もしない）。
+# 戻したあとは、町は 0 日目のまま止まる。「住みたい」の人はすぐ住み始める。始める日は config.json の startAt か、daily の start で決める。
+name: reset
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "本当に戻すなら「0日目にする」と入れる"
+        required: true
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: town
+  cancel-in-progress: false
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.confirm == '0日目にする' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: 0 日目に戻す
+        run: node tools/init.js
+      - name: 結果をコミット
+        run: |
+          git config user.name "town-bot"
+          git config user.email "town-bot@users.noreply.github.com"
+          # data/inbox/ と data/import/ は .gitignore で除外されている
+          git add -A data
+          git diff --cached --quiet || git commit -m "町を 0 日目に戻した"
+          git push
