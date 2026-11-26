@@ -14,6 +14,7 @@
 </head>
 <body>
 <main class="wrap">
+  <div id="duel"></div>
   <h1>次に何を作る？</h1>
   <div class="card">
     <div class="muted">今のフォロワー</div>
@@ -21,12 +22,14 @@
   </div>
   <div id="current"></div>
   <h2>これまでの投票</h2>
+  <div id="duelpast"></div>
   <div id="past"></div>
   <h2>建ててほしい物</h2>
   <p class="muted">「図書館たててほしい」「温泉ほしい」のようにコメントしてください。数えておいて、次の A・B・C の候補を選ぶ時の参考にします（投票の結果は変わりません）。</p>
 </main>
 <script type="module">
 import { loadAll, nav, esc, fmtDate, showError } from './js/common.js';
+import { bandHtml as versusBand, pastHtml as versusPast } from './js/versus.js';
 nav('vote.html');
 const JST = (iso) => { const d = new Date(Date.parse(iso) + 9 * 3600e3); return { m: d.getUTCMonth() + 1, d: d.getUTCDate(), h: d.getUTCHours() }; };
 const COL = { A: 'var(--A)', B: 'var(--B)', C: 'var(--C)' };
@@ -61,6 +64,9 @@ function chart(timeline) {
 }
 
 loadAll().then(({ state, config }) => {
+  // 一週間の対決投票（config.versus）：いちばん上に赤と青の割合バー。締め切ったお題は「これまでの投票」に
+  document.getElementById('duel').innerHTML = versusBand(state, config, { big: true });
+  document.getElementById('duelpast').innerHTML = versusPast(state, config);
   document.getElementById('followers').textContent = state.followers.toLocaleString() + ' 人';
   // config.liveStatsUrl（Cloudflare の受け口の /stats）があれば、2 分ごとに読んだ新しい数に置きかえる。だめなら上の数のまま
   if (/^https:\/\//.test(String(config.liveStatsUrl || ''))) {
@@ -106,7 +112,7 @@ loadAll().then(({ state, config }) => {
       ${options(d)}
       <p class="muted">${d.voters} 人が投票</p>
       <details><summary>時間ごとの票の伸び</summary>${chart(d.timeline)}</details>
-    </div>`).join('') : '<p class="muted">まだありません。</p>';
+    </div>`).join('') : (state.versus && (state.versus.done || []).length ? '' : '<p class="muted">まだありません。</p>');
 }).catch(showError);
 </script>
 </body>

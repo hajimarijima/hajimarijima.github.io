@@ -53,6 +53,10 @@ for (const v of S.villagers) P.applyPrivacy(v, hidden);
 const profComments = [...comments, ...((inbox && inbox.voteComments) || [])].filter((c) => !owners.includes(String(P.commentUser(c).username || '').toLowerCase()));
 const profUpdated = P.applyCommentProfiles(S.villagers, profComments, { word: config.joinWord, startTools: config.startTools, mbti: config.mbtiOn !== false, enemies });
 if (profUpdated) console.log(`コメントのプロフィール：${profUpdated} 人`);
+// 役職（仕事）の変更：住んでいる人の「仕事 釣り」「転職 きこり」など（config.jobChange。1 人 1 日 perDay 回まで。tools/jobs.js）
+const jobChanges = require('./jobs').applyJobChanges(S, profComments, { day, date, enemies, owners });
+for (const x of jobChanges) console.log(`${x.v.display} の仕事：${x.from} → ${x.to}`);
+if (jobChanges.rejected) console.log(`仕事の変更：1 日の回数をこえたので使わなかったコメント ${jobChanges.rejected} 件`);
 // 「住みたい」で来た人で、誕生日・好きな食べ物がまだない人には、名前から決まった値を足す（ある値は変えない）
 let filled = 0;
 for (const v of S.villagers) if (P.fillJoinProfile(v)) filled++;
@@ -63,6 +67,15 @@ if (fitted) console.log(`スキンを名前に合わせた人：${fitted} 人`);
 
 // その場で町に迎える（前の受付で「次の朝」にしていた人も、今日来たことにする）
 const { added, worldChanged } = W.welcomeNow(S, { now: NOW });
+// 仕事を変えた人（もう町にいる人）は、その場で木の道具を持ちかえる（tools/welcome.js の giveStartTool）
+for (const x of jobChanges) {
+  const L = S.life[x.v.key];
+  if (!L || added.includes(x.v)) continue;
+  const note = W.ensureLife(L, x.v, { day, life: S.life, config });
+  W.refreshLevel(L, day - x.v.joinedDay + 1, config.inventory);
+  const d = L.diary[L.diary.length - 1];
+  if (note && d && d.day === day) d.text += note;
+}
 // 称号：いちばん最初に島に住んだ人に「はじまりの村人」（1 回だけ。tools/titles.js）
 const titled = require('./titles').awardTitles(S, { day, date });
 for (const x of titled) console.log(`${x.v.display} に称号『${x.title.name}』`);
@@ -99,10 +112,15 @@ if (inbox && typeof inbox.followers === 'number' && inbox.followers >= 0 && S.st
   S.state.followers = inbox.followers;
   stateChanged = true;
 }
+// 一週間の対決投票（config.versus）：始める・数え直す・締めて、勝った側に投票した住人に経験値と称号（tools/versus.js）
+const duel = require('./versus').stepVersus(S, { inbox, now: NOW, day, date });
+for (const id of duel.opened) console.log(`対決投票を始めました：${id}`);
+for (const r of duel.closed) console.log(`対決投票を締めました：${r.id}（${r.winner ? r.winner + ' の勝ち' : '引き分け・票なし'}、ごほうび ${r.rewarded} 人）`);
+if (duel.changed) stateChanged = true;
 if (stateChanged) write('state.json', S.state);
 
 const changed = removed || registered || added.length || comments.length || filled || profUpdated || fitted;
-if (removed || registered || added.length || titled.length) {
+if (removed || registered || added.length || titled.length || jobChanges.length || duel.opened.length || duel.closed.length) {
   write('villagers.json', S.villagers);
   ST.writeLife(DATA, S.life);
   write('history.json', S.history);

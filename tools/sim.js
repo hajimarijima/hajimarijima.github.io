@@ -182,6 +182,12 @@ function stepDay(S) {
   // 町のアカウントの持ち主は村人にしない（join.js と同じ）
   W.removeOwners(S, W.ownerNames(inbox, config));
   for (const v of villagers) { P.applyPrivacy(v, hidden); P.fillJoinProfile(v); P.fitGenderSkin(v); } // 「住みたい」で来た人の誕生日・好きな食べ物（なければ足す）。名前で女性・男性と分かる人のスキン
+  // 役職（仕事）の変更のコメント（join.js と同じ。もう読んだコメントは使わない）。道具の持ちかえは下の ensureLife
+  if (inbox && inbox.joinComments) {
+    const owners = W.ownerNames(inbox, config);
+    // 日記は下の ensureLife（「仕事が◯◯になったので…」）が書く
+    require('./jobs').applyJobChanges(S, [...inbox.joinComments, ...(inbox.voteComments || [])], { day, date, enemies: !!(config.enemies && config.enemies.enabled), owners, diary: false });
+  }
   // 公開しない項目（firestore_sync.js が data/inbox/ に書く）は、書き出さない形で持つ
   for (const v of villagers) if (S.priv && S.priv[v.key]) Object.defineProperty(v, '_priv', { value: S.priv[v.key], enumerable: false, configurable: true });
   const active = villagers.filter((v) => v.joinedDay <= day);

@@ -16,6 +16,7 @@ import { makeSky, jstHour, parseTime, phaseName } from './daynight.js';
 import { hourOf, hourText, isNight } from './hours.js';
 import { tagName, igUrl } from './search.js';
 import { goalHtml, chestHtml, projectList, projectCardHtml } from './chestview.js';
+import { bandHtml as versusBand } from './versus.js'; // 一週間の対決投票の赤と青の割合バー
 // 動画の書き出し（?video=1）で開いた時
 let IS_VIDEO = false;
 import { makeTerrain, BLOCK } from './terrain_gen.js';
@@ -77,6 +78,11 @@ async function main() {
   setTownCenter(CTR, ISLANDS ? (x, z) => onLand(world, x, z, 1.2) : null);
   // 拠点の場所の投票中（0 日目）：チェスト・たき火・広場はまだ無く、地図に A/B/C の候補が出る
   const baseVote = (state.votes || []).find((v) => v.kind === 'base') || null;
+  // 地図の上の帯（上から：対決投票の割合バー → 拠点の投票 → 村人がいない時の案内）。重ならないように 1 つの箱に縦に並べる
+  const bands = document.createElement('div');
+  bands.className = 'mapbands';
+  bands.innerHTML = versusBand(state, config);
+  document.querySelector('.map').append(bands);
   if (baseVote) {
     // 旗の場所・名前は config.json の候補に合わせる（sim の tools/base.js と同じ）。旗のまわりの木と岩は描かない（古いデータでも旗が木にうまらない）
     const cands = (config.baseVote || {}).candidates || [];
@@ -85,9 +91,9 @@ async function main() {
     world.trees = world.trees.filter((t) => !nearFlag(t)); world.rocks = world.rocks.filter((r) => !nearFlag(r));
     // baseVote.needPost の時は、投票の投稿の URL を貼るまで「投票中」の帯を出さない（旗だけ出す）
     const postReady = /instagram\.com\//.test(String(config.votePostUrl || ''));
-    if (!(config.baseVote || {}).needPost || postReady) document.querySelector('.map').insertAdjacentHTML('beforeend', baseBanner(baseVote, config));
+    if (!(config.baseVote || {}).needPost || postReady) bands.insertAdjacentHTML('beforeend', baseBanner(baseVote, config));
   }
-  if (!active.length) document.querySelector('.map').insertAdjacentHTML('beforeend', emptyNote(config));
+  if (!active.length) bands.insertAdjacentHTML('beforeend', emptyNote(config));
   renderPanel(D);
 
   const stage = document.getElementById('stage');

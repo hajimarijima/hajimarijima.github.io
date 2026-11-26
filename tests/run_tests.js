@@ -2656,6 +2656,292 @@ t('ユーザー名の数字から誕生日（コメントの誕生日が勝つ�
   assert.strictEqual(n0.birthday, P.autoBirthday(n0.key), '読めない人は今まで通り');
 });
 
+// ---------- 役職（仕事）の変更 ----------
+t('役職の変更：コメントの読み取り（表記ゆれは「住みたい」の道具と同じ）', () => {
+  const JB = require('../tools/jobs');
+  const cfg = liveCfg();
+  const pj = (s, o = {}) => JB.parseJobChange(s, { startTools: cfg.startTools, ...o });
+  assert.strictEqual(pj('仕事 釣り'), 'fishing_rod');
+  assert.strictEqual(pj('役職：きこり'), 'axe');
+  assert.strictEqual(pj('役職を漁業に'), 'fishing_rod');
+  assert.strictEqual(pj('転職 ツルハシ'), 'pickaxe');
+  assert.strictEqual(pj('職業は農業'), 'hoe');
+  assert.strictEqual(pj('釣りに転職します'), 'fishing_rod');
+  assert.strictEqual(pj('漁業になりたい！'), 'fishing_rod');
+  assert.strictEqual(pj('ジョブ　オノ'), 'axe', '全角の空白・カタカナ');
+  assert.strictEqual(pj('仕事 剣'), null, '敵が出ない間は剣は選べない');
+  assert.strictEqual(pj('仕事 剣', { enemies: true }), 'sword');
+  for (const s of ['仕事がんばって', '釣りの仕事たのしそう', '釣り', 'きこり最高', 'いい仕事してるね', 'おつりください', '']) assert.strictEqual(pj(s), null, s);
+});
+t('役職の変更：住人だけ・1 人 1 日 1 回まで・同じコメントは 2 回使わない・歴史に「〇〇さんが△△から□□になった」', () => {
+  const JB = require('../tools/jobs');
+  const cfg = liveCfg();
+  const S = () => ({
+    config: cfg,
+    villagers: [
+      { key: 'k1', igId: P.igHash('101'), userHash: P.userHash('aki'), name: 'aki', display: 'aki', joinedDay: 1, startTool: 'pickaxe' },
+      { key: 'k2', igId: P.igHash('102'), userHash: P.userHash('bou'), name: 'bou', display: 'bou', joinedDay: 1 },
+    ],
+    life: { k1: { startTool: 'pickaxe', diary: [{ day: 3, date: 'd', text: 'きょう。' }] }, k2: { startTool: 'axe', startAuto: true, diary: [] } },
+    history: [],
+  });
+  const c = (id, u, text, ts, cid) => ({ id: cid, from: { id, username: u }, text, timestamp: ts });
+  const cs = [
+    c('101', 'aki', '仕事 釣り', '2026-12-01T01:00:00Z', 'c1'), // 日本時間 12/1 10時
+    c('101', 'aki', '役職 きこり', '2026-12-01T05:00:00Z', 'c2'), // 同じ日（日本時間）＝使わない
+    c('101', 'aki', '転職 くわ', '2026-12-01T16:00:00Z', 'c3'), // 日本時間 12/2 1時＝次の日
+    c('102', 'bou', '住みたい 釣り', '2026-12-01T01:00:00Z', 'c4'), // 「住みたい」は読まない
+    c('103', 'nobody', '仕事 釣り', '2026-12-01T01:00:00Z', 'c5'), // 住んでいない人
+    c('104', 'owner_acc', '仕事 釣り', '2026-12-01T01:00:00Z', 'c6'),
+    c('102', 'bou', '仕事 オノ', '2026-12-01T02:00:00Z', 'c7'), // 今と同じ仕事（自動で斧）
+  ];
+  const s = S();
+  const r = JB.applyJobChanges(s, cs, { day: 3, date: 'd', owners: ['owner_acc'] });
+  assert.deepStrictEqual(r.map((x) => [x.v.key, x.from, x.to]), [['k1', '採掘', '漁業'], ['k1', '漁業', '農業']]);
+  assert.strictEqual(r.rejected, 1, '同じ日の 2 回目');
+  assert.deepStrictEqual(s.history.map((h) => h.text), ['akiさんが採掘から漁業になった。', 'akiさんが漁業から農業になった。']);
+  assert.ok(s.history.every((h) => h.type === 'event' && h.kind === 'job' && h.who[0] === 'k1'));
+  assert.strictEqual(s.villagers[0].startTool, 'hoe');
+  assert.strictEqual(s.villagers[1].startTool, undefined, '同じ仕事なら変えない');
+  assert.ok(s.life.k1.diary[0].text.startsWith('きょう。仕事を採掘から漁業にかえた。'), '今日の日記の後ろ');
+  // もう一度読んでも変わらない（15 分ごとに同じコメントを読み直す）
+  assert.strictEqual(JB.applyJobChanges(s, cs, { day: 3, date: 'd', owners: ['owner_acc'] }).length, 0);
+  assert.strictEqual(s.history.length, 2);
+  // perDay を 2 にすると、同じ日の 2 回目も使う
+  const s2 = S(); s2.config = { ...cfg, jobChange: { ...cfg.jobChange, perDay: 2 } };
+  assert.strictEqual(JB.applyJobChanges(s2, cs, { day: 3, date: 'd' }).length, 3);
+  // enabled: false なら読まない
+  const s3 = S(); s3.config = { ...cfg, jobChange: { enabled: false } };
+  assert.strictEqual(JB.applyJobChanges(s3, cs, { day: 3, date: 'd' }).length, 0);
+  assert.ok(cfg.jobChange && cfg.jobChange.note && cfg.jobChange.perDay === 1, 'config に jobChange');
+});
+t('役職の変更：木の道具を持ちかえる（石の道具は持ったまま・持ち物がいっぱいでも仕事は変わる）', () => {
+  const W = require('../tools/welcome');
+  const cfg = liveCfg();
+  const life = {};
+  const v = { key: 'k1', joinedDay: 1, startTool: 'fishing_rod', jobChangedTo: 'fishing_rod' };
+  const L = life.k1 = { startTool: 'pickaxe', inv: [{ item: 'wood_pickaxe', dur: 20 }, null, null], xp: 0, diary: [] };
+  const note = W.ensureLife(L, v, { day: 3, life, config: cfg });
+  assert.strictEqual(L.startTool, 'fishing_rod');
+  assert.ok(L.inv.some((s) => s && s.item === 'wood_fishing_rod') && !L.inv.some((s) => s && s.item === 'wood_pickaxe'), L.inv);
+  assert.ok(note.includes('仕事が漁業になったので'), note);
+  // 持ち物がいっぱい：仕事だけ変わる
+  const v2 = { key: 'k2', joinedDay: 1, startTool: 'hoe', jobChangedTo: 'hoe' };
+  const L2 = life.k2 = { startTool: 'pickaxe', inv: [{ item: 'stone_pickaxe', dur: 50 }, { item: 'log', n: 64 }, { item: 'cobble', n: 64 }], xp: 0, diary: [] };
+  const n2 = W.ensureLife(L2, v2, { day: 3, life, config: cfg });
+  assert.strictEqual(L2.startTool, 'hoe'); assert.ok(L2.inv.some((s) => s && s.item === 'stone_pickaxe'), '石のつるはしは持ったまま');
+  assert.ok(n2.includes('持てなかった'), n2);
+});
+t('役職の変更：join.js（一時フォルダ）で住人の仕事が変わり、歴史と持ち物に出る', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-job-'));
+  const cfg = liveCfg(); cfg.startAt = null;
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
+  const env = { ...process.env, TOWN_DATA: dir };
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+  node('tools/init.js', '--seed', 'jb', '--start', '2026-11-01');
+  fs.mkdirSync(path.join(dir, 'inbox'));
+  const cm = (id, u, text, ts) => ({ id: u + ts, from: { id, username: u }, text, timestamp: ts });
+  const inbox = (cs) => fs.writeFileSync(path.join(dir, 'inbox', 'instagram.json'), JSON.stringify({ joinComments: cs }));
+  inbox([cm('9001', 'job_san', '住みたい ピッケル', '2026-11-27T00:00:00Z')]);
+  node('tools/join.js', '--now', '2026-11-27T10:00:00+09:00');
+  inbox([cm('9001', 'job_san', '住みたい ピッケル', '2026-11-27T00:00:00Z'), cm('9001', 'job_san', '仕事 釣り', '2026-11-27T02:00:00Z'), cm('9001', 'job_san', '仕事 斧', '2026-11-27T03:00:00Z')]);
+  const out = node('tools/join.js', '--now', '2026-11-27T12:30:00+09:00');
+  assert.ok(out.includes('採掘 → 漁業'), out);
+  const v = JSON.parse(fs.readFileSync(path.join(dir, 'villagers.json'), 'utf8')).find((x) => x.name === 'job_san');
+  assert.strictEqual(v.startTool, 'fishing_rod', '同じ日の 2 回目（斧）は使わない');
+  const h = JSON.parse(fs.readFileSync(path.join(dir, 'history.json'), 'utf8')).filter((x) => x.kind === 'job');
+  assert.deepStrictEqual(h.map((x) => x.text), ['job_sanさんが採掘から漁業になった。']);
+  const L = STORE.readLife(dir)[v.key];
+  assert.strictEqual(L.startTool, 'fishing_rod');
+  assert.ok(L.inv.some((s) => s && s.item === 'wood_fishing_rod'));
+  node('tools/join.js', '--now', '2026-11-27T12:45:00+09:00'); // もう一度動かしても増えない
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'history.json'), 'utf8')).filter((x) => x.kind === 'job').length, 1);
+  node('tools/sim.js', '--days', '1'); // 日が進んでも同じコメントでは変わらない
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'history.json'), 'utf8')).filter((x) => x.kind === 'job').length, 1);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// ---------- 一週間の対決投票 ----------
+const duelCfg = (over = {}) => {
+  const c = liveCfg();
+  c.versus = { ...c.versus, topics: c.versus.topics.map((x) => ({ ...x })) };
+  c.versus.topics[0].postUrl = 'https://www.instagram.com/p/DUEL1/';
+  c.versus.topics[0].start = '2026-12-01 06:00';
+  return Object.assign(c, over);
+};
+t('対決投票：A / B の読み取り・割合・残りの日数・称号の一覧', () => {
+  const VJ = require('../js/versus.js');
+  const cfg = duelCfg();
+  const tp = VJ.topicList(cfg)[0];
+  assert.deepStrictEqual([tp.id, tp.days, tp.A.color, tp.B.color], ['kinoko_takenoko', 7, '#d64541', '#3f78b8'], 'A 赤・B 青・7 日');
+  const pk = (s) => VJ.pickOf(s, tp);
+  assert.strictEqual(pk('A'), 'A'); assert.strictEqual(pk('ｂ'), 'B'); assert.strictEqual(pk('B派です'), 'B');
+  assert.strictEqual(pk('きのこ！'), 'A'); assert.strictEqual(pk('たけのこの里しか勝たん'), 'B'); assert.strictEqual(pk('キノコ派'), 'A');
+  assert.strictEqual(pk('きのこもたけのこも好き'), null, '両方は数えない');
+  assert.strictEqual(pk('AとB'), null); assert.strictEqual(pk('INFP'), null); assert.strictEqual(pk('こんにちは'), null);
+  assert.deepStrictEqual(VJ.shares({ A: 3, B: 1 }), { A: 75, B: 25, total: 4 });
+  assert.deepStrictEqual(VJ.shares({ A: 0, B: 0 }), { A: 50, B: 50, total: 0 });
+  const now = Date.parse('2026-12-01T00:00:00Z');
+  assert.strictEqual(VJ.leftText('2026-12-04T00:00:00Z', now), 'あと 3 日');
+  assert.strictEqual(VJ.leftText('2026-12-01T05:00:00Z', now), 'あと 5 時間');
+  assert.strictEqual(VJ.leftText('2026-11-30T00:00:00Z', now), '締め切りました');
+  const TT = VJ.versusTitles(cfg);
+  assert.ok(TT.some((x) => x.id === 'vs_kinoko_takenoko_a' && x.name === 'きのこ派の勝者'));
+  assert.strictEqual(new Set(TT.map((x) => x.id)).size, TT.length, '称号の id が重ならない');
+  for (const x of TT) assert.ok(/^[a-z0-9_]+$/.test(x.id) && x.name && x.desc && x.how);
+  assert.ok(!cfg.titles.list.some((x) => TT.some((y) => y.id === x.id)), 'ふつうの称号と重ならない');
+  assert.deepStrictEqual(VJ.versusTitles({ versus: { enabled: false, topics: cfg.versus.topics } }), []);
+});
+t('対決投票：URL が空なら始まらない・start を過ぎたら始まる・1 人 1 票（最後）・住人でない票も数える・勝った側の住人に経験値と称号', () => {
+  const VS = require('../tools/versus');
+  const VJ = require('../js/versus.js');
+  const c = (id, u, text, ts) => ({ id: u + ts, from: { id, username: u }, text, timestamp: ts });
+  const mk = (cfg) => ({
+    config: cfg, state: { day: 5 },
+    villagers: [
+      { key: 'r1', igId: P.igHash('1'), userHash: P.userHash('ra'), display: 'ra', joinedDay: 1 },
+      { key: 'r2', igId: P.igHash('2'), userHash: P.userHash('rb'), display: 'rb', joinedDay: 1 },
+      { key: 'r3', igId: P.igHash('3'), userHash: P.userHash('rc'), display: 'rc', joinedDay: 1 },
+      { key: 'r9', igId: P.igHash('9'), userHash: P.userHash('rz'), display: 'rz', joinedDay: 99 }, // まだ住んでいない
+    ],
+    life: { r1: { xp: 0, diary: [] }, r2: { xp: 5, diary: [] }, r3: { xp: 0, diary: [] } },
+    history: [],
+  });
+  // URL が空：始まらない（state に何も書かない）
+  const s0 = mk(liveCfg());
+  assert.strictEqual(VS.stepVersus(s0, { now: new Date('2026-12-02T00:00:00Z'), day: 5, date: 'd' }).changed, false);
+  assert.strictEqual(s0.state.versus, undefined);
+  assert.strictEqual(VS.targetTopic(liveCfg(), {}), null, 'インスタも読まない');
+  // URL あり・start の前：まだ
+  const cfg = duelCfg();
+  const S = mk(cfg);
+  assert.deepStrictEqual(VS.targetTopic(cfg, S.state), { id: 'kinoko_takenoko', postUrl: 'https://www.instagram.com/p/DUEL1/' });
+  VS.stepVersus(S, { now: new Date('2026-11-30T00:00:00Z'), day: 5, date: 'd' });
+  assert.ok(!S.state.versus || !S.state.versus.current, 'start の前');
+  // start を過ぎた：始まる。締め切りは start から 7 日
+  const cs = [
+    c('1', 'ra', 'きのこ', '2026-12-01T00:00:00Z'), c('1', 'ra', 'たけのこ派に変えます', '2026-12-02T00:00:00Z'), // 最後の票（B）
+    c('2', 'rb', 'B', '2026-12-02T00:00:00Z'), c('3', 'rc', 'A', '2026-12-02T00:00:00Z'), c('3', 'rc', 'がんばれー', '2026-12-03T00:00:00Z'), // 票のないコメントは消さない
+    c('7', 'guest1', 'たけのこ', '2026-12-02T00:00:00Z'), c('8', 'guest2', 'b', '2026-12-02T00:00:00Z'), // 住人でない人
+    c('9', 'rz', 'B', '2026-12-02T00:00:00Z'), c('5', 'comment_de_sodatsu', 'A', '2026-12-02T00:00:00Z'), // 町のアカウントは数えない
+    c('6', 'late', 'A', '2026-12-09T00:00:00Z'), // 締め切りのあと
+  ];
+  const inbox = { versusComments: { id: 'kinoko_takenoko', comments: cs } };
+  const r1 = VS.stepVersus(S, { inbox, now: new Date('2026-12-03T00:00:00Z'), day: 5, date: 'd' });
+  assert.deepStrictEqual(r1.opened, ['kinoko_takenoko']);
+  const cur = S.state.versus.current;
+  assert.deepStrictEqual([cur.opensAt, cur.closesAt], ['2026-11-30T21:00:00.000Z', '2026-12-07T21:00:00.000Z']);
+  assert.deepStrictEqual(cur.votes, { A: 1, B: 5 }); assert.strictEqual(cur.voters, 6);
+  assert.ok(S.history.some((h) => h.type === 'vote_open' && h.kind === 'versus'));
+  // 帯：名前は config から。割合と票と残りの日数
+  const html = VJ.bandHtml(S.state, cfg, { now: Date.parse('2026-12-03T00:00:00Z') });
+  assert.ok(html.includes('きのこ派') && html.includes('たけのこ派') && html.includes('16.7%') && html.includes('83.3%') && html.includes('あと 5 日') && html.includes('instagram.com/p/DUEL1'), html);
+  assert.strictEqual(VJ.bandHtml(S.state, liveCfg()), '', 'config の URL を消したら出さない');
+  // 締め切り：B の勝ち。B に投票した住人（ra・rb）に経験値と称号。rc（A）と、住んでいない rz にはなし
+  const r2 = VS.stepVersus(S, { inbox, now: new Date('2026-12-08T00:00:00Z'), day: 6, date: 'e' });
+  assert.strictEqual(r2.closed.length, 1);
+  const done = S.state.versus.done[0];
+  assert.deepStrictEqual([done.winner, done.votes, done.rewarded], ['B', { A: 1, B: 5 }, 2]);
+  assert.strictEqual(S.state.versus.current, undefined);
+  const V = (k) => S.villagers.find((v) => v.key === k);
+  assert.deepStrictEqual([V('r1').titles, V('r2').titles, V('r3').titles, V('r9').titles], [['vs_kinoko_takenoko_b'], ['vs_kinoko_takenoko_b'], undefined, undefined]);
+  assert.deepStrictEqual([S.life.r1.xp, S.life.r2.xp, S.life.r3.xp], [30, 35, 0]);
+  assert.ok(S.life.r1.level >= 1 && S.life.r1.diary[0].text.includes('称号「たけのこ派の勝者」'));
+  const res = S.history.find((h) => h.type === 'vote_result' && h.kind === 'versus');
+  assert.ok(res.text.includes('たけのこ派の勝ち') && res.text.includes('住人 2 人') && res.text.includes('たけのこ派の勝者'), res.text);
+  assert.ok(S.history.some((h) => h.type === 'title' && h.title === 'vs_kinoko_takenoko_b'));
+  // 結果の帯（1 日だけ）と、これまでの対決
+  assert.ok(VJ.bandHtml(S.state, cfg, { now: Date.parse('2026-12-08T01:00:00Z') }).includes('たけのこ派の勝ち'));
+  assert.strictEqual(VJ.bandHtml(S.state, cfg, { now: Date.parse('2026-12-10T00:00:00Z') }), '');
+  assert.ok(VJ.pastHtml(S.state, cfg).includes('たけのこ派の勝ち'));
+  // もう一度動かしても、ごほうびは増えない。次のお題は URL が空なので始まらない
+  VS.stepVersus(S, { inbox, now: new Date('2026-12-08T00:15:00Z'), day: 6, date: 'e' });
+  assert.deepStrictEqual([S.life.r1.xp, S.state.versus.done.length, S.state.versus.current], [30, 1, undefined]);
+  // 次のお題に URL を貼る：前のお題の締め切りより後で始まる（start なし＝貼って最初の受付の時）
+  cfg.versus.topics[1].postUrl = 'https://www.instagram.com/p/DUEL2/';
+  assert.deepStrictEqual(VS.targetTopic(cfg, S.state), { id: 'dog_cat', postUrl: 'https://www.instagram.com/p/DUEL2/' });
+  VS.stepVersus(S, { inbox: { versusComments: { id: 'dog_cat', comments: [c('1', 'ra', '犬', '2026-12-08T03:00:00Z'), c('2', 'rb', '猫', '2026-12-08T03:00:00Z')] } }, now: new Date('2026-12-08T04:00:00Z'), day: 6, date: 'e' });
+  const c2 = S.state.versus.current;
+  assert.deepStrictEqual([c2.id, c2.opensAt, c2.votes], ['dog_cat', '2026-12-08T04:00:00.000Z', { A: 1, B: 1 }]);
+  // 引き分け：投票した住人みんなに tieXp、称号なし
+  VS.stepVersus(S, { inbox: { versusComments: { id: 'dog_cat', comments: [c('1', 'ra', '犬', '2026-12-08T03:00:00Z'), c('2', 'rb', '猫', '2026-12-08T03:00:00Z')] } }, now: new Date('2026-12-15T05:00:00Z'), day: 13, date: 'f' });
+  const d2 = S.state.versus.done[1];
+  assert.deepStrictEqual([d2.id, d2.winner, d2.tie, d2.rewarded], ['dog_cat', null, true, 2]);
+  assert.deepStrictEqual([S.life.r1.xp, S.life.r2.xp], [40, 45]);
+  assert.ok(!S.villagers.some((v) => (v.titles || []).some((x) => x.startsWith('vs_dog_cat'))), '引き分けは称号なし');
+  assert.ok(S.history.some((h) => h.kind === 'versus' && h.tie && h.text.includes('引き分け')));
+});
+t('対決投票：締め切りの時にコメントが読めなければ待つ・待ってもだめなら最後の票で決める（ごほうびなし）・票がなければごほうびなし', () => {
+  const VS = require('../tools/versus');
+  const cfg = duelCfg();
+  const S = { config: cfg, state: {}, villagers: [], life: {}, history: [] };
+  VS.stepVersus(S, { now: new Date('2026-12-01T00:00:00Z'), day: 1, date: 'a' });
+  S.state.versus.current.votes = { A: 2, B: 1 };
+  VS.stepVersus(S, { now: new Date('2026-12-08T00:00:00Z'), day: 8, date: 'b' });
+  assert.ok(S.state.versus.current && S.state.versus.current.closing, '読めるまで待つ');
+  assert.ok(require('../js/versus.js').bandHtml(S.state, cfg, { now: Date.parse('2026-12-08T00:00:00Z') }).includes('集計中'));
+  VS.stepVersus(S, { now: new Date('2026-12-09T00:00:00Z'), day: 9, date: 'c' });
+  assert.deepStrictEqual([S.state.versus.done[0].winner, S.state.versus.done[0].rewarded], ['A', 0]);
+  // 票なし
+  const S2 = { config: duelCfg(), state: {}, villagers: [], life: {}, history: [] };
+  VS.stepVersus(S2, { inbox: { versusComments: { id: 'kinoko_takenoko', comments: [] } }, now: new Date('2026-12-09T00:00:00Z'), day: 9, date: 'c' });
+  assert.deepStrictEqual([S2.state.versus.done[0].winner, S2.state.versus.done[0].tie], [null, false]);
+  assert.ok(S2.history.some((h) => h.text.includes('票が入らなかった')));
+});
+t('対決投票：join.js（一時フォルダ）で数えて締め、画面の決まった文言にお題の言葉を入れない', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-duel-'));
+  const cfg = duelCfg(); cfg.startAt = null;
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
+  const env = { ...process.env, TOWN_DATA: dir };
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+  node('tools/init.js', '--seed', 'du', '--start', '2026-11-01');
+  fs.mkdirSync(path.join(dir, 'inbox'));
+  const cm = (id, u, text, ts) => ({ id: u + ts, from: { id, username: u }, text, timestamp: ts });
+  fs.writeFileSync(path.join(dir, 'inbox', 'instagram.json'), JSON.stringify({
+    joinComments: [cm('51', 'duel_a', '住みたい', '2026-11-30T00:00:00Z'), cm('52', 'duel_b', '住みたい', '2026-11-30T00:00:00Z')],
+    versusComments: { id: 'kinoko_takenoko', comments: [cm('51', 'duel_a', 'きのこ', '2026-12-01T00:00:00Z'), cm('52', 'duel_b', 'B', '2026-12-01T00:00:00Z'), cm('53', 'guest', 'A', '2026-12-01T00:00:00Z')] },
+  }));
+  node('tools/join.js', '--now', '2026-12-02T10:00:00+09:00');
+  let st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
+  assert.deepStrictEqual(st.versus.current.votes, { A: 2, B: 1 });
+  const out = node('tools/join.js', '--now', '2026-12-08T07:00:00+09:00');
+  assert.ok(out.includes('対決投票を締めました'), out);
+  st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
+  assert.strictEqual(st.versus.done[0].winner, 'A');
+  const vs = JSON.parse(fs.readFileSync(path.join(dir, 'villagers.json'), 'utf8'));
+  assert.ok(vs.find((v) => v.name === 'duel_a').titles.includes('vs_kinoko_takenoko_a'));
+  assert.ok(!(vs.find((v) => v.name === 'duel_b').titles || []).some((x) => x.startsWith('vs_')));
+  assert.strictEqual(STORE.readLife(dir)[vs.find((v) => v.name === 'duel_a').key].xp, 30);
+  assert.ok(JSON.parse(fs.readFileSync(path.join(dir, 'history.json'), 'utf8')).some((h) => h.kind === 'versus' && h.type === 'vote_result'));
+  fs.rmSync(dir, { recursive: true, force: true });
+  // 画面の決まった文言：お題の言葉（商品名など）は config からだけ出す
+  for (const f of ['js/versus.js', 'js/town.js', 'vote.html', 'badges.html', 'js/common.js', 'tools/versus.js', 'tools/jobs.js', 'css/style.css']) {
+    const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
+    for (const w of ['きのこ', 'たけのこ', 'キノコ', 'タケノコ']) assert.ok(!src.includes(w), `${f} に「${w}」`);
+  }
+  for (const f of ['js/versus.js', 'tools/versus.js', 'tools/jobs.js']) assert.ok(!/マイクラ|マインクラフト/.test(fs.readFileSync(path.join(ROOT, f), 'utf8')), f);
+  assert.ok(/versusBand\(state, config\)/.test(fs.readFileSync(path.join(ROOT, 'js/town.js'), 'utf8')), '町の画面に帯');
+  assert.ok(/versusBand\(state, config, \{ big: true \}\)/.test(fs.readFileSync(path.join(ROOT, 'vote.html'), 'utf8')), '投票の画面に帯');
+});
+at('対決投票：instagram.js は対決の投稿のコメントを versusComments に入れる（URL が空なら読まない）', async () => {
+  const cfg = duelCfg(); cfg.votePostUrl = 'https://www.instagram.com/p/VOTE1/';
+  cfg.versus.topics[0].postUrl = 'https://www.instagram.com/p/OLD/'; // 対決の投稿（古くても読む）
+  fakeIG(MEDIA, CM);
+  const r = await IG.collect({ cfg, env: {}, userId: 'U1', token: 'T', now: NOW_IG, log: () => {}, state: {} });
+  assert.deepStrictEqual([r.data.versusComments.id, r.data.versusComments.comments.map((c) => c.id)], ['kinoko_takenoko', ['c5']]);
+  assert.ok(r.data.joinComments.some((c) => c.id === 'c5'), '対決の投稿の「住みたい」も受け付ける');
+  // 投票中のお題があれば、そのお題の投稿
+  fakeIG(MEDIA, CM);
+  const r2 = await IG.collect({ cfg, env: {}, userId: 'U1', token: 'T', now: NOW_IG, log: () => {}, state: { versus: { current: { id: 'kinoko_takenoko', postUrl: '' }, done: [] } } });
+  assert.strictEqual(r2.data.versusComments.id, 'kinoko_takenoko');
+  // URL が空なら読まない
+  const calls = fakeIG(MEDIA, CM);
+  const r3 = await IG.collect({ cfg: { ...liveCfg(), votePostUrl: 'https://www.instagram.com/p/VOTE1/' }, env: {}, userId: 'U1', token: 'T', now: NOW_IG, log: () => {}, state: {} });
+  assert.strictEqual(r3.data.versusComments, undefined);
+  assert.ok(!calls.some((c) => /\/333\/comments/.test(c)));
+  IG._setFetch(null);
+});
+
 (async () => {
   for (const [name, fn] of asyncTests) { await fn(); ok++; console.log('OK  ' + name); }
   console.log(`\nぜんぶ通りました（${ok} 件）`);

@@ -2,6 +2,7 @@
 import { makeSkin } from './skingen.js';
 import { decodeWorld } from './tilemap.js';
 import { diaryPath } from './datafiles.js';
+import { versusTitles } from './versus.js';
 export const JOB = { wood: '木を切る', stone: '岩を掘る', food: '食べ物を集める', smith: '鍛冶（道具や防具を作る）' };
 export const RES = { wood: '木材', stone: '石', food: '食べ物' };
 export const RES_COLOR = { wood: '#b07a45', stone: '#8d939b', food: '#6aa84f' };
@@ -76,14 +77,17 @@ export function startNote(state, config) {
 }
 // 「住みたい」の案内（どの画面でも同じ言葉）
 export const joinText = (config) => `フォローして、インスタの投稿に「${(config && config.joinWord) || '住みたい'}」とコメントすると、すぐ町に住めます（15 分ほどで入居）。` +
-  `道具・誕生日・好きな食べ物${mbtiOn(config) ? '・MBTI' : ''}もいっしょに書けます（例「${(config && config.joinWord) || '住みたい'} ピッケル 12/11 りんご${mbtiOn(config) ? ' INFP' : ''}」）。住んだあとも「誕生日 12/11」のようにコメントすれば変えられます。`;
+  `道具・誕生日・好きな食べ物${mbtiOn(config) ? '・MBTI' : ''}もいっしょに書けます（例「${(config && config.joinWord) || '住みたい'} ピッケル 12/11 りんご${mbtiOn(config) ? ' INFP' : ''}」）。住んだあとも「誕生日 12/11」のようにコメントすれば変えられます。` +
+  (config && config.jobChange && config.jobChange.enabled === false ? '' : `仕事も「仕事 釣り」のようにコメントすると変えられます（1 日 ${(config && config.jobChange && config.jobChange.perDay) || 1} 回まで）。`);
 // MBTI を出すか（config.mbtiOn）。村人の MBTI の文（書いていない人は ''）。例「MBTI：INFP-T」
 export const mbtiOn = (config) => !config || config.mbtiOn !== false;
 export const mbtiText = (v, config) => (mbtiOn(config) && v && v.mbti ? `MBTI：${v.mbti}${v.mbtiAT ? '-' + v.mbtiAT : ''}` : '');
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // 称号（v.titles の id → config.titles.list の名前と説明）。バッジの HTML（説明は title 属性）
-export const titlesOf = (v, config) => ((v && v.titles) || []).map((id) => ((config && config.titles && config.titles.list) || []).find((t) => t.id === id)).filter(Boolean);
+// 対決投票の称号（js/versus.js の versusTitles。お題ごとに config.versus から作る）も同じように並べる
+export const allTitles = (config) => [...((config && config.titles && config.titles.list) || []), ...versusTitles(config)];
+export const titlesOf = (v, config) => { const all = allTitles(config); return ((v && v.titles) || []).map((id) => all.find((t) => t.id === id)).filter(Boolean); };
 // 村人が持っているバッジを全部（称号バッジ → 技能バッジ config.badges の順）。{ kind, id, name, desc, src, icon }
 // 称号の絵は config の img（icons/title_<id>.png）、技能バッジは icons/badge_<id>_<段>.png（はじまりの住人は icons/badge_founder.png）
 export function badgeList(v, config, L) {

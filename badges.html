@@ -26,6 +26,7 @@
 </main>
 <script type="module">
 import { loadAll, nav, esc, villagerUrl, showError, emptyNote } from './js/common.js';
+import { versusTitles } from './js/versus.js';
 nav('badges.html');
 const MAXW = 12; // 名前を出すのは 12 人まで（ほかは「ほか ◯ 人」）
 loadAll().then((D) => {
@@ -34,9 +35,10 @@ loadAll().then((D) => {
   const names = (vs) => vs.slice(0, MAXW).map(link).join('') + (vs.length > MAXW ? `<span class="muted">ほか ${vs.length - MAXW} 人</span>` : '');
   const img = (src, alt, size) => src ? `<img class="bdgimg pixel" src="${esc(src)}" alt="${esc(alt)}" width="${size}" height="${size}" decoding="async">` : '';
 
-  // ---- 称号バッジ（config.titles.list） ----
+  // ---- 称号バッジ（config.titles.list と、対決投票の称号 config.versus。対決の称号は、だれかが持っている物だけ出す） ----
   const TL = (D.config.titles && D.config.titles.list) || [];
-  document.getElementById('titles').innerHTML = TL.map((t) => {
+  const VT = versusTitles(D.config).filter((t) => D.active.some((v) => (v.titles || []).includes(t.id)));
+  document.getElementById('titles').innerHTML = [...TL, ...VT].map((t) => {
     const own = D.active.filter((v) => (v.titles || []).includes(t.id));
     const has = own.length > 0;
     return `<li class="bdgcard${has ? '' : ' none'}">${t.img ? img(t.img, t.name, 96) : `<span class="bdgtxt">${esc(t.icon || '★')}</span>`}<div>` +

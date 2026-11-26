@@ -26,11 +26,18 @@ function giveStartTool(L, v, { life, config }) {
   const want = v.startTool && stOpts.find((o) => o.id === v.startTool);
   if (L.startTool && (!want || want.id === L.startTool)) return '';
   const dur = CC.tiers.wood.durability;
-  if (L.startTool) { // プロフィールで道具を変えた（参加した日の間に 1 回だけ。確かめは profiles.js）
+  if (L.startTool) { // プロフィールで道具を変えた（参加した日の間に 1 回だけ。確かめは profiles.js）か、コメントで仕事を変えた（tools/jobs.js）
     const old = ST.options.find((o) => o.id === L.startTool);
     const cur = old && I.getTool(L.inv, old.id);
     if (cur && I.toolTier(cur.item) === 'wood') I.removeTool(L.inv, old.id);
-    if (I.addTool(L.inv, L.slots, want.item, dur)) { L.startTool = want.id; L.startAuto = false; return `最初の道具を${ITEMS[want.item].name}にかえた。`; }
+    const byJob = v.jobChangedTo === want.id; // コメントで仕事を変えた
+    const has = byJob && !!I.getTool(L.inv, want.id); // 同じ種類の道具（石・鉄なども）をもう持っている
+    if (has || I.addTool(L.inv, L.slots, want.item, dur)) {
+      L.startTool = want.id; L.startAuto = false;
+      return byJob ? (has ? '' : `仕事が${want.job}になったので、${ITEMS[want.item].name}を持った。`) : `最初の道具を${ITEMS[want.item].name}にかえた。`;
+    }
+    // 持ち物がいっぱいでも、コメントで変えた仕事は変える（道具はあとで作る）
+    if (byJob) { L.startTool = want.id; L.startAuto = false; return `仕事が${want.job}になった（持ち物がいっぱいで、${ITEMS[want.item].name}は持てなかった）。`; }
     return '';
   }
   let pick = want;

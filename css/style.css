@@ -343,6 +343,45 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .basevote .bv-k { display: inline-block; min-width: 16px; margin-right: 4px; border-radius: 4px; color: #fff; font-style: normal; font-weight: 700; text-align: center; }
 .bv-A { background: var(--A); } .bv-B { background: var(--B); } .bv-C { background: var(--C); }
 .map .basevote ~ .empty { top: 128px; }
+/* 地図の上の帯をまとめる箱（対決投票 → 拠点の投票 → 村人がいない時の案内 を縦に並べる。重ならない） */
+.map .mapbands { position: absolute; left: 10px; right: 10px; top: 46px; z-index: 5; max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.map .mapbands:empty { display: none; }
+.map .mapbands > * { pointer-events: auto; }
+.map .mapbands .basevote, .map .mapbands .empty { position: static; left: auto; right: auto; top: auto; width: 100%; margin: 0 auto; }
+.map .mapbands .empty { max-width: 420px; }
+
+/* 一週間の対決投票：赤（A）と青（B）の割合バー。町の地図の上と、投票のページの上 */
+.duel { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px 9px; border-radius: var(--radius); background: rgba(255,253,247,.96); border: 1px solid var(--line); color: var(--ink); text-decoration: none; box-shadow: 0 4px 14px rgba(0,0,0,.15); min-width: 0; }
+.duel-head { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; line-height: 1.35; }
+.duel-tag { flex: none; background: #2f4a37; color: #fff; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: var(--radius-pill); }
+.duel-done .duel-tag { background: var(--accent2); }
+.duel-done .duel-q { white-space: normal; } /* 結果（「〇〇の勝ち！」）は切らずに折り返す */
+.duel-win { display: inline-block; color: var(--accent2); }
+.duel-q { min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.duel-names { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 15px; line-height: 1.3; }
+.duel-names b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.duel-names b:last-child { text-align: right; }
+.duel-vs { flex: none; font-size: 11px; font-weight: 700; color: var(--sub); letter-spacing: .05em; }
+.duel-bar { display: flex; height: 18px; border-radius: var(--radius-pill); overflow: hidden; background: #ece5d4; }
+.duel-seg { display: flex; align-items: center; min-width: 0; height: 100%; transition: width .4s; }
+.duel-A { justify-content: flex-start; padding-left: 8px; }
+.duel-B { justify-content: flex-end; padding-right: 8px; }
+.duel-seg em { font-style: normal; font-size: 11px; font-weight: 700; color: #fff; white-space: nowrap; text-shadow: 0 1px 1px rgba(0,0,0,.25); font-variant-numeric: tabular-nums; }
+.duel-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; line-height: 1.3; }
+.duel-n b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.duel-left { text-align: center; color: var(--sub); font-weight: 700; min-width: 0; }
+.duel-left small { font-weight: 400; margin-left: 2px; }
+.duel-how { font-size: 11px; color: var(--sub); text-align: center; line-height: 1.35; }
+@media (max-width: 420px) { .duel-left small { display: none; } }
+.duel-big { margin: 4px 0 14px; padding: 12px 14px; box-shadow: none; }
+.duel-big .duel-head { font-size: 15px; }
+.duel-big .duel-q { white-space: normal; }
+.duel-big .duel-names { font-size: 18px; }
+.duel-big .duel-bar { height: 26px; }
+.duel-big .duel-seg em { font-size: 13px; }
+.duel-big .duel-how { font-size: 12px; }
+.duelpast { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.duelpast .duel { box-shadow: none; }
 .btag.basetag { font-size: 13px; padding: 3px 8px; font-weight: 700; color: #fff; text-decoration: none; cursor: pointer; border: 2px solid rgba(255,255,255,.85); box-shadow: 0 2px 6px rgba(0,0,0,.25); }
 .btag.basetag b { margin-right: 2px; }
 .btag.basetag .bt-n { margin-left: 6px; font-weight: 400; font-size: 11px; opacity: .92; }

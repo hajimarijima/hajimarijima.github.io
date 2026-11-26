@@ -183,7 +183,8 @@ const hintIds = (s) => String(s || '').split(',').map((x) => x.trim()).filter((x
 
 // インスタから読む（ファイルは書かない。テストでにせの fetch を入れて確かめる）
 //   戻り値 { data（inbox に書く中身）, cache（次の覚え書き）, calls（API を呼んだ回数）, stats }
-async function collect({ cfg = {}, env = {}, userId, token, cache = null, now = new Date(), log = console.log, hint = '' } = {}) {
+//   state：data/state.json（対決投票の今のお題を見る。なければ config の最初のお題から）
+async function collect({ cfg = {}, env = {}, userId, token, cache = null, now = new Date(), log = console.log, hint = '', state = null } = {}) {
   const start = apiCalls;
   const t = now.getTime();
   const old = cache && cache.v === 1 ? cache : null;
@@ -205,9 +206,19 @@ async function collect({ cfg = {}, env = {}, userId, token, cache = null, now = 
     try { recent = await list.atLeast(sc.posts); } catch (e) { log('最近の投稿を読めませんでした：' + e.message.slice(0, 120)); }
     if (sc.days > 0) recent = recent.filter((m) => !m.timestamp || t - Date.parse(String(m.timestamp).replace(/([+-]\d{2})(\d{2})$/, '$1:$2')) <= sc.days * 86400e3);
   }
+  // 一週間の対決投票（config.versus）：投票中のお題か、次に始めるお題（URL を貼ったもの）の投稿。tools/versus.js の targetTopic
+  let duel = null;
+  try {
+    const VT = require('./versus').targetTopic(cfg, state);
+    if (VT) {
+      const f = await findMediaIds([VT.postUrl], userId, token, 10, list);
+      if (f.get(VT.postUrl)) { duel = { id: VT.id, media: f.get(VT.postUrl) }; log(`対決投票の投稿：${VT.id}（${VT.postUrl}）→ ID ${duel.media}`); }
+      else log(`対決投票の投稿（${VT.postUrl}）が最近の投稿に見つかりません`);
+    }
+  } catch (e) { log('対決投票の投稿を探せませんでした：' + e.message.slice(0, 120)); }
   const count = new Map(list.items.map((m) => [String(m.id), m.comments_count]));
   // 投票の投稿に書いた「住みたい」も受け付ける（投票のために読むので、API は増えない）
-  const joinIds = [...new Set([...join.map(String), ...recent.map((m) => String(m.id)), ...(vote ? [String(vote)] : [])])];
+  const joinIds = [...new Set([...join.map(String), ...recent.map((m) => String(m.id)), ...(vote ? [String(vote)] : []), ...(duel ? [String(duel.media)] : [])])];
 
   // フォロワー数と町のアカウントの名前（1 回で読む。毎回読んで、サイトのフォロワー数を 15 分ごとに新しくする。読めない時は前の値）
   try {
@@ -232,13 +243,20 @@ async function collect({ cfg = {}, env = {}, userId, token, cache = null, now = 
     voteComments = n === 0 ? [] : (await readPost(String(vote))).filter(notOwner);
     if (n != null) next.media[String(vote)] = n;
   }
+  // 対決投票：その投稿のコメントを毎回ぜんぶ読む（数え直すので）。読めなかった時は入れない（締め切りは読めるまで待つ）
+  let versusComments = null;
+  if (duel) {
+    const n = count.get(String(duel.media));
+    try { versusComments = { id: duel.id, comments: n === 0 ? [] : (await readPost(String(duel.media))).filter(notOwner) }; } catch (e) { log('対決投票のコメントを読めませんでした：' + e.message.slice(0, 120)); }
+    if (n != null) next.media[String(duel.media)] = n;
+  }
   const joinComments = [];
   const seenComment = new Set();
   for (const id of joinIds) {
     const n = count.get(id);
     if (n === 0) { stats.empty++; next.media[id] = 0; continue; } // コメントがない投稿は呼ばない
     const same = !full && !hints.has(id) && n != null && old.media && old.media[id] === n;
-    if (same && id !== String(vote)) { stats.skipped++; next.media[id] = n; continue; }
+    if (same && id !== String(vote) && !(duel && id === String(duel.media))) { stats.skipped++; next.media[id] = n; continue; }
     let cs;
     try { cs = await readPost(id); } catch (e) { log(`投稿 ${id} のコメントを読めませんでした：` + e.message.slice(0, 120)); continue; } // 覚え書きに入れない（次にまた読む）
     stats.read++;
@@ -251,6 +269,7 @@ async function collect({ cfg = {}, env = {}, userId, token, cache = null, now = 
     }
   }
   const data = { fetchedAt: now.toISOString(), followers: next.followers, joinComments, voteComments, scan: { ...stats, full } };
+  if (versusComments) data.versusComments = versusComments;
   if (owner) data.owner = owner;
   return { data, cache: next, calls: apiCalls - start, stats: { ...stats, full } };
 }
@@ -320,7 +339,9 @@ async function main() {
   const useCache = args.includes('--cache');
   let cache = null;
   if (useCache) { try { cache = JSON.parse(fs.readFileSync(CACHE, 'utf8')); } catch (e) { cache = null; } }
-  const r = await collect({ cfg: readConfig(), env: process.env, userId, token, cache, hint: process.env.IG_HINT_MEDIA });
+  let state = null;
+  try { state = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'state.json'), 'utf8')); } catch (e) { state = null; }
+  const r = await collect({ cfg: readConfig(), env: process.env, userId, token, cache, hint: process.env.IG_HINT_MEDIA, state });
   fs.writeFileSync(OUT, JSON.stringify(r.data, null, 1) + '\n');
   if (useCache) fs.writeFileSync(CACHE, JSON.stringify(r.cache) + '\n');
   const s = r.stats;
