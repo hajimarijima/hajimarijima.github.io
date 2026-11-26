@@ -3,6 +3,8 @@
   "account": "@comment_de_sodatsu",
   "profileUrl": "https://www.instagram.com/comment_de_sodatsu/",
   "profileUrlNote": "投票の投稿の URL（votePostUrl）が空の時、投票のボタンはここ（インスタのプロフィール）へ飛ぶ",
+  "liveStatsUrl": "",
+  "liveStatsUrlNote": "フォロワー数を 2〜3 分ごとに新しく出すための、Cloudflare の受け口の URL の後ろに /stats を付けたもの。例 \"https://town-webhook.〇〇.workers.dev/stats\"（docs/すぐ反映する手順.md）。空のあいだは、15 分ごとの受付で書いた数（state.followers）を出す",
   "joinWord": "住みたい",
   "mbtiOn": true,
   "mbtiOnNote": "コメントで MBTI（INFP・ENTJ・INFP-T など）を受け付けて、村人のページとカードに「MBTI：INFP」と出すか。書いた人だけに出る（書いていない人には入れない）。false にすると読まないし出さない。サイトの案内の例（住みたい ピッケル 12/11 りんご INFP）からも INFP が消える",

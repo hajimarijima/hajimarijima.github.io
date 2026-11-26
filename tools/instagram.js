@@ -175,9 +175,9 @@ function scanOpts(cfg) {
   return { posts: num(cfg && cfg.joinScanPosts, 25, 100), days: num(cfg && cfg.joinScanDays, 60, 3650) };
 }
 // 小さな覚え書き（data/inbox/ig_cache.json。公開しない。Actions のキャッシュに置く）：
-//   media: { 投稿の ID: そのとき読んだコメントの数 }、fullAt: 全部読み直した時刻、followers・followersAt・owner、refreshedAt
+//   media: { 投稿の ID: そのとき読んだコメントの数 }、fullAt: 全部読み直した時刻、followers・followersAt・owner（読めない時の代わり）、refreshedAt
 // コメントの数が前と同じ投稿は読まない（もう受け付けた分なので）。6 時間に 1 回は全部読み直す（消して足して同じ数、を拾う）
-const FULL_EVERY = 6 * 3600e3, FOLLOWERS_EVERY = 3600e3, REFRESH_EVERY = 20 * 3600e3;
+const FULL_EVERY = 6 * 3600e3, REFRESH_EVERY = 20 * 3600e3;
 // Webhook から渡される「コメントがついた投稿」の ID（数字だけ・カンマ区切り）
 const hintIds = (s) => String(s || '').split(',').map((x) => x.trim()).filter((x) => /^\d{1,30}$/.test(x)).slice(0, 20);
 
@@ -209,13 +209,12 @@ async function collect({ cfg = {}, env = {}, userId, token, cache = null, now = 
   // 投票の投稿に書いた「住みたい」も受け付ける（投票のために読むので、API は増えない）
   const joinIds = [...new Set([...join.map(String), ...recent.map((m) => String(m.id)), ...(vote ? [String(vote)] : [])])];
 
-  // フォロワー数と町のアカウントの名前（1 回で読む。1 時間は覚えたものを使う）
-  if (!old || !old.owner || !(t - Date.parse(old.followersAt || 0) < FOLLOWERS_EVERY)) {
-    try {
-      const me = await get(`${API}/${userId}?fields=followers_count,username&access_token=${encodeURIComponent(token)}`);
-      next.followers = me.followers_count; next.owner = String(me.username || '').toLowerCase(); next.followersAt = now.toISOString();
-    } catch (e) { log('フォロワー数を読めませんでした：' + e.message.slice(0, 120)); }
-  }
+  // フォロワー数と町のアカウントの名前（1 回で読む。毎回読んで、サイトのフォロワー数を 15 分ごとに新しくする。読めない時は前の値）
+  try {
+    const me = await get(`${API}/${userId}?fields=followers_count,username&access_token=${encodeURIComponent(token)}`);
+    if (typeof me.followers_count === 'number') { next.followers = me.followers_count; next.followersAt = now.toISOString(); }
+    if (me.username) next.owner = String(me.username).toLowerCase();
+  } catch (e) { log('フォロワー数を読めませんでした：' + e.message.slice(0, 120)); }
   const owner = next.owner || '';
   // 町のアカウント自身のコメントは、村人の受付にも投票にも数えない（持ち主は村人にしない）
   const notOwner = (c) => { const u = c.from || {}; return !(String(u.id || '') === String(userId) || (owner && String(u.username || c.username || '').toLowerCase() === owner)); };

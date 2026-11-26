@@ -1,24 +1,30 @@
 // はじまり島：インスタのコメントがついたら、すぐ GitHub Actions の join を動かす受け口（Cloudflare Workers・無料）。
 // 中身の説明と、置き方の手順は docs/すぐ反映する手順.md。
 //
-// することは 2 つだけ（コメントの中身や名前はどこにも書かない・残さない）
+// すること（コメントの中身や名前はどこにも書かない・残さない）
 //   1) Meta の Webhook（comments / live_comments）を受けて、本物か確かめ（X-Hub-Signature-256）、GitHub に「join を動かして」と頼む
-//   2) （おまけ・Webhook が届かない時の代わり）2 分ごとに投稿のコメントの数だけ見て、増えていたら同じく頼む
+//   2) 2 分ごと（Cron）：フォロワー数を読んで KV に置く。GH_DISPATCH_TOKEN があれば、投稿のコメントの数も見て、増えていたら 1) と同じく頼む
+//   3) GET /stats：KV のフォロワー数を {"followers": 123, "at": "…"} で返す（サイト https://hajimarijima.github.io だけ読める・60 秒キャッシュ）
+//   インスタの API は 2) で 2 分に 1 回（コメントの数も見る時は 1 回で両方読む）
 //
 // Worker に入れる Secrets（値は持ち主が Cloudflare の画面で入れる。このファイルには書かない）
 //   META_VERIFY_TOKEN   Meta の Webhook の「認証トークン（Verify Token）」に入れたのと同じ、自分で決めた合言葉
 //   META_APP_SECRET     Meta のアプリの「app secret」（署名の確かめに使う）
 //   IG_APP_SECRET       （任意）インスタのログインのアプリの「Instagram app secret」。どちらで署名されても通す
 //   GH_DISPATCH_TOKEN   GitHub の fine-grained token（このリポジトリだけ・Contents: Read and write）
-//   IG_TOKEN / IG_USER_ID（任意）2) を使う時だけ。GitHub の Secrets と同じ値
+//   IG_TOKEN / IG_USER_ID（任意）2)・3) を使う時だけ。GitHub の Secrets と同じ値
 // Bindings（任意）
-//   TOWN_KV             KV。あると、続けて来たコメントで何度も頼まない（DEBOUNCE_SECONDS 秒に 1 回）。2) には必須
+//   TOWN_KV             KV。あると、続けて来たコメントで何度も頼まない（DEBOUNCE_SECONDS 秒に 1 回）。2)・3) には必須
 // Variables（任意・ふつうは入れなくてよい）
 //   GITHUB_REPO         既定 "hajimarijima/hajimarijima.github.io"
+//   SITE_ORIGIN         /stats を読めるサイト。既定 "https://hajimarijima.github.io"
 //   DEBOUNCE_SECONDS    既定 30
 //   POLL_POSTS          2) で見る最近の投稿の数。既定 10
+//   POLL_COMMENTS       "off" にすると 2) でコメントの数は見ない（フォロワー数だけ）
 
 const DEFAULT_REPO = 'hajimarijima/hajimarijima.github.io';
+const DEFAULT_SITE = 'https://hajimarijima.github.io';
+const STATS_REWRITE = 30 * 60e3; // フォロワー数が同じでも、30 分に 1 回は時刻を書き直す（KV の書きこみは 1 日 1000 回まで）
 const enc = new TextEncoder();
 
 // ---------- 署名 ----------
@@ -93,20 +99,63 @@ async function dispatchSoon(env, media, why) {
 }
 
 // ---------- 2) 2 分ごとに、コメントの数だけ見る（Webhook が届かない時の代わり） ----------
-async function poll(env) {
-  if (!env.IG_TOKEN || !env.IG_USER_ID || !env.TOWN_KV || !env.GH_DISPATCH_TOKEN) return;
+// インスタを読む：フォロワー数と（要る時）最近の投稿のコメントの数。できれば 1 回で（だめなら分けて読む）
+async function readInsta(env, withMedia) {
   const api = /^IG/.test(env.IG_TOKEN) ? 'https://graph.instagram.com/v21.0' : 'https://graph.facebook.com/v21.0';
+  const id = encodeURIComponent(env.IG_USER_ID), tok = encodeURIComponent(env.IG_TOKEN);
   const n = Math.min(50, Math.max(1, Number(env.POLL_POSTS || 10)));
-  const r = await fetch(`${api}/${encodeURIComponent(env.IG_USER_ID)}/media?fields=id,comments_count&limit=${n}&access_token=${encodeURIComponent(env.IG_TOKEN)}`);
-  if (!r.ok) { console.log('インスタを読めませんでした', r.status); return; }
-  const now = {};
-  for (const m of (await r.json()).data || []) now[String(m.id)] = Number(m.comments_count) || 0;
+  const toMap = (list) => { const o = {}; for (const m of list || []) o[String(m.id)] = Number(m.comments_count) || 0; return o; };
+  if (withMedia) {
+    const r = await fetch(`${api}/${id}?fields=followers_count,media.limit(${n}){id,comments_count}&access_token=${tok}`);
+    if (r.ok) { const j = await r.json(); return { followers: j.followers_count, media: toMap(j.media && j.media.data) }; }
+  }
+  const r = await fetch(`${api}/${id}?fields=followers_count&access_token=${tok}`);
+  if (!r.ok) { console.log('インスタを読めませんでした', r.status); return null; }
+  const out = { followers: (await r.json()).followers_count, media: null };
+  if (withMedia) {
+    const m = await fetch(`${api}/${id}/media?fields=id,comments_count&limit=${n}&access_token=${tok}`);
+    if (m.ok) out.media = toMap((await m.json()).data);
+  }
+  return out;
+}
+
+async function poll(env, nowMs = Date.now()) {
+  if (!env.IG_TOKEN || !env.IG_USER_ID || !env.TOWN_KV) return;
+  const withMedia = !!env.GH_DISPATCH_TOKEN && env.POLL_COMMENTS !== 'off';
+  const got = await readInsta(env, withMedia);
+  if (!got) return;
+  // フォロワー数（変わった時か、30 分たった時だけ KV に書く）
+  if (typeof got.followers === 'number') {
+    let st = null;
+    try { st = JSON.parse((await env.TOWN_KV.get('stats')) || 'null'); } catch (e) { st = null; }
+    if (!st || st.followers !== got.followers || !(nowMs - Date.parse(st.at || 0) < STATS_REWRITE)) {
+      await env.TOWN_KV.put('stats', JSON.stringify({ followers: got.followers, at: new Date(nowMs).toISOString() }));
+    }
+  }
+  if (!withMedia || !got.media) return;
+  const now = got.media;
   let before = null;
   try { before = JSON.parse((await env.TOWN_KV.get('counts')) || 'null'); } catch (e) { before = null; }
   const changed = before ? Object.keys(now).filter((id) => before[id] !== undefined ? before[id] !== now[id] : now[id] > 0) : [];
   if (JSON.stringify(before) !== JSON.stringify(now)) await env.TOWN_KV.put('counts', JSON.stringify(now));
   if (changed.length) await dispatchSoon(env, changed, 'poll');
 }
+
+// ---------- 3) GET /stats：サイトがフォロワー数を読む ----------
+async function stats(env) {
+  const headers = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': env.SITE_ORIGIN || DEFAULT_SITE, // このサイトのページからだけ読める
+    Vary: 'Origin',
+    'Cache-Control': 'public, max-age=60',
+  };
+  let st = null;
+  try { st = env.TOWN_KV ? JSON.parse((await env.TOWN_KV.get('stats')) || 'null') : null; } catch (e) { st = null; }
+  if (!st || typeof st.followers !== 'number') return new Response('{}', { status: 404, headers });
+  return new Response(JSON.stringify({ followers: st.followers, at: st.at }), { status: 200, headers });
+}
+
+export { poll, stats };
 
 export default {
   async fetch(request, env, ctx) {
@@ -115,6 +164,7 @@ export default {
     if (request.method === 'GET') {
       const mode = url.searchParams.get('hub.mode'), token = url.searchParams.get('hub.verify_token'), challenge = url.searchParams.get('hub.challenge');
       if (mode === 'subscribe' && env.META_VERIFY_TOKEN && sameText(token || '', env.META_VERIFY_TOKEN)) return new Response(challenge || '', { status: 200, headers: { 'Content-Type': 'text/plain' } });
+      if (!mode && url.pathname === '/stats') return stats(env);
       if (!mode) return new Response('はじまり島の受け口です（動いています）', { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
       return new Response('forbidden', { status: 403 });
     }

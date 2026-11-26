@@ -62,6 +62,13 @@ function chart(timeline) {
 
 loadAll().then(({ state, config }) => {
   document.getElementById('followers').textContent = state.followers.toLocaleString() + ' 人';
+  // config.liveStatsUrl（Cloudflare の受け口の /stats）があれば、2 分ごとに読んだ新しい数に置きかえる。だめなら上の数のまま
+  if (/^https:\/\//.test(String(config.liveStatsUrl || ''))) {
+    fetch(config.liveStatsUrl, { cache: 'no-cache', signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j && Number.isFinite(j.followers) && j.followers >= 0) document.getElementById('followers').textContent = Math.floor(j.followers).toLocaleString() + ' 人'; })
+      .catch(() => {});
+  }
 
   const cur = document.getElementById('current');
   const votes = state.votes || (state.vote ? [state.vote] : []);

@@ -14,6 +14,7 @@
   - `POST`：`X-Hub-Signature-256` を app secret で確かめ、`comments` / `live_comments` の時だけ GitHub に頼む。すぐ `200` を返す。
   - KV（`TOWN_KV`）があれば、`DEBOUNCE_SECONDS`（既定 30 秒）に 1 回だけ頼む。なくても、Actions の順番待ち（`town-join`）が 1 つにまとめる。
   - 2 分ごとの見回り（Cron Trigger・任意）：Webhook が届かない時の代わり。`IG_TOKEN`・`IG_USER_ID`・KV があれば、最近の投稿のコメントの数だけ見て、増えていたら頼む（1 回の見回りでインスタの API 1 回）。
+  - 2 分ごとの見回りは、フォロワー数も読んで KV に置く（コメントの数も見る時は API 1 回で両方）。`GET /stats` が `{"followers":123,"at":"…"}` を返す（`Access-Control-Allow-Origin: https://hajimarijima.github.io`・`Cache-Control: max-age=60`）。サイトは `config.json` の `liveStatsUrl` にこの URL を入れると読む。
 - `wrangler.toml.example`：コマンド（`npx wrangler deploy`）で置く人向けの見本。
 - コメントの中身・名前は、Worker のどこにも残さない（GitHub に渡すのは投稿の ID だけ）。
 

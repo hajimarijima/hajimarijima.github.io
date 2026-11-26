@@ -56,6 +56,10 @@ if (profUpdated) console.log(`コメントのプロフィール：${profUpdated}
 // 「住みたい」で来た人で、誕生日・好きな食べ物がまだない人には、名前から決まった値を足す（ある値は変えない）
 let filled = 0;
 for (const v of S.villagers) if (P.fillJoinProfile(v)) filled++;
+// 名前（またはコメントの「女の子」「男性」）で女性・男性と分かる人は、そう見えるスキンに（プロフィールで選んだ見た目は変えない）
+let fitted = 0;
+for (const v of S.villagers) if (P.fitGenderSkin(v)) fitted++;
+if (fitted) console.log(`スキンを名前に合わせた人：${fitted} 人`);
 
 // その場で町に迎える（前の受付で「次の朝」にしていた人も、今日来たことにする）
 const { added, worldChanged } = W.welcomeNow(S, { now: NOW });
@@ -89,9 +93,15 @@ if (baseWorld) {
   ST.writeLife(DATA, S.life);
   write('history.json', S.history);
 }
+// フォロワー数：受付のたびに新しくする（サイトの数が 15 分ごとに変わる。変わった時だけ state.json を書く＝コミットされる）
+if (inbox && typeof inbox.followers === 'number' && inbox.followers >= 0 && S.state.followers !== inbox.followers) {
+  console.log(`フォロワー ${S.state.followers} → ${inbox.followers} 人`);
+  S.state.followers = inbox.followers;
+  stateChanged = true;
+}
 if (stateChanged) write('state.json', S.state);
 
-const changed = removed || registered || added.length || comments.length || filled || profUpdated;
+const changed = removed || registered || added.length || comments.length || filled || profUpdated || fitted;
 if (removed || registered || added.length || titled.length) {
   write('villagers.json', S.villagers);
   ST.writeLife(DATA, S.life);
