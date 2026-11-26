@@ -18,11 +18,16 @@ const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDa
 const inboxFile = opt('--inbox', path.join(DATA, 'inbox', 'instagram.json'));
 if (!fs.existsSync(inboxFile)) { console.log('コメントのファイルがないので、何もしません'); process.exit(0); }
 const inbox = JSON.parse(fs.readFileSync(inboxFile, 'utf8'));
-if (!inbox.joinComments || !inbox.joinComments.length) { console.log('「住みたい」コメントはありません'); process.exit(0); }
-
 const config = read('config.json');
 const state = read('state.json');
-const villagers = read('villagers.json');
+let villagers = read('villagers.json');
+// 町のアカウントの持ち主は村人にしない（前に入ってしまった分も外す）
+const owners = [inbox.owner, ...((config.joinExclude) || [])].filter(Boolean).map((s) => String(s).toLowerCase());
+const before = villagers.length;
+villagers = villagers.filter((v) => !owners.includes(String(v.name || '').toLowerCase()));
+if (villagers.length !== before) { fs.writeFileSync(path.join(DATA, 'villagers.json'), JSON.stringify(villagers, null, 1) + '\n'); console.log(`持ち主のアカウントを村人から ${before - villagers.length} 人外しました`); }
+if (!inbox.joinComments || !inbox.joinComments.length) { console.log('「住みたい」コメントはありません'); process.exit(0); }
+
 const hidden = P.loadHidden(DATA);
 const day = state.day + 1;
 const date = addDays(state.startDate, day - 1);

@@ -106,9 +106,14 @@ async function main() {
   const vote = (process.env.IG_VOTE_MEDIA || '').trim() || recent[0] || '';
   const data = { fetchedAt: new Date().toISOString() };
   data.followers = await followers(userId, token);
+  // 町のアカウント自身のコメントは、村人の受付にも投票にも数えない（持ち主は村人にしない）
+  const me = await get(`${API}/${userId}?fields=username&access_token=${encodeURIComponent(token)}`).catch(() => ({}));
+  const owner = String(me.username || '').toLowerCase();
+  const notOwner = (c) => { const u = c.from || {}; return !(String(u.id || '') === String(userId) || (owner && String(u.username || c.username || '').toLowerCase() === owner)); };
+  if (owner) data.owner = owner;
   data.joinComments = [];
-  for (const m of join) data.joinComments.push(...(await comments(m, token)));
-  data.voteComments = vote ? await comments(vote, token) : null;
+  for (const m of join) data.joinComments.push(...(await comments(m, token)).filter(notOwner));
+  data.voteComments = vote ? (await comments(vote, token)).filter(notOwner) : null;
   fs.writeFileSync(OUT, JSON.stringify(data, null, 1) + '\n');
   console.log(`フォロワー ${data.followers} 人・登録コメント ${data.joinComments.length} 件・投票コメント ${data.voteComments ? data.voteComments.length : 0} 件を読みました`);
 }

@@ -134,6 +134,9 @@ function stepDay(S) {
       if (v) v._new = true;
     }
   }
+  // 町のアカウントの持ち主は村人にしない（join.js と同じ）
+  const owners = [inbox && inbox.owner, ...(config.joinExclude || [])].filter(Boolean).map((s) => String(s).toLowerCase());
+  for (let i = villagers.length - 1; i >= 0; i--) if (owners.includes(String(villagers[i].name || '').toLowerCase())) { delete life[villagers[i].key]; villagers.splice(i, 1); }
   for (const v of villagers) P.applyPrivacy(v, hidden);
   // 公開しない項目（firestore_sync.js が data/inbox/ に書く）は、書き出さない形で持つ
   for (const v of villagers) if (S.priv && S.priv[v.key]) Object.defineProperty(v, '_priv', { value: S.priv[v.key], enumerable: false, configurable: true });
@@ -939,12 +942,18 @@ function stepDay(S) {
     }
     if (a.action === 'berry') {
       const b = a.b; takenBushes.add(b.id); b.ready = false; b.regrow = 3;
-      give(c, [['berry', q(1, 3, mult.food)], ['flower_r', R.chance(0.08) ? 1 : 0]]);
+      const woolB = world.animals.some((an) => an.kind === 'sheep' && !an.pen) && R.chance(0.35) ? 1 : 0;
+      if (woolB && !c.woolEv) { c.woolEv = 1; c.ev.push({ h, text: `${tm(h)}、しげみの近くで、ヒツジの羊毛が枝にひっかかっているのを拾った。` }); }
+      give(c, [['berry', q(1, 3, mult.food)], ['flower_r', R.chance(0.08) ? 1 : 0], ['wool', woolB]]);
       c.target = c.target || b.id; L.targets.push(b.id);
       return finish('gb:' + b.id, 'light');
     }
     if (a.action === 'guard') { c.guardH = (c.guardH || 0) + 1; return finish('w', 'light'); }
-    give(c, [['berry', q(1, 2, mult.food)], [R.chance(0.5) ? 'flower_r' : 'flower_y', R.chance(0.25) ? 1 : 0], ['seeds', R.int(0, 1)]]);
+    // 野原のヒツジが落とした羊毛を、ときどき拾う（柵がなくてもベッドを作れるように。柵で世話するほうがずっと多くもらえる）
+    const wildSheep = world.animals.some((an) => an.kind === 'sheep' && !an.pen);
+    const wool = wildSheep && R.chance(0.3) ? 1 : 0;
+    if (wool && !c.woolEv) { c.woolEv = 1; c.ev.push({ h, text: `${tm(h)}、野原で、ヒツジの羊毛が草にひっかかっているのを拾った。` }); }
+    give(c, [['berry', q(1, 2, mult.food)], [R.chance(0.5) ? 'flower_r' : 'flower_y', R.chance(0.25) ? 1 : 0], ['seeds', R.int(0, 1)], ['wool', wool]]);
     return finish('g', 'light');
   }
 
