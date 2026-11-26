@@ -33,9 +33,17 @@ function crunch(put, s0, { len, lo, hi, density, gain = 1, decay = 10 }) {
   }
 }
 const jit = () => 0.93 + rnd() * 0.14;
+let digHit = 0;
 // 選んでもらった音（岩の音の候補3 の 6 番＝木を切る、8 番＝作る・建てる）
 const SOUNDS = {
   chop(put, s0) { const j = jit(); impact(put, s0, { modes: stone(520, j), decay: 30, q: 12, gain: 0.7, exc: 0.006 }); thump(put, s0, { f: 100, gain: 0.8, decay: 20 }); },
+  // 岩を掘る「カン」（岩の音の候補7 の 9 番を少し高く）：たたくたびに少しずつ上がる（4 回で 1 回り）
+  dig(put, s0) {
+    const j = 1 + 0.05 * (digHit++ % 4), f = 830;
+    impact(put, s0, { modes: stone(f, j), decay: 20, q: 22, gain: 0.8, exc: 0.003 });
+    thump(put, s0, { f: 120, gain: 0.15 });
+    crunch(put, s0 + 200, { len: 0.06, lo: 1500, hi: 5000, density: 800, gain: 0.15, decay: 35 });
+  },
   build(put, s0) { const j = jit(); impact(put, s0, { modes: stone(520, j), decay: 30, q: 8, gain: 0.8, exc: 0.012 }); thump(put, s0, { f: 120, gain: 0.35 }); },
 };
 module.exports = { SR, rnd, impact, thump, crunch, stone, jit, SOUNDS };

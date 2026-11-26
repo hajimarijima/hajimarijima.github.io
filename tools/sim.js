@@ -153,13 +153,13 @@ function stepDay(S) {
   if (inbox && inbox.joinComments) {
     const enemiesOn = !!(config.enemies && config.enemies.enabled);
     for (const r of P.registrationsFrom(inbox.joinComments, config.joinWord, config.startTools, { enemies: enemiesOn })) {
-      const v = P.upsertVillager(villagers, { igId: r.igId, username: r.username, joined: date, joinedDay: day, source: 'comment', startTool: r.startTool }, hidden);
+      const v = P.upsertVillager(villagers, { igId: r.igId, username: r.username, joined: date, joinedDay: day, source: 'comment', startTool: r.startTool, birthday: r.birthday, food: r.food }, hidden);
       if (v) v._new = true;
     }
   }
   // 町のアカウントの持ち主は村人にしない（join.js と同じ）
   W.removeOwners(S, W.ownerNames(inbox, config));
-  for (const v of villagers) P.applyPrivacy(v, hidden);
+  for (const v of villagers) { P.applyPrivacy(v, hidden); P.fillJoinProfile(v); } // 「住みたい」で来た人の誕生日・好きな食べ物（なければ足す）
   // 公開しない項目（firestore_sync.js が data/inbox/ に書く）は、書き出さない形で持つ
   for (const v of villagers) if (S.priv && S.priv[v.key]) Object.defineProperty(v, '_priv', { value: S.priv[v.key], enumerable: false, configurable: true });
   const active = villagers.filter((v) => v.joinedDay <= day);
@@ -1199,6 +1199,7 @@ function stepDay(S) {
     c.baseLen = c.entry.text.length;
     L.diary.push(c.entry);
   }
+  require('./titles').awardTitles({ config, villagers, life, history }, { day, date }); // 称号（最初に住んだ人。1 回だけ。今日の日記の後ろに書く）
   if (noFood) hist('event', '食べ物が足りなくなった。みんなおなかをすかせている。');
   syncRes();
 

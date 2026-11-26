@@ -59,9 +59,10 @@ function findVillager(villagers, { igId, username }) {
 
 // 村人を足す。もういる人なら名前だけ新しくして null を返す
 // startTool は新しく来た人にだけ入れる（もういる人の道具は、プロフィールでだけ変えられる）
-function upsertVillager(villagers, { igId, username, joined, joinedDay, source, startTool }, hidden) {
+function upsertVillager(villagers, { igId, username, joined, joinedDay, source, startTool, birthday, food }, hidden) {
   const hit = findVillager(villagers, { igId, username });
   if (hit) {
+    if (birthday || food) fillJoinProfile(hit, { birthday, food });
     if (igId && !hit.igId) hit.igId = igHash(igId);
     if (username && userHash(username) !== hit.userHash) { // 名前が変わった
       hit.userHash = userHash(username);
@@ -75,6 +76,7 @@ function upsertVillager(villagers, { igId, username, joined, joinedDay, source, 
   const v = { key, igId: igId ? igHash(igId) : undefined, name: norm(username), userHash: userHash(username), skin: skinFor(key), joined, joinedDay, source };
   if (!v.igId) delete v.igId;
   if (startTool) v.startTool = startTool;
+  fillJoinProfile(v, { birthday, food });
   applyPrivacy(v, hidden);
   villagers.push(v);
   return v;
@@ -110,7 +112,7 @@ const startToolByLabel = (startTools, label) => ((startTools && startTools.optio
 const startToolById = (startTools, id) => ((startTools && startTools.options) || []).find((o) => o.id === id) || null;
 
 function registrationsFrom(comments, word, startTools, opts) {
-  // 古い順に見て、1 人 1 回。最後の名前を使う。道具の言葉は、書いてある最後のものを使う
+  // 古い順に見て、1 人 1 回。最後の名前を使う。道具・誕生日・好きな食べ物の言葉は、書いてある最後のものを使う
   const byUser = new Map();
   for (const c of [...comments].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))) {
     if (!isJoin(c.text, word)) continue;
@@ -121,9 +123,87 @@ function registrationsFrom(comments, word, startTools, opts) {
     const r = { ...u, firstAt: prev ? prev.firstAt : c.timestamp };
     const st = tool || (prev && prev.startTool);
     if (st) r.startTool = st;
+    const bd = parseBirthday(c.text) || (prev && prev.birthday);
+    if (bd) r.birthday = bd;
+    const fd = parseFood(c.text) || (prev && prev.food);
+    if (fd) r.food = fd;
     byUser.set(id, r);
   }
   return [...byUser.values()];
+}
+
+// ---------- 誕生日と好きな食べ物（「住みたい 誕生日3月14日 好きな食べ物りんご」「住みたい 3/14 りんご」） ----------
+// 書いていない人には、名前の印（key）から決まった値を入れる（乱数は使わない。同じ人はいつも同じ）
+const MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const md = (m, d) => (m >= 1 && m <= 12 && d >= 1 && d <= MONTH_DAYS[m - 1] ? String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0') : null);
+// 「3月14日」「3月14」「3/14」「03/14」「3-14」「3.14」「0314」「誕生日は3月14日」「3/14生まれ」（全角の数字・空白のあるなしも）。
+// 「誕生日」「たんじょうび」「誕生日は」はあってもなくてもよい。年は読まない（「2000/3/14」は 3/14）。ありえない日（13/40 など）は読まない。なければ null
+const BDAY_RES = [
+  /(\d{1,2})\s*月\s*(\d{1,2})/g,                         // 3月14日・3月14
+  /(?<![\d.])(\d{1,2})\s*[/.\-]\s*(\d{1,2})(?![\d.])/g,   // 3/14・03/14・3-14・3.14
+  /(?<![\d.\-/])(\d{2})(\d{2})(?![\d.\-/])/g,             // 0314
+];
+function parseBirthday(text) {
+  const t = norm(text);
+  for (const re of BDAY_RES) for (const m of t.matchAll(re)) { const r = md(+m[1], +m[2]); if (r) return r; }
+  return null;
+}
+// 町にある食べ物（config.items の食べ物）と、よく使う言い方。auto: 書いていない人に入れてよい物
+const FOODS = [
+  { name: 'りんご', auto: true, words: ['りんご', 'リンゴ', '林檎', 'アップル'] },
+  { name: '魚', auto: true, words: ['焼き魚', '焼魚', 'お魚', '魚', 'さかな', 'サカナ', '刺身', 'さしみ', 'お寿司', '寿司', '鮭', 'フナ', 'ニジマス', 'ナマズ', '鯉'] },
+  { name: '木の実', auto: true, words: ['木の実', 'きのみ', 'ベリー', 'ナッツ', 'どんぐり', 'くるみ'] },
+  { name: 'にんじん', auto: true, words: ['にんじん', 'ニンジン', '人参', 'キャロット'] },
+  { name: 'じゃがいも', auto: true, words: ['じゃがいも', 'ジャガイモ', 'じゃが芋', 'ポテト'] },
+  { name: 'たまご', auto: true, words: ['たまご', 'タマゴ', '玉子', '卵', '目玉焼き', 'オムレツ'] },
+  { name: 'ミルク', auto: true, words: ['ミルク', '牛乳', 'ぎゅうにゅう'] },
+  { name: 'きのこ', auto: true, words: ['きのこ', 'キノコ', '茸', 'しいたけ', 'マッシュルーム'] },
+  { name: 'パン', words: ['食パン', 'パン', 'トースト'] },
+  { name: '小麦', words: ['小麦', 'こむぎ'] },
+];
+const AUTO_FOODS = FOODS.filter((f) => f.auto).map((f) => f.name);
+// 文の中の、いちばん前に書いてある知っている食べ物（同じ所なら長い言葉）
+function knownFood(s) {
+  const t = norm(s);
+  let best = null, at = Infinity, len = 0;
+  for (const f of FOODS) for (const w of f.words) {
+    const i = t.indexOf(norm(w));
+    if (i >= 0 && (i < at || (i === at && w.length > len))) { best = f.name; at = i; len = w.length; }
+  }
+  return best;
+}
+const FOOD_LABEL = /(?:好きな食べ物|好きなたべもの|すきなたべもの|好きな食べもの|好物|こうぶつ)\s*(?:は|が|:|=)?\s*([^\s、。,.!?「」()]+)/;
+let PF = null; // 悪い言葉の確かめ（js/profile-fields.js）。使う時に読む
+// 好きな食べ物を読む。知っている食べ物はその名前に。「好きな食べ物カレー」のように書いてあれば、短くて安全な言葉はそのまま使う。
+// 「好きな食べ物」と書かずに知らない言葉だけなら読まない（ふつうのあいさつを食べ物にしないため）。なければ null
+function parseFood(text) {
+  const t = norm(text);
+  const m = t.match(FOOD_LABEL);
+  if (m) {
+    const w = m[1].replace(/(です|だよ|かな|が好き|がすき|大好き|だいすき)+$/, '');
+    const k = knownFood(w);
+    if (k) return k;
+    if (!PF) PF = require('../js/profile-fields.js');
+    if (w && Array.from(w).length <= 10 && /^[\p{L}ー・々]+$/u.test(w) && !PF.badWord(w)) return w;
+    return null;
+  }
+  return knownFood(t);
+}
+const autoBirthday = (key) => { const h = hashStr('bday:' + key), m = (h % 12) + 1; return md(m, ((h >>> 5) % (m === 2 ? 28 : MONTH_DAYS[m - 1])) + 1); };
+const autoFood = (key) => AUTO_FOODS[hashStr('food:' + key) % AUTO_FOODS.length];
+// 「住みたい」で来た人（source: comment）に、誕生日と好きな食べ物を入れる（ある物は変えない＝足すだけ）。
+// said：コメントに書いてあった値。今の値がないか自動で入れた値の時だけ、書いてあった値に変える（ログインのプロフィールで入れた値は変えない）
+function fillJoinProfile(v, said = {}) {
+  if (v.source !== 'comment' && !said.birthday && !said.food) return false;
+  let changed = false;
+  const prof = v.profile || {};
+  if (said.birthday && v.birthday !== said.birthday && (!v.birthday || v.birthday === autoBirthday(v.key))) { v.birthday = said.birthday; changed = true; }
+  if (said.food && prof.food !== said.food && (!prof.food || prof.food === autoFood(v.key))) { v.profile = { ...prof, food: said.food }; changed = true; }
+  if (v.source === 'comment') {
+    if (!v.birthday) { v.birthday = autoBirthday(v.key); changed = true; }
+    if (!(v.profile && v.profile.food)) { v.profile = { ...(v.profile || {}), food: autoFood(v.key) }; changed = true; }
+  }
+  return changed;
 }
 
 // 「A」「ａ」「Aがいい」「Ｂ案」などから 1 文字を読む。2 つ以上書いてあれば数えない
@@ -185,4 +265,4 @@ function readFollowerExport(json) {
 // hidden.json に書く印（hmac:...）
 const hiddenEntry = (username) => 'hmac:' + userHash(username);
 
-module.exports = { saltIsDev, hiddenEntry, norm, igHash, userHash, keyFor, nickname, loadHidden, applyPrivacy, findVillager, upsertVillager, registrationsFrom, isJoin, JOIN_WORDS, parseStartTool, startToolByLabel, startToolById, parseChoice, tallyVote, readFollowerExport, commentUser };
+module.exports = { saltIsDev, hiddenEntry, norm, igHash, userHash, keyFor, nickname, loadHidden, applyPrivacy, findVillager, upsertVillager, registrationsFrom, isJoin, JOIN_WORDS, parseStartTool, startToolByLabel, startToolById, parseBirthday, parseFood, FOODS, autoBirthday, autoFood, fillJoinProfile, parseChoice, tallyVote, readFollowerExport, commentUser };

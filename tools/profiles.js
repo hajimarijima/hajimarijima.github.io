@@ -58,6 +58,7 @@ function applyProfiles(villagers, pubDocs, privDocs, fields, { day = null, start
       }
       else prof[f.id] = ok[f.id];
     }
+    if (prof.food === undefined && v.profile && v.profile.food) prof.food = v.profile.food; // 「住みたい」のコメントで書いた（または自動で入った）好きな食べ物は残す
     v.profile = prof;
     report.updated.push(key);
   }

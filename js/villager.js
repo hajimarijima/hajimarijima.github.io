@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeCharacter, animate, setTool, setAccent, chibiOf } from './character.js';
 import { initAuth } from './auth.js';
-import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, JOB, ACTION, RES, fmtDate, homeName, buildingLabel, showError, KIND, KIND_COLOR, MBTI, LETTER, mdText, villagerUrl, faceCanvas, emptyNote, lookDataUrl, loadImage, drawFigure, gaugeHtml, loadDiary } from './common.js';
+import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, JOB, ACTION, RES, fmtDate, homeName, buildingLabel, showError, KIND, KIND_COLOR, MBTI, LETTER, mdText, villagerUrl, faceCanvas, emptyNote, lookDataUrl, loadImage, drawFigure, gaugeHtml, loadDiary, titlesOf, titleBadges } from './common.js';
 import { BODIES, BODY_LABEL } from './skingen.js';
 import { decodeHours, parseCode, hourOf, hourText } from './hours.js';
 import { heldOf } from './invslots.js';
@@ -39,8 +39,13 @@ async function main() {
   const ps = document.getElementById('profsec');
   if (ps) ps.hidden = !(D.config.ui && D.config.ui.profileSection);
   document.getElementById('name').textContent = v.display;
+  // 称号のバッジ（名前のすぐ下。説明もそえる）
+  const tl = titlesOf(v, D.config), nameEl = document.getElementById('name');
+  if (tl.length) { const box = document.createElement('div'); box.className = 'titles'; box.innerHTML = titleBadges(v, D.config) + `<small class="muted">${tl.map((t) => esc(t.desc || '')).join('／')}</small>`; nameEl.after(box); }
   document.getElementById('info').innerHTML = [
     ['参加した日', `${fmtDate(v.joined)}（${v.joinedDay}日目）`],
+    // 誕生日・好きな食べ物（「住みたい 誕生日3月14日 りんご」で書いた値。書いていない人は島が決めた値）。プロフィールの欄を出す時はそちらに出る
+    ...(ps && !ps.hidden ? [] : [...(v.birthday ? [['誕生日', mdText(v.birthday)]] : []), ...(v.profile && v.profile.food ? [['好きな食べ物', v.profile.food]] : [])]),
     ['今の仕事', `${JOB[L.job] || 'まだなし'}${L.action ? '（' + ACTION[L.action] + '）' : ''}`],
     ...hourRows(L),
     ['住んでいる家', homeName(L, D.world, D.config)],

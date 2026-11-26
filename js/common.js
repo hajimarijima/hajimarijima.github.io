@@ -78,6 +78,9 @@ export function startNote(state, config) {
 export const joinText = (config) => `フォローして、インスタの投稿に「${(config && config.joinWord) || '住みたい'}」とコメントすると、すぐ町に住めます（15 分ほどで入居）。`;
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// 称号（v.titles の id → config.titles.list の名前と説明）。バッジの HTML（説明は title 属性）
+export const titlesOf = (v, config) => ((v && v.titles) || []).map((id) => ((config && config.titles && config.titles.list) || []).find((t) => t.id === id)).filter(Boolean);
+export const titleBadges = (v, config) => titlesOf(v, config).map((t) => `<span class="titlebadge" title="${esc(t.desc || '')}">${esc(t.icon || '★')} ${esc(t.name)}</span>`).join('');
 export const skinUrl = (n) => 'skins/skin_' + String(n).padStart(3, '0') + '.png';
 // 村人のスキンの画像：プロフィールで見た目を決めた人（v.look = { body, seed }）はその場で作る。ほかは番号の画像
 const lookCache = {};

@@ -10,6 +10,13 @@
   "source": "comment",
   "startTool": "pickaxe",
   "hidden": false,
-  "display": "ryusei01040505"
+  "display": "ryusei01040505",
+  "birthday": "07-19",
+  "profile": {
+   "food": "ミルク"
+  },
+  "titles": [
+   "first_villager"
+  ]
  }
 ]

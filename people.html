@@ -28,7 +28,7 @@
   <div class="people" id="list"></div>
 </main>
 <script type="module">
-import { loadAll, nav, esc, villagerUrl, JOB, faceCanvas, showError, emptyNote, gaugeHtml, loadDiary } from './js/common.js';
+import { loadAll, nav, esc, villagerUrl, JOB, faceCanvas, showError, emptyNote, gaugeHtml, loadDiary, titleBadges } from './js/common.js';
 import { searchVillagers, findExact, igUrl, normQ } from './js/search.js';
 import { hourOf, hourText } from './js/hours.js';
 import { slotsHtml, heldOf } from './js/invslots.js';
@@ -48,7 +48,7 @@ function setupSearch(D) {
     const today = diary.filter((d) => d.day === D.state.day).pop() || diary[diary.length - 1];
     const ig = igUrl(v);
     const el = document.createElement('article'); el.className = 'card vres';
-    el.innerHTML = `<div class="vhead"><span class="vface"></span><div><h2>${esc(v.display)}</h2>` +
+    el.innerHTML = `<div class="vhead"><span class="vface"></span><div><h2>${esc(v.display)}</h2>${titleBadges(v, D.config)}` +
       `<small class="muted">${v.body === 'chibi' ? '2 頭身' : '通常の体'}・${esc(o ? o.job + '（木の' + o.label + '）' : JOB[L.job] || 'まだ仕事なし')}</small></div></div>` +
       `<dl class="info vinfo">` +
       `<dt>レベル</dt><dd>Lv${L.level || 1}・持ち物の枠 ${L.slots || IC.base || 3}/${IC.max || 9}</dd>` +
@@ -110,7 +110,7 @@ loadAll().then(async (D) => {
       if (me !== run) return; // 途中でページを変えた
       a.append(face);
       const s = document.createElement('span');
-      s.innerHTML = `<b>${esc(v.display)}</b><small>${esc(JOB[L.job] || '')}・${v.joinedDay}日目から</small>`;
+      s.innerHTML = `<b>${esc(v.display)}</b>${titleBadges(v, D.config)}<small>${esc(JOB[L.job] || '')}・${v.joinedDay}日目から</small>`;
       a.append(s); box.append(a);
     }
     pager.innerHTML = pages > 1 ? `<button class="btn" data-d="-1" ${page ? '' : 'disabled'}>前へ</button><span>${page + 1} / ${pages} ページ</span><button class="btn" data-d="1" ${page < pages - 1 ? '' : 'disabled'}>次へ</button>` : '';

@@ -82,6 +82,12 @@ h2 { font-size: 17px; margin: 22px 0 10px; }
 .nametag.hiddenname { background: rgba(60,52,80,.62); }
 .btag { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(255,250,235,.85); color: #4a3a20; white-space: nowrap; pointer-events: none; border: 1px solid rgba(0,0,0,.1); }
 .btag.new { background: #ffe08a; font-weight: 700; }
+.titlebadge { display: inline-block; font-size: 11px; line-height: 1.5; padding: 0 7px; margin: 2px 4px 2px 0; border-radius: 999px; background: #f6d77a; color: #5a3d00; border: 1px solid #d9b247; font-weight: 700; white-space: nowrap; vertical-align: middle; }
+.titles { margin: -4px 0 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.titles .titlebadge { font-size: 13px; padding: 1px 10px; }
+.person .titlebadge { display: block; width: max-content; margin: 1px 0; }
+.nametag .tstar { color: #ffd34d; margin-left: 2px; font-size: 9px; }
+.btag.sleeptag { background: rgba(44,52,96,.82); color: #e8ecff; font-size: 10px; border-color: rgba(255,255,255,.25); }
 
 /* 村人カード（地図の上） */
 .vcard {

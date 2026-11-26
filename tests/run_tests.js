@@ -1677,4 +1677,161 @@ t('りんごの木：切ると原木（＋なっていたりんご）。実の�
   assert.strictEqual(HR.CODE_ACTION.ga, 'apple'); assert.ok(HR.WORK.has('apple')); assert.ok(HR.hourText({ action: 'apple' }).includes('りんご'));
 });
 
+// ---------- 「住みたい」の誕生日・好きな食べ物、ベッドの大きさと家の中のベッド ----------
+t('住みたい：誕生日の読み取り（いろいろな書き方・全角・空白・「誕生日」のあるなし・道具や食べ物といっしょ）', () => {
+  const forms = ['3/14', '03/14', '3-14', '3.14', '3月14日', '３月１４日', '3月14', '0314', '誕生日3/14', '誕生日は3月14日', '3/14生まれ', '3月14日生まれ',
+    '３／１４', '０３１４', '3 / 14', '3 月 14 日', 'たんじょうび3/14', 'たんじょうびは 3.14', '誕生日 0314', '誕生日は ３月１４日', '2000/3/14'];
+  for (const f of forms) for (const s of [f, '住みたい ' + f, '住みたい ピッケル ' + f + ' りんご', '住みたい 好きな食べ物魚 ' + f + ' 釣り', f + ' 住みたい 斧']) assert.strictEqual(P.parseBirthday(s), '03-14', s);
+  const ok1 = { '住みたい ピッケル 誕生日12月25日 魚': '12-25', '住みたい 12-03': '12-03', '住みたい 誕生日は0229': '02-29', '住みたい 誕生日 7.7': '07-07', '住みたい 1/5生まれ': '01-05' };
+  for (const [k, v] of Object.entries(ok1)) assert.strictEqual(P.parseBirthday(k), v, k);
+  // ありえない日・書いていない時は読まない
+  for (const k of ['住みたい', '住みたい ピッケル', '住みたい りんご', '13/40', '住みたい 13/40', '住みたい 2月30日', '住みたい 13/1', '住みたい 0/5', '住みたい 1340', '住みたい 4月31日', '住みたい 3.14.15']) assert.strictEqual(P.parseBirthday(k), null, k);
+  // 道具と食べ物もいっしょに読める
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  for (const s of ['住みたい ピッケル 3/14 りんご', '住みたい 0314 ピッケル りんご', '住みたい りんご 誕生日は3月14日 ピッケル']) {
+    assert.strictEqual(P.parseStartTool(s, cfg.startTools), 'pickaxe', s); assert.strictEqual(P.parseFood(s), 'りんご', s); assert.strictEqual(P.parseBirthday(s), '03-14', s);
+  }
+});
+t('住みたい：好きな食べ物の読み取り（町の食べ物・言いかえ・書いた言葉）', () => {
+  const ok1 = { '住みたい 誕生日3月14日 好きな食べ物りんご': 'りんご', '住みたい 3/14 リンゴ': 'りんご', '住みたい ピッケル 誕生日12月25日 魚': '魚', '住みたい 釣り 刺身すき': '魚', '住みたい ベリー': '木の実', '住みたい 好物は卵焼き': 'たまご', '住みたい 好きな食べ物はカレーです': 'カレー', '住みたい 好きな食べ物：ﾗｰﾒﾝ': 'ラーメン', '住みたい パン': 'パン' };
+  for (const [k, v] of Object.entries(ok1)) assert.strictEqual(P.parseFood(k), v, k);
+  // 書いていない・知らない言葉だけ・悪い言葉・長すぎは読まない（自動の食べ物になる）
+  for (const k of ['住みたい', '住みたい ピッケル', '住みたい よろしく', '住みたいですし', 'クリスマスに住みたい', '住みたい 好きな食べ物 バーカ', '住みたい 好きな食べ物 あいうえおかきくけこさしす', '住みたい 好きな食べ物 http://x.example']) assert.strictEqual(P.parseFood(k), null, k);
+});
+t('住みたい：道具・誕生日・食べ物をいっしょに書ける（あとのコメントが勝つ・書いていない物は前のまま）', () => {
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const cm = (id, text, ts) => ({ from: { id, username: 'u' + id }, text, timestamp: ts });
+  const regs = P.registrationsFrom([
+    cm('1', '住みたい ピッケル 誕生日12月25日 魚', '2026-11-01T00:00:00Z'),
+    cm('2', '住みたい 3/14 りんご', '2026-11-01T00:00:00Z'),
+    cm('2', '住みたい 釣り', '2026-11-02T00:00:00Z'),
+    cm('3', '住みたい', '2026-11-01T00:00:00Z'),
+  ], '住みたい', cfg.startTools);
+  const by = Object.fromEntries(regs.map((r) => [r.igId, r]));
+  assert.deepStrictEqual([by['1'].startTool, by['1'].birthday, by['1'].food], ['pickaxe', '12-25', '魚']);
+  assert.deepStrictEqual([by['2'].startTool, by['2'].birthday, by['2'].food], ['fishing_rod', '03-14', 'りんご']);
+  assert.ok(!by['3'].birthday && !by['3'].food && !by['3'].startTool);
+});
+t('住みたい：何も書いていない人には、名前から決まった誕生日と町の食べ物（同じ人はいつも同じ・ある値は変えない）', () => {
+  const mk = () => { const vs = []; P.upsertVillager(vs, { igId: '55', username: 'kaze', joinedDay: 0, source: 'comment' }, new Set()); return vs[0]; };
+  const a = mk(), b = mk();
+  assert.ok(/^\d{2}-\d{2}$/.test(a.birthday) && a.birthday === b.birthday, '同じ人は同じ誕生日');
+  assert.ok(a.profile.food && a.profile.food === b.profile.food, '同じ人は同じ食べ物');
+  assert.ok(P.FOODS.some((f) => f.auto && f.name === a.profile.food), '町にある食べ物');
+  // いろいろな人：ありえる日・ばらける
+  const days = new Set(), foods = new Set();
+  for (let i = 0; i < 60; i++) { const k = 'k' + i, bd = P.autoBirthday(k), [m, d] = bd.split('-').map(Number); assert.ok(m >= 1 && m <= 12 && d >= 1 && d <= 31 && !(m === 2 && d > 28), bd); days.add(bd); foods.add(P.autoFood(k)); }
+  assert.ok(days.size > 30 && foods.size >= 5);
+  // コメントに書いてあればそれを使う
+  const vs = []; const v = P.upsertVillager(vs, { igId: '56', username: 'mizu', joinedDay: 0, source: 'comment', birthday: '03-14', food: 'カレー' }, new Set());
+  assert.deepStrictEqual([v.birthday, v.profile.food], ['03-14', 'カレー']);
+  // 足すだけ：前からいる人（ryusei01040505 の形）に足す。もう一度でも変わらない。ログインで入れた値は変えない
+  const old = { key: '51dd020030', source: 'comment', startTool: 'pickaxe', display: 'x' };
+  assert.strictEqual(P.fillJoinProfile(old), true);
+  const snap = JSON.stringify(old);
+  assert.strictEqual(P.fillJoinProfile(old), false); assert.strictEqual(JSON.stringify(old), snap);
+  // あとから誕生日を書いたら、自動の値から書いた値へ。ログインで入れた値（自動と違う値）は、コメントで変えない
+  const g = { key: 'g1', source: 'comment', birthday: '01-01', profile: { food: 'うどん' } };
+  P.fillJoinProfile(g, { birthday: '05-05', food: 'りんご' });
+  assert.deepStrictEqual([g.birthday, g.profile.food], ['01-01', 'うどん']);
+  const au = { key: 'g2', source: 'comment' }; P.fillJoinProfile(au); P.fillJoinProfile(au, { birthday: '05-05', food: 'りんご' });
+  assert.deepStrictEqual([au.birthday, au.profile.food], ['05-05', 'りんご']);
+  // フォロワー一覧から来た人（コメントでない）には入れない
+  const fv = []; P.upsertVillager(fv, { username: 'follow_only', joinedDay: 1 }, new Set());
+  assert.ok(!fv[0].birthday && !fv[0].profile);
+  // ログインのプロフィールで食べ物を書かなくても、前の食べ物は消えない
+  const pv = [{ key: 'p1', source: 'comment', profile: { food: 'りんご' } }];
+  PR.applyProfiles(pv, { p1: { color: '#112233' } }, {}, FIELDS);
+  assert.deepStrictEqual(pv[0].profile, { color: '#112233', food: 'りんご' });
+});
+t('住みたい：join.js で入った人に誕生日・食べ物が入り、前からいる人にも足される', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-bday-'));
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  cfg.startAt = null;
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
+  const env = { ...process.env, TOWN_DATA: dir };
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+  node('tools/init.js', '--seed', 'bd', '--start', '2026-11-01');
+  // 前からいる人（誕生日・食べ物なし）
+  fs.writeFileSync(path.join(dir, 'villagers.json'), JSON.stringify([{ key: '51dd020030', igId: P.igHash('8000'), name: 'old_one', userHash: P.userHash('old_one'), skin: 1, joined: '2026-11-26', joinedDay: 0, source: 'comment', startTool: 'pickaxe' }]));
+  fs.mkdirSync(path.join(dir, 'inbox'));
+  const cm = (id, u, text) => ({ from: { id, username: u }, text, timestamp: '2026-11-27T01:00:00Z' });
+  fs.writeFileSync(path.join(dir, 'inbox', 'instagram.json'), JSON.stringify({ joinComments: [cm('8001', 'a_san', '住みたい 誕生日3月14日 好きな食べ物りんご'), cm('8002', 'b_san', '住みたい ピッケル 誕生日12月25日 魚'), cm('8003', 'c_san', '住みたい')] }));
+  node('tools/join.js', '--now', '2026-11-27T10:00:00+09:00');
+  const vs = JSON.parse(fs.readFileSync(path.join(dir, 'villagers.json'), 'utf8'));
+  const by = Object.fromEntries(vs.map((v) => [v.name, v]));
+  assert.deepStrictEqual([by.a_san.birthday, by.a_san.profile.food], ['03-14', 'りんご']);
+  assert.deepStrictEqual([by.b_san.birthday, by.b_san.profile.food, by.b_san.startTool], ['12-25', '魚', 'pickaxe']);
+  assert.deepStrictEqual([by.c_san.birthday, by.c_san.profile.food], [P.autoBirthday(by.c_san.key), P.autoFood(by.c_san.key)]);
+  assert.deepStrictEqual([by.old_one.birthday, by.old_one.profile.food, by.old_one.startTool], [P.autoBirthday('51dd020030'), P.autoFood('51dd020030'), 'pickaxe'], '前からいる人にも足す');
+  // 称号：いちばん最初に住んだ人（old_one）だけに「はじまりの村人」。歴史と日記に 1 回だけ
+  const titleCheck = () => {
+    const vs2 = JSON.parse(fs.readFileSync(path.join(dir, 'villagers.json'), 'utf8'));
+    assert.deepStrictEqual(vs2.filter((v) => (v.titles || []).length).map((v) => [v.name, v.titles]), [['old_one', ['first_villager']]]);
+    const h = JSON.parse(fs.readFileSync(path.join(dir, 'history.json'), 'utf8')).filter((x) => x.type === 'title');
+    assert.strictEqual(h.length, 1); assert.strictEqual(h[0].text, 'old_one に称号『はじまりの村人』がおくられた。');
+    const dy = STORE.readLife(dir)['51dd020030'].diary;
+    assert.strictEqual(dy.filter((e) => e.text.includes('称号「はじまりの村人」をもらった')).length, 1, '本人の日記に 1 回');
+  };
+  titleCheck();
+  node('tools/join.js', '--now', '2026-11-27T10:15:00+09:00'); titleCheck(); // もう一度動かしても増えない
+  node('tools/sim.js', '--days', '2'); titleCheck(); // 日が進んでも、ほかの人にはおくらない
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+t('称号：config の一覧・最初に住んだ 1 人だけ（来た順）・すでにおくった称号はおくらない', () => {
+  const TT = require('../tools/titles');
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const first = cfg.titles.list.find((x) => x.id === 'first_villager');
+  assert.ok(cfg.titles.note && first && first.name === 'はじまりの村人' && first.desc === 'はじまり島に最初に住んだ人' && first.auto === 'first');
+  const mk = () => ({ config: cfg, villagers: [{ key: 'b', display: 'B', joinedDay: 1, joined: '2026-11-02' }, { key: 'a', display: 'A', joinedDay: 0, joined: '2026-11-26' }, { key: 'c', display: 'C', joinedDay: 0, joined: '2026-11-26' }, { key: 'w', display: 'W', joinedDay: 5 }], life: { a: { diary: [{ day: 1, date: 'x', text: 'きょう。' }] }, b: { diary: [] }, c: { diary: [] } }, history: [] });
+  const S = mk();
+  const r = TT.awardTitles(S, { day: 1, date: 'x' });
+  assert.deepStrictEqual(r.map((x) => x.v.key), ['a'], '0 日目に来た人のうち、先に来た人');
+  assert.deepStrictEqual(S.villagers.find((v) => v.key === 'a').titles, ['first_villager']);
+  assert.strictEqual(S.life.a.diary.length, 1); assert.ok(S.life.a.diary[0].text.endsWith('称号「はじまりの村人」をもらった（はじまり島に最初に住んだ人）。'), '今日の日記の後ろ');
+  assert.strictEqual(TT.awardTitles(S, { day: 2, date: 'y' }).length, 0, '2 回目はない');
+  // 持っていた人が町を出ても、ほかの人にはおくらない
+  S.villagers.splice(1, 1); assert.strictEqual(TT.awardTitles(S, { day: 3, date: 'z' }).length, 0);
+  // ページの表示（common.js の titleBadges）は説明を title 属性に入れ、文字はエスケープ
+  const src = fs.readFileSync(path.join(ROOT, 'js/common.js'), 'utf8');
+  assert.ok(/export const titleBadges/.test(src) && /esc\(t\.name\)/.test(src));
+  assert.ok(/titleBadges\(v, D\.config\)/.test(fs.readFileSync(path.join(ROOT, 'people.html'), 'utf8')), '住人一覧にバッジ');
+  assert.ok(/titleBadges\(v, D\.config\)/.test(fs.readFileSync(path.join(ROOT, 'js/villager.js'), 'utf8')), '村人ページにバッジ');
+});
+t('ベッド：前より小さい（はば・高さ 75%、長さ 80%）。寝る人の頭はまくら側の板の内側', () => {
+  const BD = require('../js/beds.js');
+  assert.ok(Math.abs(BD.BED.w - 1.9 * 0.75) < 1e-9 && Math.abs(BD.BED.l - 3.8 * 1.0) < 1e-9 && BD.BED.h < 0.6);
+  for (const chibi of [false, true]) for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+    const bed = { cx: 10, cz: -4, yaw };
+    const s = BD.sleeperOnBed(bed, chibi), len = chibi ? BD.BODY_LEN.chibi : BD.BODY_LEN.normal;
+    // 頭のてっぺん＝足から yaw の反対へ体の長さ。まくら側の板（中心から -l/2）より内側で、まくらの上
+    const hx = s.x - Math.sin(yaw) * len, hz = s.z - Math.cos(yaw) * len;
+    const along = (hx - bed.cx) * Math.sin(yaw) + (hz - bed.cz) * Math.cos(yaw);
+    assert.ok(along > -BD.BED.l / 2 + 0.12 && along < -BD.BED.l / 2 + 0.5, '頭はまくら側の板のすぐ内側 ' + along);
+  }
+  // 部品はベッドの大きさの中
+  for (const [w, h, d, x, y, z] of BD.bedParts()) assert.ok(Math.abs(x) + w / 2 <= BD.BED.w / 2 + 1e-9 && Math.abs(z) + d / 2 <= BD.BED.l / 2 + 1e-9);
+});
+t('ベッド：家ができたら家の中（床の中に並べる）。家がないうちはテントのそば（town.js）', () => {
+  const BD = require('../js/beds.js');
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const look = cfg.buildings.house.look;
+  for (const rot of [0, Math.PI / 2, Math.PI, 0.6]) {
+    const b = { id: 'h1', type: 'house', x: 20, z: 8, rot };
+    for (let slot = 0; slot < 4; slot++) {
+      const bd = BD.bedInHouse(b, look, slot);
+      assert.ok(bd.inside, '家の中');
+      for (const c of BD.bedCorners(bd)) assert.ok(BD.insideHouse(c, b, look, 0.05), `ベッドの角が家の壁の中 rot=${rot} slot=${slot}`);
+    }
+    // 2 人目は 1 人目と重ならない（横に並ぶ）
+    const a0 = BD.bedInHouse(b, look, 0), a1 = BD.bedInHouse(b, look, 1);
+    assert.ok(Math.hypot(a0.cx - a1.cx, a0.cz - a1.cz) >= BD.BED.w);
+  }
+  const src = fs.readFileSync(path.join(ROOT, 'js/town.js'), 'utf8');
+  assert.ok(/if \(p\.homeB\) \{[\s\S]{0,200}bedInHouse\(p\.homeB/.test(src), '家があれば家の中のベッド');
+  assert.ok(/p\.bedAt\.inside \? \{ x: p\.home\.x/.test(src), '家の中のベッドで寝る人は外から見えない（家の扉まで歩いて入る）');
+  assert.ok(/filter\(\(p\) => !p\.bedAt\.inside\)/.test(src), '家の中のベッドは描かない');
+  assert.ok(/Zz 寝ている/.test(src), '家の上に「寝ている」の札');
+});
+
 console.log(`\nぜんぶ通りました（${ok} 件）`);

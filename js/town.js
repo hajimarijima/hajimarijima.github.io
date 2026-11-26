@@ -20,6 +20,7 @@ let IS_VIDEO = false;
 import { makeTerrain, BLOCK } from './terrain_gen.js';
 import { makeTerrainView } from './terrain.js';
 import { SpatialHash, TILE } from './tilemap.js';
+import { BED, bedParts, sleeperOnBed, bedInHouse } from './beds.js';
 import { islandAt, isOpen, randomLand, radiusAt, onLand, MAIN } from './island.js';
 import { makeClouds } from './clouds.js';
 import { seededRng, fightNight, roundsOf } from './combat.js';
@@ -517,7 +518,8 @@ async function main() {
     return c.length ? c[hash(key + 'tree') % c.length] : null;
   }
   function sleepSpot(p, a) {
-    if (a.place === 'bed' && p.bedAt) return { ...p.bedAt, inside: false, bed: true };
+    // 家の中のベッド：家の扉まで歩いて入る（外からは見えない。家の上に「寝ている」の札）。家の外のベッドは、その上で横になる
+    if (a.place === 'bed' && p.bedAt) return p.bedAt.inside ? { x: p.home.x, z: p.home.z, yaw: 0, inside: true, bed: true, inBed: p.bedAt } : { ...p.bedAt, inside: false, bed: true };
     if (a.place === 'tree') {
       // 幹にせなかをあずけて座る（幹と反対を向く）。幹は四角（はば 1.3 × 木の大きさ）なので、平らな面に背中をつける
       // 1 本の木には、肩が当たらない 向かい合わせの 2 面まで。いっぱいなら 近くの別の木へ
@@ -571,16 +573,17 @@ async function main() {
     }
     return { x: p.home.x, z: p.home.z, yaw: 0, inside: false };
   }
-  // ベッドは家（なければテント）の入口の横に置く。頭の側が家を向く
-  // マイクラのベッドの形：はば 1 マス・長さ 2 マス（1 マス＝1 ブロック＝1.9）。高さは 9/16 ブロックより少し低め
-  const BED = { w: TILE, l: 2 * TILE, h: 0.6 };
+  // ベッドはマイクラのベッドの形（はば 1 マス・長さ 2 マス）を少し小さくしたもの（大きさは js/beds.js の BED）
   const placedBeds = [], bedTiles = new Set();
-  // ベッドの置き場所：家があれば家の中。なければ自分のテントのすぐ横の、たき火・広場と反対の側。
-  // 広場をかこむ道・たき火・ほかのテントやベッド・建物にかからない所を、近い順に探す
-  function bedSpot(p) {
+  // ベッドの置き場所：家があれば家の中（住む順に横に並べる。家は外から中が見えないので描かない）。
+  // なければ自分のテントのすぐ横の、たき火・広場と反対の側。広場をかこむ道・たき火・ほかのテントやベッド・建物にかからない所を、近い順に探す
+  function bedSpot(p, slot = 0) {
     let cx, cz, yaw;
     if (p.homeB) {
-      yaw = (p.homeB.rot || 0) + Math.PI; cx = p.homeB.x; cz = p.homeB.z;
+      const look = config.buildings[p.homeB.type].look || {};
+      const bd = bedInHouse(p.homeB, look, slot);
+      placedBeds.push({ x: bd.cx, z: bd.cz });
+      return { ...sleeperOnBed(bd, chibiOf(p.v)), cx: bd.cx, cz: bd.cz, inside: true };
     } else {
       // マス目にそって置く：まくらのマスと足のマスの 2 マス。向きは 4 つ（東西南北）だけ
       const t = tentAt[p.v.key] || { x: p.home.x, z: p.home.z };
@@ -607,12 +610,6 @@ async function main() {
       if (!best) return null; // 置ける所がない（地面で寝る形のまま）
       ({ cx, cz, yaw } = best);
     }
-    if (p.homeB) { // 家の中も、マス目にそろえる
-      yaw = Math.round(yaw / (Math.PI / 2)) * (Math.PI / 2);
-      const ux = Math.round(Math.sin(yaw)), uz = Math.round(Math.cos(yaw));
-      cx = ux ? Math.round(cx / TILE) * TILE : (Math.floor(cx / TILE) + 0.5) * TILE;
-      cz = uz ? Math.round(cz / TILE) * TILE : (Math.floor(cz / TILE) + 0.5) * TILE;
-    }
     // ベッドの 2 マスは、ほかの人が入れない所になる（持ち主だけ入って寝る）
     for (const s of [-0.5, 0.5]) {
       const x = cx + Math.sin(yaw) * TILE * s, z = cz + Math.cos(yaw) * TILE * s;
@@ -620,24 +617,37 @@ async function main() {
       const o = { x, z, r: 0.95, owner: p.v.key }; solids.push(o); walls.push({ x, z, r: o.r + 0.8 }); if (solidIx) solidIx.set(o, x, z, o);
     }
     placedBeds.push({ x: cx, z: cz });
-    // 村人の足の位置（ベッドの足もと）。頭はまくらの側（向きの反対）
-    return { x: cx + Math.sin(yaw) * (BED.l / 2 - 0.25), z: cz + Math.cos(yaw) * (BED.l / 2 - 0.25), yaw, cx, cz };
+    // 村人の足の位置。頭はまくらの側（向きの反対）で、まくら側の板のすぐ内側
+    return { ...sleeperOnBed({ cx, cz, yaw }, chibiOf(p.v)), cx, cz };
   }
-  // ベッドは 4 つの部品をまとめて描く（人が多くても軽い）
+  // ベッドは 4 つの部品をまとめて描く（人が多くても軽い）。家の中のベッドは見えないので描かない
   function makeBeds(list) {
+    list = list.filter((p) => !p.bedAt.inside);
     if (!list.length) return;
-    const parts = [
-      [new THREE.BoxGeometry(BED.w, 0.32, BED.l).translate(0, 0.26, 0), 0xa87040],
-      [new THREE.BoxGeometry(BED.w - 0.08, 0.16, BED.l * 0.7).translate(0, 0.5, BED.l * 0.14), 0xcc3c3c],
-      [new THREE.BoxGeometry(BED.w * 0.72, 0.18, 0.7).translate(0, 0.5, -BED.l / 2 + 0.6), 0xf2efe6],
-      [new THREE.BoxGeometry(BED.w, 1.1, 0.16).translate(0, 0.55, -BED.l / 2 + 0.08), 0x6e4524],
-    ];
+    const parts = bedParts().map(([w, h, d, x, y, z, col]) => [new THREE.BoxGeometry(w, h, d).translate(x, y, z), col]);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1);
     for (const [g, col] of parts) {
       const im = new THREE.InstancedMesh(g, mat(col), list.length);
       list.forEach((p, k) => { q.setFromAxisAngle(up, p.bedAt.yaw); m4.compose(new THREE.Vector3(p.bedAt.cx, 0, p.bedAt.cz), q, one); im.setMatrixAt(k, m4); });
       im.castShadow = !LITE; im.receiveShadow = true; scene.add(im);
     }
+  }
+  // 家の中で寝ている人がいる家の上に「寝ている」の札（家は外から中が見えないので、札で分かるようにする）
+  const sleepTags = new Map();
+  function updateSleepTags() {
+    const n = new Map();
+    for (const p of people) if (p.mode === 'sleep' && p.sleepAt && p.sleepAt.inside && p.homeB) n.set(p.homeB.id, (n.get(p.homeB.id) || 0) + 1);
+    for (const [id, c] of n) {
+      let t = sleepTags.get(id);
+      if (!t) {
+        const b = objById[id], el = document.createElement('div'); el.className = 'btag sleeptag';
+        const obj = new CSS2DObject(el); obj.position.set(b.x, ((config.buildings[b.type].look || {}).h || 2) + 0.9, b.z); scene.add(obj);
+        t = { el, obj }; sleepTags.set(id, t);
+      }
+      t.el.textContent = c > 1 ? `Zz ${c} 人が寝ている` : 'Zz 寝ている';
+      t.obj.visible = true; t.el.style.display = '';
+    }
+    for (const [id, t] of sleepTags) if (!n.has(id)) { t.obj.visible = false; t.el.style.display = 'none'; }
   }
   // 仕事のあとの時間の場所（人と時刻から決まる。おしゃべりは 2 人で同じ場所を出して向かい合う）
   const FREE_ACT = new Set(['walk', 'chat', 'view', 'water', 'pet', 'help']);
@@ -734,12 +744,13 @@ async function main() {
     else { p.phase = act === 'carry' ? 2 : 0; p.ri = 0; p.t = 0; setupMine(p); }
   }
   // ベッドは、人の立つ所を決める前に みんなの分を先に置く（あとから置いたベッドが人の立つ所に重ならないように）
-  const bedFor = {};
+  const bedFor = {}, bedSlot = {};
   for (const v of active) {
     const L = life[v.key] || {};
     if (!L.bed) continue;
     const homeB = L.home && objById[L.home];
-    bedFor[v.key] = bedSpot({ v, homeB, home: tentPos[v.key] || { x: camp.x, z: camp.z + 2 } });
+    const slot = homeB ? (bedSlot[homeB.id] = (bedSlot[homeB.id] ?? -1) + 1) : 0; // 同じ家の人は横に並べる
+    bedFor[v.key] = bedSpot({ v, homeB, home: tentPos[v.key] || { x: camp.x, z: camp.z + 2 } }, slot);
   }
   active.forEach((v, i) => {
     const L = life[v.key] || {};
@@ -752,6 +763,7 @@ async function main() {
     tagEl.className = 'nametag' + (v.hidden ? ' hiddenname' : '');
     // 名前札：かくしていない人は @ユーザー名、かくしている人はあだ名（?video=1 の時は config.nameTags.video に従う）
     tagEl.textContent = tagName(v, { video: IS_VIDEO, cfg: config });
+    if ((v.titles || []).length && !IS_VIDEO) { const st = document.createElement('span'); st.className = 'tstar'; st.textContent = '★'; st.title = '称号あり'; tagEl.append(st); } // 称号のある人は名札に小さな★
     tagEl.style.pointerEvents = 'auto';
     tagEl.addEventListener('click', (e) => { e.stopPropagation(); openCard(v); });
     const label = new CSS2DObject(tagEl);
@@ -1601,6 +1613,7 @@ async function main() {
       if (!p.ch.visible) p.bubble.hidden = true; // 家の中で寝ている人の札は出さない（CSS2D は親が見えなくても出るため）
       p.label.style.fontSize = dd > 70 * VIEW_K ? '10px' : '11px';
     }
+    if ((frame & 7) === 0) updateSleepTags();
     // 名前の札が重ならないように、近い人から置いて、ぶつかる札は上へずらす（それでも無理なら隠す）
     if ((frame++ & 3) === 0) {
       // 画面の上の実際の札の位置で調べる（ずらした分はもどして考える）

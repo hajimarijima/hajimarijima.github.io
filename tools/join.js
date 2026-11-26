@@ -44,13 +44,19 @@ let registered = 0;
 const comments = (inbox && inbox.joinComments) || [];
 for (const r of P.registrationsFrom(comments, config.joinWord, config.startTools, { enemies })) {
   if (owners.includes(String(r.username || '').toLowerCase())) continue;
-  const v = P.upsertVillager(S.villagers, { igId: r.igId, username: r.username, joined: date, joinedDay: day, source: 'comment', startTool: r.startTool }, hidden);
+  const v = P.upsertVillager(S.villagers, { igId: r.igId, username: r.username, joined: date, joinedDay: day, source: 'comment', startTool: r.startTool, birthday: r.birthday, food: r.food }, hidden);
   if (v) registered++;
 }
 for (const v of S.villagers) P.applyPrivacy(v, hidden);
+// 「住みたい」で来た人で、誕生日・好きな食べ物がまだない人には、名前から決まった値を足す（ある値は変えない）
+let filled = 0;
+for (const v of S.villagers) if (P.fillJoinProfile(v)) filled++;
 
 // その場で町に迎える（前の受付で「次の朝」にしていた人も、今日来たことにする）
 const { added, worldChanged } = W.welcomeNow(S, { now: NOW });
+// 称号：いちばん最初に島に住んだ人に「はじまりの村人」（1 回だけ。tools/titles.js）
+const titled = require('./titles').awardTitles(S, { day, date });
+for (const x of titled) console.log(`${x.v.display} に称号『${x.title.name}』`);
 
 // 拠点の場所の投票（0 日目）：コメントの票をその場で数え直す（町の画面と投票のページに出す）。
 //   config の baseVote.until を過ぎていたら、ここで締めて拠点を決める（決めていなければ 1 日目にする朝の sim.js で決まる）
@@ -80,8 +86,8 @@ if (baseWorld) {
 }
 if (stateChanged) write('state.json', S.state);
 
-const changed = removed || registered || added.length || comments.length;
-if (removed || registered || added.length) {
+const changed = removed || registered || added.length || comments.length || filled;
+if (removed || registered || added.length || titled.length) {
   write('villagers.json', S.villagers);
   ST.writeLife(DATA, S.life);
   write('history.json', S.history);
