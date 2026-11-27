@@ -46,7 +46,7 @@ export async function loadDiary(key, L) {
 
 export function nav(current) {
   // [ページ, 名前]。NAV_ICON はそのアイコン（js/icons.js）。PC は上の帯、スマホの幅は右上のメニューボタン（js/menu.js・css/style.css）
-  const items = [['index.html', '町'], ['history.html', '年表'], ['vote.html', '投票'], ['people.html', '村人'], ['relations.html', '関係'], ['fish.html', '釣り'], ['badges.html', 'バッジ'], ['play.html', '遊ぶ'], ['me.html', '自分の村人']];
+  const items = [['index.html', '町'], ['history.html', '年表'], ['vote.html', '投票'], ['people.html', '村人'],['fish.html', '釣り'], ['badges.html', 'バッジ'], ['play.html', '遊ぶ'], ['me.html', '自分の村人']];
   const NAV_ICON = { 'index.html': 'house', 'history.html': 'calendar-days', 'vote.html': 'vote', 'people.html': 'users', 'relations.html': 'share-2', 'fish.html': 'fish', 'badges.html': 'award', 'play.html': 'gamepad-2', 'me.html': 'circle-user' };
   // DM で届いた専用のリンク（?me=印）で来た時は、最初の案内のシートを出さない（js/joinsheet.js）。印の保存と「自分の村人」の名前・顔は js/mine.js
   if (/[?&]me=/.test(location.search)) { try { localStorage.setItem('town.joinSeen', '1'); } catch (e) { /* 覚えられなくてもよい */ } }
