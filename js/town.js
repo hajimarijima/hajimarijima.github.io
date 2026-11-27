@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { makeCharacter, animate, setTool as setTool0, setCarry as setCarry0, setAccent, setShield as setShield0, setArmor, fishCycle, chibiOf } from './character.js';
 import { armorLook, gearNames } from './smithing.js'; // 鍛冶職人が作った防具と、カードの「装備」
+import { kitLook } from './workshop.js'; // 持ち物で作った防具（かんむり・よろい・すねあて・くつ）
 // 姿をまだ作っていない人（遠くの人）には、道具や荷物を持たせない（作った時に、その時の物を持たせる）
 // ?chibi=1：2 頭身の見本の体型で試す（採用前。ふだんは今の体型）
 const setTool = (ch, k) => { if (ch.userData.parts) setTool0(ch, k); };
@@ -1354,7 +1355,7 @@ async function main() {
   function buildModel(p) {
     const v = p.v, m = makeCharacter(skinSrc(v), { scale: 1, slim: skinSlim(v), chibi: chibiOf(v) });
     if (v.profile && v.profile.color) setAccent(m, v.profile.color);
-    setArmor(m, armorLook((life[v.key] || {}).gear, config.smithing)); // 鍛冶職人が作った防具（帽子・服・くつ。顔と髪は見える）
+    setArmor(m, { ...armorLook((life[v.key] || {}).gear, config.smithing), ...kitLook(life[v.key]) }); // 鍛冶職人が作った防具（帽子・服・くつ。顔と髪は見える）
     Object.assign(p.ch.userData, m.userData);
     p.ch.userData.smooth = true; // 動きの切りかわりをなめらかに（character.js の animate）
     p.ch.add(m); p.model = m;
@@ -2413,8 +2414,9 @@ async function main() {
       p.label.style.fontSize = dd > 70 * VIEW_K ? '10px' : '11px';
     }
     if ((frame & 7) === 0) updateSleepTags();
-    // 名前の札が重ならないように、近い人から置いて、ぶつかる札は上へずらす（それでも無理なら隠す）
-    if ((frame++ & 3) === 0) {
+    // 名前の札の重なりよけは止めた（人が動くたびに札がずれたり消えたりしてチカチカするため。重なってもよい）
+    frame++;
+    if (false) {
       // 画面の上の実際の札の位置で調べる（ずらした分はもどして考える）
       const tags = [];
       for (const p of people) {

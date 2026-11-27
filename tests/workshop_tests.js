@@ -257,49 +257,49 @@ module.exports = function workshopTests({ at, t, ROOT }) {
     const L = { slots: 6, inv: [{ item: 'iron', n: 12 }, { item: 'leather', n: 3 }, null, null, null, null] };
     let r = WS.applyOp(C, L, { t: 'armor', part: 'chest', mat: 'iron', holes: 3, aid: 'arm01' });
     assert.ok(r.ok, r.why); assert.strictEqual(WS.countOf(L.inv, 'iron'), 12 - G.parts.chest.n, '鉄を使う');
-    assert.strictEqual(L.gear.on.chest, 'arm01', '空いていればすぐつける'); assert.strictEqual(L.gear.armor[0].st.length, 3);
+    assert.strictEqual(L.kit.on.chest, 'arm01', '空いていればすぐつける'); assert.strictEqual(L.kit.armor[0].st.length, 3);
     assert.ok(!WS.applyOp(C, L, { t: 'armor', part: 'head', mat: 'leather', holes: 4, aid: 'arm02' }).ok, '穴は 0〜3');
     assert.match(WS.applyOp(C, L, { t: 'armor', part: 'chest', mat: 'leather', holes: 0, aid: 'arm03' }).why, /材料が足りない/);
     assert.ok(WS.applyOp(C, L, { t: 'armor', part: 'chest', mat: 'iron', holes: 1, aid: 'arm04' }).ok);
-    assert.strictEqual(L.gear.on.chest, 'arm01', 'もうつけていれば、つけかえない');
-    assert.ok(WS.applyOp(C, L, { t: 'wear', armor: 'arm04' }).ok && L.gear.on.chest === 'arm04');
+    assert.strictEqual(L.kit.on.chest, 'arm01', 'もうつけていれば、つけかえない');
+    assert.ok(WS.applyOp(C, L, { t: 'wear', armor: 'arm04' }).ok && L.kit.on.chest === 'arm04');
     assert.ok(WS.applyOp(C, L, { t: 'wear', armor: 'arm01' }).ok);
     // 見つけた石（宝箱・宝探し・釣り）
     const st = (id, f, m, c = 'common') => ({ id, c, f, m });
     r = WS.applyOp(C, L, { t: 'gain', items: [], src: 'fish', stones: [st('s0001', 'life', [['walk', 3], ['shard', 10]]), st('s0002', 'life', [['walk', 2]]), st('s0003', 'life', [['fish', 4]])] });
-    assert.ok(r.ok, r.why); assert.strictEqual(L.gear.stones.length, 3);
+    assert.ok(r.ok, r.why); assert.strictEqual(L.kit.stones.length, 3);
     assert.ok(!WS.applyOp(C, L, { t: 'gain', items: [], stones: [st('s0009', 'atk', [['atk', 99]])] }).ok, '変な石は入れない');
     for (const [i, id] of ['s0001', 's0002', 's0003'].entries()) assert.ok(WS.applyOp(C, L, { t: 'socket', armor: 'arm01', hole: i, stone: id }).ok);
     assert.ok(!WS.applyOp(C, L, { t: 'socket', armor: 'arm01', hole: 3, stone: 's0001' }).ok, 'ない穴');
-    let S = WS.gearStats(C, L.gear);
+    let S = WS.gearStats(C, L.kit);
     assert.strictEqual(S.sets.life, 1, 'くらしの石 3 つでセット効果');
     assert.strictEqual(S.sum.walk, 3 + 2 + G.sets.life.find((x) => x[0] === 'walk')[1]);
     assert.strictEqual(S.def, WS.armorDef(C, 'chest', 'iron'));
     assert.ok(WS.gearBoost(S, 'walk') > 1 && WS.gearBoost({ sum: { walk: 999 } }, 'walk') <= 1.3, '歩く速さは上限つき');
     // 外す → 砕く（かけら。くらしの「かけら」で少し増える）
-    assert.ok(WS.applyOp(C, L, { t: 'unsocket', armor: 'arm01', hole: 2 }).ok); assert.strictEqual(L.gear.stones.length, 1);
+    assert.ok(WS.applyOp(C, L, { t: 'unsocket', armor: 'arm01', hole: 2 }).ok); assert.strictEqual(L.kit.stones.length, 1);
     assert.ok(!WS.applyOp(C, L, { t: 'crush', stone: 's0001' }).ok, 'はめている石は砕けない');
     r = WS.applyOp(C, L, { t: 'crush', stone: 's0003' }); assert.ok(r.ok);
-    assert.strictEqual(L.gear.shards + L.gear.sf, 1 * (1 + 10 / 100), 'かけらの端数も持っておく');
+    assert.strictEqual(L.kit.shards + L.kit.sf, 1 * (1 + 10 / 100), 'かけらの端数も持っておく');
     // 振り直し：10 個でぜんぶ・15 個で 1 つ残す
     assert.match(WS.applyOp(C, L, { t: 'reroll', stone: 's0001', mods: [['xp', 5], ['dig', 3]] }).why, /かけらが足りない/);
-    L.gear.shards = 30;
+    L.kit.shards = 30;
     assert.ok(!WS.applyOp(C, L, { t: 'reroll', stone: 's0001', mods: [['xp', 5]] }).ok, '数はそのまま');
-    assert.ok(WS.applyOp(C, L, { t: 'reroll', stone: 's0001', mods: [['xp', 5], ['dig', 3]] }).ok); assert.strictEqual(L.gear.shards, 20);
+    assert.ok(WS.applyOp(C, L, { t: 'reroll', stone: 's0001', mods: [['xp', 5], ['dig', 3]] }).ok); assert.strictEqual(L.kit.shards, 20);
     assert.ok(!WS.applyOp(C, L, { t: 'reroll', stone: 's0001', lock: 'xp', mods: [['xp', 6], ['fish', 3]] }).ok, '固定したモッドは値もそのまま');
-    assert.ok(WS.applyOp(C, L, { t: 'reroll', stone: 's0001', lock: 'xp', mods: [['xp', 5], ['fish', 3]] }).ok); assert.strictEqual(L.gear.shards, 5);
+    assert.ok(WS.applyOp(C, L, { t: 'reroll', stone: 's0001', lock: 'xp', mods: [['xp', 5], ['fish', 3]] }).ok); assert.strictEqual(L.kit.shards, 5);
     const s1 = { id: 'zz001', c: 'rare', f: 'atk', m: [['atk', 3], ['crit', 2], ['boss', 4]] };
     for (let i = 0; i < 200; i++) { const m = WS.rerollMods(C, s1, 'crit', Math.random); assert.strictEqual(m.length, 3); assert.ok(m.some((x) => x[0] === 'crit' && x[1] === 2)); assert.strictEqual(new Set(m.map((x) => x[0])).size, 3); }
     // 手放す：石は持ち物へもどる
-    assert.ok(WS.applyOp(C, L, { t: 'scrap', armor: 'arm01' }).ok); assert.ok(!L.gear.on.chest && L.gear.stones.length === 2);
+    assert.ok(WS.applyOp(C, L, { t: 'scrap', armor: 'arm01' }).ok); assert.ok(!L.kit.on.chest && L.kit.stones.length === 2);
     // 宝箱から石。石がいっぱいならかけらに（なくさない）
-    const L2 = { slots: 3, inv: [{ item: 'treasure_box', n: 1 }, null, null], gear: { stones: Array.from({ length: G.maxStones }, (_, i) => st('f' + String(i).padStart(4, '0'), 'def', [['hp', 2]])), shards: 0 } };
+    const L2 = { slots: 3, inv: [{ item: 'treasure_box', n: 1 }, null, null], kit: { stones: Array.from({ length: G.maxStones }, (_, i) => st('f' + String(i).padStart(4, '0'), 'def', [['hp', 2]])), shards: 0 } };
     assert.ok(WS.applyOp(C, L2, { t: 'open', got: ['log', 6], tier: 'common', stone: st('new01', 'atk', [['atk', 2]], 'epic') }).ok);
-    assert.strictEqual(L2.gear.stones.length, G.maxStones); assert.strictEqual(L2.gear.shards, G.shards.epic);
+    assert.strictEqual(L2.kit.stones.length, G.maxStones); assert.strictEqual(L2.kit.shards, G.shards.epic);
     // 見本の確かめ：simulate は元の gear を変えない
-    const L3 = { slots: 3, inv: [{ item: 'leather', n: 9 }, null, null], gear: { stones: [], shards: 0 } };
+    const L3 = { slots: 3, inv: [{ item: 'leather', n: 9 }, null, null], kit: { stones: [], shards: 0 } };
     WS.simulate(C, L3, [], [{ t: 'armor', part: 'head', mat: 'leather', holes: 2, aid: 'arm09' }]);
-    assert.strictEqual(L3.gear.armor, undefined);
+    assert.strictEqual(L3.kit.armor, undefined);
   });
 
   at('防具とストーン：受け口が穴の数・新しいモッド・見つける石を決める・はめるのは 1 日の回数に数えない・pull と毎日の更新', async () => {
@@ -307,7 +307,7 @@ module.exports = function workshopTests({ at, t, ROOT }) {
     W._resetSiteConfig(); W._resetSiteFiles();
     const store = new Map();
     const kv = { get: async (k) => (store.has(k) ? store.get(k) : null), put: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); }, list: async ({ prefix }) => ({ keys: [...store.keys()].filter((k) => k.startsWith(prefix)).map((name) => ({ name })), list_complete: true }) };
-    const life = { amy: { level: 1, badges: {}, slots: 6, inv: [{ item: 'gold', n: 9 }, { item: 'treasure_box', n: 2 }, null, null, null, null], gear: { stones: [{ id: 'aa001', c: 'rare', f: 'life', m: [['walk', 4], ['dig', 3]] }], shards: 25 } } };
+    const life = { amy: { level: 1, badges: {}, slots: 6, inv: [{ item: 'gold', n: 9 }, { item: 'treasure_box', n: 2 }, null, null, null, null], kit: { stones: [{ id: 'aa001', c: 'rare', f: 'life', m: [['walk', 4], ['dig', 3]] }], shards: 25 } } };
     const realFetch = globalThis.fetch;
     globalThis.fetch = async (url) => {
       const u = String(url);
@@ -325,16 +325,16 @@ module.exports = function workshopTests({ at, t, ROOT }) {
       let r = await call('/shop/do', tk, { t: 'armor', part: 'head', mat: 'gold', holes: 0 });
       assert.strictEqual(r.status, 200, r.j && r.j.why);
       assert.strictEqual(r.j.op.holes, 3, '穴の数は受け口が決める（画面の holes は使わない）');
-      const aid = r.j.op.aid; assert.ok(r.j.gear.on.head === aid && r.j.gear.armor[0].st.length === 3);
+      const aid = r.j.op.aid; assert.ok(r.j.kit.on.head === aid && r.j.kit.armor[0].st.length === 3);
       r = await call('/shop/do', tk, { t: 'socket', armor: aid, hole: 1, stone: 'aa001' }); assert.strictEqual(r.status, 200, r.j && r.j.why);
       assert.strictEqual(r.j.left, 19, 'はめるのは回数に数えない');
       r = await call('/shop/do', tk, { t: 'reroll', stone: 'aa001', lock: 'walk', mods: [['walk', 99], ['dig', 99]] }); assert.strictEqual(r.status, 200, r.j && r.j.why);
-      const ns = r.j.gear.armor[0].st[1]; assert.ok(ns.m.some((x) => x[0] === 'walk' && x[1] === 4), '固定したモッドは残る'); assert.ok(ns.m.every((x) => x[1] < 99), '新しいモッドは受け口が決める');
-      assert.strictEqual(r.j.gear.shards, 10);
+      const ns = r.j.kit.armor[0].st[1]; assert.ok(ns.m.some((x) => x[0] === 'walk' && x[1] === 4), '固定したモッドは残る'); assert.ok(ns.m.every((x) => x[1] < 99), '新しいモッドは受け口が決める');
+      assert.strictEqual(r.j.kit.shards, 10);
       // 宝箱から石（_rnd：段・中身・石の見こみ・石の中身）
       rv = [0.1, 0.1, 0.01, 0.1, 0.5, 0.1, 0.4, 0.4];
       r = await call('/box/open', tk, {}); assert.strictEqual(r.status, 200, r.j && r.j.why);
-      assert.ok(r.j.op.stone && W.stoneOk(cfg(), r.j.op.stone), '宝箱からストーン'); assert.strictEqual(r.j.gear.stones.length, 1);
+      assert.ok(r.j.op.stone && W.stoneOk(cfg(), r.j.op.stone), '宝箱からストーン'); assert.strictEqual(r.j.kit.stones.length, 1);
       // 釣りで石
       const fk = cfg().fishing.seaFish[0][0];
       rv = [0.99, 0.001, 0.2, 0.2, 0.9, 0.3];
@@ -348,7 +348,7 @@ module.exports = function workshopTests({ at, t, ROOT }) {
       const WSK = require(path.join(ROOT, 'tools', 'workshop.js'));
       const Sx = { config: cfg(), villagers: [{ key: 'amy', display: 'エイミー', joinedDay: 1 }], state: { store: {} }, life: { amy: { ...JSON.parse(JSON.stringify(life.amy)), diary: [{ day: 3, text: '' }] } } };
       WSK.stepWorkshop(Sx, { day: 3, date: d, play: c, hist: () => {}, now: Date.now() });
-      const g = Sx.life.amy.gear;
+      const g = Sx.life.amy.kit;
       assert.ok(Object.values(Sx.workshop.results).every((x) => x.ok), JSON.stringify(Sx.workshop.results));
       assert.strictEqual(g.armor.length, 1); assert.strictEqual(g.stones.length, 2); assert.strictEqual(g.shards, 10);
       assert.match(Sx.life.amy.diary[0].text, /金のかんむりを作った（穴 3 個）/);

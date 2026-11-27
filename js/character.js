@@ -371,12 +371,19 @@ function armorFaceTex(tier, color, w, h, face) {
       k = 0.94 + r * 0.14;
       if (edge) k = 0.62;
       else if ((x === 1 || x === w - 2 || y === 1 || y === h - 2) && (x + y) % 2 === 0) k = 1.22;
+    } else if (tier === 'chain') {
+      // 鎖：小さな輪が並ぶ（明るい輪と、すき間の暗い点が交互）。上と左は光、下と右は影
+      k = (x + y) % 2 === 0 ? 1.08 : 0.68;
+      if (y % 2 === 1 && x % 2 === 1) k = 0.55;
+      if (y === 0 || x === 0) k *= 1.1;
+      if (y === h - 1 || x === w - 1) k *= 0.75;
     } else {
-      // 鉄の明暗：上と左は光、下と右は影、すじ、四すみに鋲
+      // 鉄・金・ダイヤの明暗：上と左は光、下と右は影、すじ、四すみに鋲（金とダイヤは光の筋を足す）
       k = 0.97 + r * 0.06 + (x % 3 === 0 ? -0.05 : 0);
       if (y === 0 || x === 0) k = 1.16;
       if (y === h - 1 || x === w - 1) k = 0.7;
       if (w > 3 && h > 3 && (x === 1 || x === w - 2) && (y === 1 || y === h - 2)) k = 0.6;
+      if ((tier === 'gold' || tier === 'diamond') && x > 0 && y > 0 && x + y === Math.round((w + h) / 3)) k = 1.28;
     }
     put(x, y, k);
   }
@@ -394,10 +401,12 @@ function armorMats(tier, color, w, h, d) {
   const mats = dims.map(([a, b], i) => { const map = armorFaceTex(tier, color, R(a), R(b), i); return map ? new THREE.MeshLambertMaterial({ map }) : new THREE.MeshLambertMaterial({ color }); });
   return (armorMatCache[key] = mats);
 }
+// かんむりの宝石（素材ごと。js/../tools/gen_gear_icons.js のアイコンと同じ色）
+const GEM_MAT = { leather: new THREE.MeshLambertMaterial({ color: 0x3f8fe6 }), chain: new THREE.MeshLambertMaterial({ color: 0x4cc35a }), iron: new THREE.MeshLambertMaterial({ color: 0x3f8fe6 }), gold: new THREE.MeshLambertMaterial({ color: 0xe0303a }), diamond: new THREE.MeshLambertMaterial({ color: 0xf4f1ff, emissive: 0x334455 }) };
 const armorPart = (look) => { const [tier, c] = String(look).split('#'); return { tier: tier || 'wool', color: '#' + (c || 'e6dcc4') }; };
 export function setArmor(ch, look) {
   const P = ch.userData.parts;
-  const key = look ? ['head', 'body', 'feet'].map((k) => look[k] || '').join('|') : '';
+  const key = look ? ['head', 'body', 'legs', 'feet', 'crown'].map((k) => look[k] || '').join('|') : '';
   if (P.armorKey === key) return;
   for (const m of P.armor || []) m.parent && m.parent.remove(m);
   P.armor = []; P.armorKey = key; P.armorBody = !!(look && look.body);
@@ -405,7 +414,18 @@ export function setArmor(ch, look) {
   for (const t of P.tails || []) t.position.z = (P.armorBody ? TAIL_Z_ARMOR : TAIL_Z) * (t.userData.back ? -1 : 1) * PX; // ツインテールの房は防具の外へ
   if (!look) return;
   const add = (parent, A, w, h, d, x, y, z) => { const m = box(w * PX, h * PX, d * PX, armorMats(A.tier, A.color, w, h, d), x * PX, y * PX, z * PX); parent.add(m); P.armor.push(m); };
-  if (look.head) {
+  if (look.head && look.crown) {
+    // かんむり（持ち物で作る防具）：頭を包まず、頭のてっぺんのまわりに輪（帽子の層 ±4.5 の外）と、上へとがった先・正面の宝石。
+    //   輪の下は 7.2（前髪の上 1px だけにかかる）なので、顔と髪は見える
+    const A = armorPart(look.head), W = 0.7, R = (ch.userData.chibi ? 4.2 : 4.5) + W / 2 + 0.02, y0 = 8.05, hb = 1.7; // 2 頭身は帽子の層が ±4.2（浮かないように合わせる）
+    add(P.head, A, 2 * R + W, hb, W, 0, y0, R); add(P.head, A, 2 * R + W, hb, W, 0, y0, -R); // 前・うしろ
+    add(P.head, A, W, hb, 2 * R - W - 0.04, R, y0, 0); add(P.head, A, W, hb, 2 * R - W - 0.04, -R, y0, 0); // 左右（前後の板の内側に入れて角が重ならない）
+    const ty = y0 + hb / 2 + 0.75; // 先（四すみと、前後左右のまん中）
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(P.head, A, W + 0.02, 1.5, W + 0.02, sx * R, ty, sz * R);
+    for (const [x, z, w, d] of [[0, R, 1.4, W], [0, -R, 1.4, W], [R, 0, W, 1.4], [-R, 0, W, 1.4]]) add(P.head, A, w, 2.1, d, x, ty + 0.3, z);
+    const gm = GEM_MAT[A.tier] || GEM_MAT.iron;
+    for (const x of [-2.6, 0, 2.6]) { const g = box(1 * PX, 0.9 * PX, 0.3 * PX, gm, x * PX, y0 * PX, (R + W / 2 + 0.15) * PX); P.head.add(g); P.armor.push(g); }
+  } else if (look.head) {
     // 頭（0〜8px、スキンの帽子の層は 8.5 まで）のてっぺん側だけ：上 1.5px と、前に少し出たつば
     const A = armorPart(look.head);
     add(P.head, A, 9.4, 1.5, 9.4, 0, 8.55, 0);
@@ -432,6 +452,11 @@ export function setArmor(ch, look) {
       const out = Math.sign(arm.position.x) || 1;
       add(arm, A, aw + 0.75, 5.6, 5.8, out * 0.375, -2.2, 0);
     }
+  }
+  if (look.legs) {
+    // すねあて（持ち物で作る防具）：脚の上（付け根〜くつの上 6.5px）を 0.5 ふくらませた層。くつ（-6.6 から下）とは重ならない
+    const A = armorPart(look.legs);
+    [P.rleg, P.lleg].forEach((leg, i) => add(leg, A, 5.0 + i * 0.08, 6.4, 5.0 + i * 0.08, 0, -3.3, 0));
   }
   if (look.feet) {
     // 足とすねの下（脚 4×12×4 の下 5.4px）を 0.6 ふくらませた層。底は地面の高さ

@@ -24,7 +24,7 @@ export function makeBag({ root, store, config, L, guest, mode, onChange }) {
     render();
   }
   const counts = () => invCounts(S ? S.inv : []);
-  const tryOp = (op) => { if (!S) return { ok: false, why: '読みこみ中' }; const T = { ...L, inv: S.inv.map((s) => (s ? { ...s } : null)), slots: S.slots, gear: S.gear || null }; return applyOp(config, T, op, null); };
+  const tryOp = (op) => { if (!S) return { ok: false, why: '読みこみ中' }; const T = { ...L, inv: S.inv.map((s) => (s ? { ...s } : null)), slots: S.slots, kit: S.kit || null }; return applyOp(config, T, op, null); };
 
   function render() {
     if (!S) { root.innerHTML = `<h2>${icon('backpack', { size: 20 })}<span>持ち物</span></h2><p class="muted">${esc(msg || '読みこんでいます…')}</p>`; return; }

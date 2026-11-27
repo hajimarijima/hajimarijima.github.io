@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeCharacter, animate, setTool, setAccent, setArmor, chibiOf } from './character.js';
 import { armorLook, gearNames } from './smithing.js';
+import { kitLook } from './workshop.js';
 import { initAuth } from './auth.js';
 import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, JOB, ACTION, RES, fmtDate, homeName, buildingLabel, showError, KIND, KIND_COLOR, MBTI, LETTER, mdText, villagerUrl, faceCanvas, emptyNote, lookDataUrl, loadImage, drawFigure, gaugeHtml, loadDiary, badgeList, badgeIcon, bestFishText, mbtiText } from './common.js';
 import { BODIES, BODY_LABEL } from './skingen.js';
@@ -123,7 +124,9 @@ async function main() {
   const ch = makeCharacter(skinSrc(v), { scale: 1, slim: skinSlim(v), chibi: chibiOf(v) });
   scene.add(ch);
   if (v.profile && v.profile.color) setAccent(ch, v.profile.color);
-  setArmor(ch, armorLook(L.gear, D.config.smithing)); // 鍛冶職人が作った防具（帽子・服・くつ）
+  const kl = kitLook(L); // 持ち物で作った防具（かんむり・よろい・すねあて・くつ）
+  setArmor(ch, { ...armorLook(L.gear, D.config.smithing), ...kl }); // 鍛冶職人が作った防具（帽子・服・くつ）
+  if (kl.crown) { controls.target.y = 1.12; camera.position.set(1.75, 1.8, 3.95); } // かんむりの先が上で切れないように少し引く
   let tool = { level: 'hoe', chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', tend: 'hoe', berry: 'basket', apple: 'basket', harvest: 'basket', forage: 'basket', fish: 'rod', ranch: 'basket', smith: 'hammer' }[L.action];
   if (tool && ['axe', 'pick', 'hoe', 'rod'].includes(tool)) tool += ':' + (L.toolTier && L.toolTier !== 'hand' ? L.toolTier : 'wood'); // 道具の素材で色と形を変える
   setTool(ch, tool || null);

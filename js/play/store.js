@@ -26,11 +26,11 @@ function memStore(config, P, mode, L) {
   // 見本の防具とストーン：石を 3 つとかけら 30 個から（その場だけ）
   //   見本は色ちがい（緑・青・紫）のくらしの石にして、セット効果まで見られるようにする（本番の出かたは受け口の抽選）
   const fixed = (...v) => { let i = 0; return () => (i < v.length ? v[i++] : Math.random()); };
-  if (mode === 'demo' && !L0.gear) L0.gear = { armor: [], on: {}, stones: [[0.7, 0.9, 0.5, 0.85], [0.9, 0.9, 0.5, 0.6], [0.97, 0.9, 0.5, 0.3]].map((v) => rollStone(config, fixed(...v), nid())), shards: 30, sf: 0 };
+  if (mode === 'demo' && !L0.kit) L0.kit = { armor: [], on: {}, stones: [[0.7, 0.9, 0.5, 0.85], [0.9, 0.9, 0.5, 0.6], [0.97, 0.9, 0.5, 0.3]].map((v) => rollStone(config, fixed(...v), nid())), shards: 30, sf: 0 };
   const cur = () => simulate(config, L0, gains, ops).L;
-  const view = () => { const s = simulate(config, L0, gains, ops); return { inv: s.L.inv, slots: s.L.slots, gear: s.L.gear || null, ops: ops.map((o, i) => ({ ...o, ok: s.results[i].ok, why: s.results[i].why || null })), gains, left: Math.max(0, wsCfg(config).perDay - ops.filter((o) => !['gain', 'wear', 'socket', 'unsocket'].includes(o.t)).length), perDay: wsCfg(config).perDay, demo: true }; };
+  const view = () => { const s = simulate(config, L0, gains, ops); return { inv: s.L.inv, slots: s.L.slots, kit: s.L.kit || null, ops: ops.map((o, i) => ({ ...o, ok: s.results[i].ok, why: s.results[i].why || null })), gains, left: Math.max(0, wsCfg(config).perDay - ops.filter((o) => !['gain', 'wear', 'socket', 'unsocket'].includes(o.t)).length), perDay: wsCfg(config).perDay, demo: true }; };
   const force = (k) => (typeof window !== 'undefined' ? window[k] : undefined);
-  const stoneDrop = (src) => { const f = force('__stoneForce'); const st = gearStats(config, cur().gear); return f || Math.random() < gearCfg(config).drop[src] * gearBoost(st, 'u_find') ? rollStone(config, Math.random, nid()) : null; };
+  const stoneDrop = (src) => { const f = force('__stoneForce'); const st = gearStats(config, cur().kit); return f || Math.random() < gearCfg(config).drop[src] * gearBoost(st, 'u_find') ? rollStone(config, Math.random, nid()) : null; };
   // 受け口と同じく、穴の数・新しいモッドはここで決める（見本だけ window.__holesForce で穴の数を決められる）
   const prep = (op) => {
     if (op.t === 'armor') { const f = force('__holesForce'); op = { t: 'armor', part: op.part, mat: op.mat, holes: Number.isInteger(f) ? f : rollHoles(config, Math.random), aid: nid() }; }
@@ -50,7 +50,7 @@ function memStore(config, P, mode, L) {
     async useFish(res) {
       if (day.fish >= P.fishPerDay) throw new Error('きょうの回数はおしまいです');
       day.fish++; st.last = {};
-      if (res) { fish.push([res.item, res.cm ?? 0]); gains.push([res.item, 1]); const lg = rollLegend(config, 'fish', Math.random, gearBoost(gearStats(config, cur().gear), 'fish')); if (lg) { gains.push([lg, 1]); st.last.legend = lg; } const sn = stoneDrop('fish'); if (sn) { ops.push({ id: 'demo' + ++n, t: 'gain', items: [], stones: [sn], src: 'fish', at: new Date().toISOString() }); st.last.stone = sn; } }
+      if (res) { fish.push([res.item, res.cm ?? 0]); gains.push([res.item, 1]); const lg = rollLegend(config, 'fish', Math.random, gearBoost(gearStats(config, cur().kit), 'fish')); if (lg) { gains.push([lg, 1]); st.last.legend = lg; } const sn = stoneDrop('fish'); if (sn) { ops.push({ id: 'demo' + ++n, t: 'gain', items: [], stones: [sn], src: 'fish', at: new Date().toISOString() }); st.last.stone = sn; } }
       return { ...day };
     },
     async useChore() { if (day.chores >= P.chorePerDay) throw new Error('きょうの回数はおしまいです'); day.chores++; mine++; st.last = {}; if (day.chores === P.chorePerDay) { gains.push(['treasure_box', 1]); st.last.box = 1; } return { ...day }; },

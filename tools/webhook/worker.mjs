@@ -762,12 +762,12 @@ export function applyOp(config, L, op, store = null) {
   const fail = (why) => ({ ok: false, why });
   const nm = (k) => wsName(config, k);
   if (!op || typeof op !== 'object') return fail('形がちがう');
-  let text = '', gear = null; // 防具とストーン（L.gear）。さわった時だけ書きもどす
+  let text = '', gear = null; // 防具とストーン（L.kit）。さわった時だけ書きもどす
   if (GEAR_OPS.includes(op.t)) {
     gear = gearOf(L);
     const r = applyGear(config, inv, gear, op, L);
     if (!r.ok) return r;
-    L.inv = inv; L.gear = gear;
+    L.inv = inv; L.kit = gear;
     return { ok: true, text: r.text, toStore };
   }
   const addStones = (list) => { if (!list) return true; if (!Array.isArray(list) || list.length > 4 || !list.every((s) => stoneOk(config, s))) return false; gear = gear || gearOf(L); for (const s of list) gearAddStone(config, gear, s); return true; };
@@ -826,7 +826,7 @@ export function applyOp(config, L, op, store = null) {
     text = `${nm(op.got[0])}${op.got[1] > 1 ? ` ${op.got[1]} 個` : ''}${op.stone ? '・ストーン' : ''}`;
   } else return fail('形がちがう');
   L.inv = inv;
-  if (gear) L.gear = gear;
+  if (gear) L.kit = gear;
   if (store) for (const [k, n] of Object.entries(toStore)) store[k] = (store[k] || 0) + n;
   return { ok: true, text, toStore };
 }
@@ -840,7 +840,7 @@ export function applyGains(config, L, gains) {
 // まだ毎日の更新に入っていない分を足した、今の持ち物（受け口・画面の見本）。ops の順に確かめ、できない物は ok: false
 export function simulate(config, L0, gains, ops) {
   const L = { ...L0, inv: (L0.inv || []).map((s) => (s ? { ...s } : null)) };
-  if (L0.gear) L.gear = gearOf(L0);
+  if (L0.kit) L.kit = gearOf(L0);
   applyGains(config, L, gains || []);
   const results = (ops || []).map((op) => ({ id: op.id, ...applyOp(config, L, op, null) }));
   return { L, results };
@@ -872,7 +872,7 @@ export function rollLegend(config, src, rnd, mul = 1) {
 // ストーン：防具の穴にはめる。色は宝箱と同じ 5 段。ごくまれにユニーク（ふつうの石に付かないモッドが 1 つ）。モッドは 1〜4 個・同じ石に同じモッドは付かない。
 //   値には幅があり、色が上がるほど上限が上がる。同じ系統（攻め・守り・くらし）の石を 3 つはめるとセット効果
 // かけら：いらない石を砕くと出る。10 個でモッドをぜんぶ振り直し・15 個で 1 つ固定して振り直し（新しいモッドは受け口が決めて op.mods に入れる）
-// 持ち物の L.gear = { armor: [{ id, part, mat, holes, st: [石 | null] }], on: { 部位: 防具の id }, stones: [石], shards, sf（かけらの端数） }
+// 持ち物の L.kit = {（L.gear は鍛冶職人の防具なので別） armor: [{ id, part, mat, holes, st: [石 | null] }], on: { 部位: 防具の id }, stones: [石], shards, sf（かけらの端数） }
 //   石 = { id, c: 色, f: 系統（atk・def・life）, m: [[モッド, 値]], u?: [ユニークのモッド, 値] }
 // 戦い・敵・ボスはまだないので、攻め・守りは数を持って見せるだけ。くらしのうち live の物は今も効く（受け口と画面で）
 export const GEAR_DEF = {
@@ -943,7 +943,7 @@ export function stoneOk(config, s) {
 }
 const cleanStone = (s) => { const o = { id: s.id, c: s.c, f: s.f, m: s.m.map((x) => [x[0], x[1]]) }; if (s.u) o.u = [s.u[0], s.u[1]]; return o; };
 export function gearOf(L) {
-  const g = (L && L.gear) || {};
+  const g = (L && L.kit) || {};
   return { armor: (g.armor || []).map((a) => ({ ...a, st: (a.st || []).map((s) => (s ? cleanStone(s) : null)) })), on: { ...(g.on || {}) }, stones: (g.stones || []).map(cleanStone), shards: g.shards || 0, sf: g.sf || 0 };
 }
 // つけている防具の合計（はめた石のモッド・セット効果・守りの数）
@@ -957,6 +957,15 @@ export function gearStats(config, gear) {
   }
   for (const [f, c] of Object.entries(fams)) { const k = Math.floor(c / 3); if (k) { sets[f] = k; for (const [m, v] of G.sets[f] || []) sum[m] = (sum[m] || 0) + v * k; } }
   return { sum, sets, def, n, fams };
+}
+// 体に重ねる見た目（js/character.js の setArmor）。{ head: '素材#色', crown: true, body, legs, feet }。つけていない所は入れない
+export const GEAR_LOOK = { leather: '#9a6234', chain: '#8e9399', iron: '#d3d8de', gold: '#efb726', diamond: '#45d6cf' };
+export function kitLook(L) {
+  const g = (L && L.kit) || {}, on = g.on || {}, out = {}, slot = { head: 'head', chest: 'body', legs: 'legs', feet: 'feet' };
+  for (const a of g.armor || []) if (a && on[a.part] === a.id && GEAR_LOOK[a.mat] && slot[a.part]) out[slot[a.part]] = a.mat + GEAR_LOOK[a.mat];
+  if (out.feet) out.feet = out.feet.replace(/#(w{6})/, (m, h) => '#' + [0, 2, 4].map((i) => Math.round(parseInt(h.slice(i, i + 2), 16) * 0.82).toString(16).padStart(2, '0')).join('')); // くつは少し暗く（すねあてとの境目が見える）
+  if (out.head) out.crown = true; // 頭はかんむり（兜で顔と髪をかくさない）
+  return out;
 }
 // 今も効くモッドの倍（上限つき）。例：gearBoost(st, 'walk') → 1.08
 const BOOST_CAP = { walk: 30, fish: 100, dig: 60, chore: 60, shard: 200, u_gold: 30, u_find: 200 };
@@ -1063,7 +1072,7 @@ const wsAsked = (m) => (m.ops || []).filter((o) => o && o.t !== 'gain' && !WS_FR
 const wsFree = (m) => (m.ops || []).filter((o) => o && WS_FREE.includes(o.t)).length;
 // 今の防具の合計（くらしのモッドを遊びに効かせる）。読めなければ何もつけていない時と同じ
 async function wsStats(kv, env, v, nowMs, cfg) {
-  try { const P = await wsPending(kv, env, v, nowMs); return gearStats(cfg, simulate(cfg, P.L0, P.gains, P.ops).L.gear); } catch (e) { return gearStats(cfg, null); }
+  try { const P = await wsPending(kv, env, v, nowMs); return gearStats(cfg, simulate(cfg, P.L0, P.gains, P.ops).L.kit); } catch (e) { return gearStats(cfg, null); }
 }
 const wsStone = (cfg, st, src, rnd) => (rnd() < (gearCfg(cfg).drop[src] || 0) * gearBoost(st, 'u_find') ? rollStone(cfg, rnd, rid()) : null);
 async function shopApi(path, request, body, { kv, v, date, cfg, nowMs, res, env }) {
@@ -1071,7 +1080,7 @@ async function shopApi(path, request, body, { kv, v, date, cfg, nowMs, res, env 
   const P = await wsPending(kv, env, v, nowMs), sim = simulate(cfg, P.L0, P.gains, P.ops);
   const today = await readJ(kv, k, { ops: [] });
   today.ops = today.ops || [];
-  const view = () => ({ inv: sim.L.inv, slots: sim.L.slots || 3, gear: sim.L.gear || null, ops: P.ops.map((op, i) => ({ ...op, ok: sim.results[i].ok, why: sim.results[i].why || null })), gains: P.gains, left: Math.max(0, W.perDay - wsAsked(today)), perDay: W.perDay });
+  const view = () => ({ inv: sim.L.inv, slots: sim.L.slots || 3, kit: sim.L.kit || null, ops: P.ops.map((op, i) => ({ ...op, ok: sim.results[i].ok, why: sim.results[i].why || null })), gains: P.gains, left: Math.max(0, W.perDay - wsAsked(today)), perDay: W.perDay });
   if (path === '/shop/state' && request.method === 'GET') return res(view());
   if (request.method !== 'POST') return res({ error: 'method' }, 405);
   let op;
@@ -1095,7 +1104,7 @@ async function shopApi(path, request, body, { kv, v, date, cfg, nowMs, res, env 
       }
     } else return res({ error: 'bad op' }, 400);
   } else if (path === '/box/open') {
-    const rnd = wsRnd(env), stt = gearStats(cfg, sim.L.gear);
+    const rnd = wsRnd(env), stt = gearStats(cfg, sim.L.kit);
     let g = rollBox(cfg, rnd);
     if (stt.sum.u_gold && rnd() < gearBoost(stt, 'u_gold') - 1) g = bumpBox(cfg, g, rnd); // 黄金の手
     op = { t: 'open', got: [g.item, g.n], tier: g.tier };

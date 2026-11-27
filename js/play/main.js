@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { nav, esc, showError, load } from '../common.js';
 import { icon } from '../icons.js';
-import { setTool, holdCan } from '../character.js';
+import { setTool, holdCan, setArmor } from '../character.js';
 import { whoami, atName, faceEl, withDemo } from '../mine.js';
 import { buildScene, tickScene, fadeLeaves, WATER_Y, setWet } from './scene.js';
 import { makeHero, reachOf, place, walkTo, tickHero, faceTo, rodTip } from './hero.js';
@@ -13,7 +13,7 @@ import { makeStore } from './store.js';
 import { pickCatch, biteDelay, judgeHook, sizeWord, CHORES, jstHour, isNight, leftOf, beepInterval, beepPitch, detectWord, DETECT } from './rules.js';
 import { makeDetector, holdDetector, coilPos, makeBeeper } from './detector.js';
 import { makeBag } from './bag.js';
-import { TIER_LOOK, gearStats, gearBoost, stoneIcon } from '../workshop.js';
+import { TIER_LOOK, gearStats, gearBoost, stoneIcon, kitLook } from '../workshop.js';
 
 nav('play.html');
 const $ = (id) => document.getElementById(id);
@@ -541,7 +541,7 @@ async function main() {
   renderer.setAnimationLoop(frame);
   Object.assign(window.PLAY, { frame, F, T, C, S, H, dig, walkHere, doChore, setTab, cast, hook, chest, det, beeper }); // 確かめ用
   // 防具のくらし「歩く速さ」を自分の村人に効かせる（持ち物が変わったら合わせなおす）
-  const gearSpeed = (s) => { H.speedMul = gearBoost(gearStats(config, (s && s.gear) || null), 'walk'); };
+  const gearSpeed = (s) => { H.speedMul = gearBoost(gearStats(config, (s && s.kit) || null), 'walk'); if (s) setArmor(H.ch, kitLook(s)); }; // 着た防具も自分の村人に見せる
   const bagEl = $('bag'), bag = makeBag({ root: bagEl, store, config, L, guest, mode: W.mode, onChange: () => gearSpeed(bag.state) });
   window.PLAY.bag = bag; // 確かめ用
   if (!guest) store.shop().then(gearSpeed).catch(() => {});

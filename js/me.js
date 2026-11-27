@@ -6,6 +6,7 @@ import { icon } from './icons.js';
 import { slotsHtml } from './invslots.js';
 import { makeCharacter, animate, setAccent, setArmor, chibiOf } from './character.js';
 import { armorLook } from './smithing.js';
+import { kitLook } from './workshop.js';
 import { skinSrc, skinSlim } from './common.js';
 import { whoami, atName, api, forget, withDemo } from './mine.js';
 import { ORE_MODES, validOreMode } from './play/rules.js';
@@ -103,7 +104,7 @@ function viewer(el, v, L, config) {
   ground.position.y = -0.06; scene.add(ground);
   const ch = makeCharacter(skinSrc(v), { slim: skinSlim(v), chibi: chibiOf(v) });
   if (v.profile && v.profile.color) setAccent(ch, v.profile.color);
-  setArmor(ch, armorLook(L.gear, config.smithing));
+  setArmor(ch, { ...armorLook(L.gear, config.smithing), ...kitLook(L) });
   scene.add(ch);
   cam.position.set(0, 1.35, 5.2); cam.lookAt(0, 1.0, 0);
   let yaw = 0.5, drag = null;
