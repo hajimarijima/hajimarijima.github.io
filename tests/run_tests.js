@@ -3136,7 +3136,7 @@ t('DM で入居：join.js（一時フォルダ）で住み、返事のファイ�
   assert.ok(!fs.existsSync(path.join(dir, 'inbox', 'dm_replies.json')));
   // サイトの受け口（?v=）と、住み方の文
   const tj = fs.readFileSync(path.join(ROOT, 'js', 'town.js'), 'utf8');
-  assert.ok(/function focusVillagerFromUrl\(/.test(tj) && /focusVillagerFromUrl\(QS\.get\('v'\)/.test(tj), 'town.js の ?v= の受け口');
+  assert.ok(/QS\.get\('v'\)[^\n]*flyTo\(\(\) => \(\{ x: p\.ch\.position\.x/.test(tj) && /openCard\(p\.v\)/.test(tj), 'town.js の ?v= の受け口（本人に寄ってカードを開く）');
   const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'join.yml'), 'utf8');
   assert.ok(/node tools\/dm\.js pull/.test(wf) && /node tools\/dm\.js done/.test(wf) && /DM_QUEUE_TOKEN: \$\{\{ secrets\.DM_QUEUE_TOKEN \}\}/.test(wf), 'join.yml が DM を読んで返事する');
   assert.ok(wf.indexOf('dm.js done') > wf.indexOf('git push'), '返事はコミットのあと');
@@ -3715,6 +3715,8 @@ t('引っ越し：その人の id がどこにも残らない・空き家にも�
   delete env.TOWN_SALT; delete env.GITHUB_ACTIONS; delete env.TOWN_HIDDEN;
   const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
   const realBefore = fs.readFileSync(path.join(src, 'villagers.json'), 'utf8');
+  const readMoved = () => (fs.existsSync(path.join(src, 'moved.json')) ? fs.readFileSync(path.join(src, 'moved.json'), 'utf8') : null);
+  const movedBefore = readMoved(); // 本番で引っ越しがあると、本物の data/ にも moved.json がある
   // 何日か動かして、関係・おしゃべり・建てた人の名簿などができてから試す
   node('tools/sim.js', '--days', '6', '--now', '2026-12-03T12:00:00+09:00');
   const readV = () => JSON.parse(fs.readFileSync(path.join(dir, 'villagers.json'), 'utf8'));
@@ -3779,7 +3781,7 @@ t('引っ越し：その人の id がどこにも残らない・空き家にも�
   assert.strictEqual(readV().filter((x) => x.name === v.name).length, 1);
   // 本物の data/ は変わっていない
   assert.strictEqual(fs.readFileSync(path.join(src, 'villagers.json'), 'utf8'), realBefore, '本物の data/ をさわった');
-  assert.ok(!fs.existsSync(path.join(src, 'moved.json')));
+  assert.strictEqual(readMoved(), movedBefore, '本物の data/moved.json をさわった');
 });
 
 t('引っ越しの保管と復元：30 日以内なら元の家・関係ごともどる・30 日を過ぎるともどせず消える', () => {
