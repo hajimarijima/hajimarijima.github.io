@@ -505,5 +505,22 @@
   "display": "nanasi774_ou",
   "profileAt": "2026-11-27T06:38:20.000Z",
   "joinedAt": "15:38"
+ },
+ {
+  "key": "f4d33a7e3d",
+  "igId": "32aa13d1166ccc89",
+  "name": "ru1.0612",
+  "userHash": "750ad0f4fbadc794",
+  "skin": 118,
+  "joined": "2026-11-27",
+  "joinedDay": 1,
+  "source": "comment",
+  "birthday": "06-12",
+  "profile": {
+   "food": "たまご"
+  },
+  "hidden": false,
+  "display": "ru1.0612",
+  "joinedAt": "21:59"
  }
 ]
