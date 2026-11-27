@@ -1,0 +1,83 @@
+# 引っ越した人を元にもどす（管理者が手で動かす。引っ越してから 30 日以内だけ。tools/movein-restore.js）
+# 動かし方：Actions → restore → Run workflow → username（引っ越した人のユーザー名）を入れて、dry を選ぶ
+#   dry が true（既定）：もどす物の一覧をログに出すだけ（何も書かない）
+#   dry が false：元の家・関係・日記ごともどして、変わった data をコミットする
+# 保管は moveout が上げた artifact（moveout-<名前の印>、30 日で GitHub が消す）。サイトや Worker に入り口はない
+name: restore
+
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: "もどす人のユーザー名（@ なしでもよい）"
+        required: true
+        type: string
+      dry:
+        description: "ためしだけ（true：一覧を出すだけ・false：本当にもどしてコミット）"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: write # 前の実行の artifact を受け取る・もどしたあとで消す
+
+# 町のファイルを書く仕事どうし（join・daily・moveout と同じ town）：同時に書かない
+concurrency:
+  group: town
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: 保管を探す
+        id: find
+        run: |
+          H=$(node tools/movein-restore.js "$WHO" --hash)
+          RUN=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=moveout-$H&per_page=100" --jq '[.artifacts[] | select(.expired == false)] | sort_by(.created_at) | last | .workflow_run.id // empty')
+          if [ -z "$RUN" ]; then echo "保管が見つかりません（引っ越していないか、30 日を過ぎて消えました）"; exit 1; fi
+          echo "hash=$H" >> "$GITHUB_OUTPUT"
+          echo "run=$RUN" >> "$GITHUB_OUTPUT"
+        env:
+          WHO: ${{ inputs.username }}
+          TOWN_SALT: ${{ secrets.TOWN_SALT }}
+          GH_TOKEN: ${{ github.token }}
+      - name: 保管を受け取る
+        uses: actions/download-artifact@v4
+        with:
+          name: moveout-${{ steps.find.outputs.hash }}
+          path: .vault/
+          run-id: ${{ steps.find.outputs.run }}
+          github-token: ${{ github.token }}
+      - name: 元にもどす
+        run: |
+          if [ "$DRY" = "true" ]; then node tools/movein-restore.js "$WHO" --dry; else node tools/movein-restore.js "$WHO"; fi
+        env:
+          WHO: ${{ inputs.username }}
+          DRY: ${{ inputs.dry }}
+          TOWN_SALT: ${{ secrets.TOWN_SALT }}
+          TOWN_HIDDEN: ${{ secrets.TOWN_HIDDEN }}
+      - name: 結果をコミット
+        if: ${{ !inputs.dry }}
+        run: |
+          git config user.name "town-bot"
+          git config user.email "town-bot@users.noreply.github.com"
+          for f in data/villagers.json data/world.json data/state.json data/life.json data/history.json data/social.json data/diary data/mail.json data/visits.json data/decor.json data/requests.json data/requests_seen.json data/moved.json; do
+            if [ -e "$f" ]; then git add "$f"; fi
+          done
+          git diff --cached --quiet || (git commit -m "引っ越した住人を元にもどす" && git push)
+      # もどしたら保管の artifact も消す（同じ人を二重にもどさない）
+      - name: 保管を消す
+        if: ${{ success() && !inputs.dry }}
+        continue-on-error: true
+        run: |
+          for id in $(gh api "repos/${{ github.repository }}/actions/artifacts?name=moveout-${{ steps.find.outputs.hash }}&per_page=100" --jq '.artifacts[].id'); do
+            gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id"
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}

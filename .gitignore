@@ -20,3 +20,6 @@ data/inbox_comments.json
 .poster-app-profile/
 tools/poster/app/.port
 tools/poster/app/tmp/
+
+# 引っ越した人の保管（暗号化ずみ。tools/vault.js。Actions では artifact に 30 日だけ置く）
+.vault/

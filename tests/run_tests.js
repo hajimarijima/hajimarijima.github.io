@@ -3663,7 +3663,7 @@ t('引っ越し：その人の id がどこにも残らない・空き家にも�
   fs.cpSync(src, dir, { recursive: true, filter: (p) => !['inbox', 'import'].includes(path.relative(src, p).split(/[\\/]/)[0]) });
   assert.ok(!fs.existsSync(path.join(dir, 'inbox')), 'inbox は写さない');
   assert.notStrictEqual(path.resolve(dir), path.resolve(src));
-  const env = { ...process.env, TOWN_DATA: dir, TOWN_SALT_QUIET: '1' };
+  const env = { ...process.env, TOWN_DATA: dir, TOWN_SALT_QUIET: '1', TOWN_VAULT: dir + '-vault' };
   delete env.TOWN_SALT; delete env.GITHUB_ACTIONS; delete env.TOWN_HIDDEN;
   const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
   const realBefore = fs.readFileSync(path.join(src, 'villagers.json'), 'utf8');
@@ -3732,6 +3732,98 @@ t('引っ越し：その人の id がどこにも残らない・空き家にも�
   // 本物の data/ は変わっていない
   assert.strictEqual(fs.readFileSync(path.join(src, 'villagers.json'), 'utf8'), realBefore, '本物の data/ をさわった');
   assert.ok(!fs.existsSync(path.join(src, 'moved.json')));
+});
+
+t('引っ越しの保管と復元：30 日以内なら元の家・関係ごともどる・30 日を過ぎるともどせず消える', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-restore-'));
+  const vault = dir + '-vault';
+  const src = path.join(ROOT, 'data');
+  fs.cpSync(src, dir, { recursive: true, filter: (p) => !['inbox', 'import'].includes(path.relative(src, p).split(/[\\/]/)[0]) });
+  const env = { ...process.env, TOWN_DATA: dir, TOWN_SALT_QUIET: '1', TOWN_VAULT: vault };
+  delete env.TOWN_SALT; delete env.GITHUB_ACTIONS; delete env.TOWN_HIDDEN;
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const fails = (f, ...a) => { try { node(f, ...a); return null; } catch (e) { return String(e.stderr || e.message); } };
+  const realBefore = fs.readFileSync(path.join(src, 'villagers.json'), 'utf8');
+  node('tools/sim.js', '--days', '6', '--now', '2026-12-03T12:00:00+09:00');
+  const rd = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+  // 名前のある人の印をテストの塩に合わせる（本物の印は本物の塩で作ってあるため）
+  const vs = rd('villagers.json');
+  for (const x of vs) if (x.name) x.userHash = P.userHash(x.name);
+  fs.writeFileSync(path.join(dir, 'villagers.json'), JSON.stringify(vs, null, 1) + '\n');
+  // まだ家がない町なので、家を 2 つ建てたことにして、名前のある人を 1 軒目に住ませる
+  const cfg0 = rd('config.json');
+  const houseT = Object.keys(cfg0.buildings).find((t) => cfg0.buildings[t].cap);
+  const W0 = STORE.readWorld(dir), base = W0.buildings[0] || { x: 0, z: 0 };
+  W0.buildings.push({ id: 'house_t1', type: houseT, x: base.x + 3, z: base.z + 3, day: 1 }, { id: 'house_t2', type: houseT, x: base.x - 3, z: base.z - 3, day: 1 });
+  STORE.writeWorld(dir, W0, { clearR: ((cfg0.terrain && cfg0.terrain.clearBlocks) ?? 4) * 1.9 + 2.5 });
+  const L0 = STORE.readLife(dir);
+  const named = vs.filter((x) => x.name && !x.hidden && L0[x.key]);
+  L0[named[0].key].home = 'house_t1';
+  STORE.writeLife(dir, L0);
+  const snap = () => ({ villagers: rd('villagers.json'), life: STORE.readLife(dir), social: rd('social.json'), state: rd('state.json'), world: STORE.readWorld(dir), history: rd('history.json') });
+  const S0 = snap();
+  const txt = JSON.stringify(S0);
+  const v = S0.villagers.find((x) => x.key === named[0].key);
+  assert.ok(txt.split(v.key).length > 3, '参照のある村人');
+  assert.ok(v, '家のある人がいる');
+  const K = v.key;
+  node('tools/moveout.js', v.name, '--now', '2026-12-03T13:00:00+09:00');
+  // 保管は data/ の外。暗号化されていて、名前も id も読めない
+  const vf = fs.readdirSync(vault);
+  assert.deepStrictEqual(vf, [P.userHash(v.name) + '.json']);
+  const raw = fs.readFileSync(path.join(vault, vf[0]), 'utf8');
+  assert.ok(!raw.includes(K) && !raw.includes(v.name) && !raw.includes(v.display), '保管は暗号化されている');
+  assert.ok(!fs.readdirSync(dir).some((f) => /vault/.test(f)), 'data/ の下に保管を置かない');
+  assert.ok(!JSON.stringify(rd('villagers.json')).includes(K));
+  // --dry：何も書かない
+  const mid = JSON.stringify(snap());
+  const dry = node('tools/movein-restore.js', v.name, '--dry', '--now', '2026-12-10T12:00:00+09:00');
+  assert.ok(/ためし/.test(dry) && /元の家/.test(dry), dry);
+  assert.strictEqual(JSON.stringify(snap()), mid);
+  assert.ok(fs.existsSync(path.join(vault, vf[0])));
+  // もどす（7 日後）：引っ越しの前とほぼ同じ
+  const out = node('tools/movein-restore.js', '@' + v.name, '--now', '2026-12-10T12:00:00+09:00');
+  assert.ok(/もどりました/.test(out), out);
+  const S1 = snap();
+  assert.deepStrictEqual(S1.villagers, S0.villagers, '村人の並び・中身');
+  assert.deepStrictEqual(S1.life, S0.life, '暮らし・日記・家（ほかの人の行動も）');
+  assert.deepStrictEqual(S1.social, S0.social, '関係');
+  assert.deepStrictEqual(S1.state, S0.state, 'state の名簿');
+  assert.deepStrictEqual(S1.world.buildings, S0.world.buildings, '建てた人の名簿');
+  assert.deepStrictEqual(S1.history.slice(0, S0.history.length), S0.history, '歴史の who');
+  assert.deepStrictEqual(S1.history.slice(S0.history.length).map((h) => h.type), ['moveout', 'movein']);
+  assert.ok(!(rd('moved.json')).some((m) => m.u === P.userHash(v.name)), 'moved.json の印を外す');
+  assert.ok(!fs.existsSync(path.join(vault, vf[0])), 'もどしたら保管を消す');
+  assert.ok(/見つかりません/.test(fails('tools/movein-restore.js', v.name)), '二重にはもどせない');
+  // 家が埋まっていたら、空いている家へ：引っ越したあとに家を他の人で埋める
+  node('tools/moveout.js', v.name, '--now', '2026-12-10T13:00:00+09:00');
+  const cfg = rd('config.json');
+  const L1 = STORE.readLife(dir);
+  const home = S0.life[K].home;
+  const capOf = (id) => cfg.buildings[S1.world.buildings.find((b) => b.id === id).type].cap;
+  const others = Object.keys(L1).filter((k) => L1[k].home !== home);
+  let filled = Object.values(L1).filter((L) => L.home === home).length;
+  for (const k of others) { if (filled >= capOf(home)) break; L1[k].home = home; filled++; }
+  STORE.writeLife(dir, L1);
+  const out2 = node('tools/movein-restore.js', v.name, '--now', '2026-12-11T12:00:00+09:00');
+  assert.ok(/埋まっていた/.test(out2), out2);
+  const L2 = STORE.readLife(dir);
+  assert.notStrictEqual(L2[K].home, home);
+  assert.ok(L2[K].home == null || Object.values(L2).filter((L) => L.home === L2[K].home).length <= capOf(L2[K].home), '空いている家に入った');
+  // 30 日を過ぎると、もどせない（保管も消える）
+  node('tools/moveout.js', v.name, '--now', '2026-12-11T13:00:00+09:00');
+  const e = fails('tools/movein-restore.js', v.name, '--now', '2027-01-11T13:00:01+09:00');
+  assert.ok(e && /30 日を過ぎた/.test(e), e);
+  assert.ok(!fs.existsSync(path.join(vault, vf[0])), '30 日を過ぎた保管は消える');
+  assert.ok(!rd('villagers.json').some((x) => x.key === K));
+  // 自動の片づけ（--purge）：30 日を過ぎた保管分だけ消す
+  const w = rd('villagers.json').find((x) => x.name);
+  node('tools/moveout.js', w.name, '--now', '2026-12-12T13:00:00+09:00');
+  assert.ok(/0 件/.test(node('tools/movein-restore.js', '--purge', '--now', '2027-01-10T13:00:00+09:00')));
+  assert.ok(/1 件/.test(node('tools/movein-restore.js', '--purge', '--now', '2027-01-12T13:00:01+09:00')));
+  assert.deepStrictEqual(fs.readdirSync(vault), []);
+  assert.strictEqual(fs.readFileSync(path.join(src, 'villagers.json'), 'utf8'), realBefore, '本物の data/ をさわった');
+  assert.ok(!fs.existsSync(path.join(ROOT, '.vault')), 'リポジトリに保管を書いた');
 });
 
 // ---------- 手紙と家の飾り（tests/home_tests.js） ----------

@@ -42,6 +42,21 @@ jobs:
           DRY: ${{ inputs.dry }}
           TOWN_SALT: ${{ secrets.TOWN_SALT }}
           TOWN_HIDDEN: ${{ secrets.TOWN_HIDDEN }}
+      # 消した物の保管（暗号化ずみ。tools/vault.js）。リポジトリには入れず、Actions の artifact に 30 日だけ置く（GitHub が 30 日で消す）。
+      # 公開リポジトリの artifact はだれでも落とせるので、中身は TOWN_SALT から作った鍵で暗号化してある。名前は塩入りの印だけ
+      - name: 保管の名前
+        if: ${{ !inputs.dry }}
+        id: vault
+        run: echo "hash=$(basename "$(ls .vault/*.json | head -1)" .json)" >> "$GITHUB_OUTPUT"
+      - name: 保管を上げる（30 日）
+        if: ${{ !inputs.dry }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: moveout-${{ steps.vault.outputs.hash }}
+          path: .vault/
+          retention-days: 30
+          if-no-files-found: error
+          include-hidden-files: true
       - name: 結果をコミット
         if: ${{ !inputs.dry }}
         run: |
