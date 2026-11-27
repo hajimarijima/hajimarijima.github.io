@@ -2999,7 +2999,7 @@ at('町の画面：年表は config.episodes から、空なら歴史の日ご�
 t('DM で入居：言葉の読み取り・config は切ってある・返事の文', () => {
   const DM = require('../tools/dm');
   const cfg = liveCfg();
-  assert.strictEqual(cfg.dm.enabled, false, '権限が取れるまでは切っておく');
+  assert.strictEqual(typeof cfg.dm.enabled, 'boolean', 'dm.enabled は true / false');
   for (const w of ['住みたい', 'すみたい', '入居', '入村']) assert.ok(cfg.dm.words.includes(w), w);
   for (const s of ['住みたい', '入居したいです！', '入村 ピッケル', 'わたしも住みたい 12/11 りんご']) assert.ok(DM.dmJoinWord(s, cfg.dm.words), s);
   for (const s of ['住みたくない', '入居しない', 'こんにちは', '参加しない', '']) assert.strictEqual(DM.dmJoinWord(s, cfg.dm.words), null, s);

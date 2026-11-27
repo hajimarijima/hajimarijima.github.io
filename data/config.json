@@ -25,7 +25,7 @@
   "joinExclude": ["comment_de_sodatsu"],
   "dm": {
     "note": "DM で入居する。インスタの DM に words の言葉（「住みたい」など）を送ると、コメントの「住みたい」と同じように町に住み、返事の DM で家のリンク（siteUrl の ?v=<村人>）が届く。もう住んでいる人には、新しい家は作らず元の家のリンクを返す。権限（instagram_business_manage_messages）が取れるまでは enabled を false のままにする。取れたら、docs/DMで入居する手順.md の設定をして true にするだけで動く（tools/dm.js・tools/webhook/worker.mjs）",
-    "enabled": false,
+    "enabled": true,
     "words": ["住みたい", "すみたい", "入居", "入村"],
     "wordsNote": "DM で入居の言葉として読む言葉。どれかが入っていれば受け付ける（「住みたくない」「入居しない」は読まない）。受け口（Cloudflare）もこの config を読んで、ほかの話の DM は積まない",
     "readOptions": true,
@@ -1505,7 +1505,7 @@
   },
   "play": {
     "note": "自分の村人（DM で届く専用のリンク ?me=印）と遊びのページ（play.html）。apiUrl は受け口（Cloudflare の Worker）の URL（例 https://town-webhook.〇〇.workers.dev）。空の間は「準備中」（?demo-me=1 で見本が見られる）。回数は 1 日あたり（Worker が数える）。手順は docs/遊びとログインの手順.md",
-    "apiUrl": "",
+    "apiUrl": "https://town-webhook.winterekordbox.workers.dev",
     "fishPerDay": 5,
     "chorePerDay": 5,
     "choreGoal": 300
