@@ -273,6 +273,7 @@ async function main() {
   async function found() {
     H.mode = 'idle'; H.work = null; setTool(H.ch, null);
     T.found = true; T.riseAt = clock.getElapsedTime(); T.near = false; T.reveal = true; // reveal の間はカメラが村人について行かない
+    dpan.hidden = true; // 開けている間は探知機の札を消す（村人と宝箱にかからない）
     chest.g.rotation.y = Math.atan2(H.ch.position.x - chest.x, H.ch.position.z - chest.z); // 前（留め金）を村人へ
     chest.g.position.y = -0.9; chest.g.visible = true; chest.passable = false;
     // 宝箱と村人を横から見る（下に出るカードに隠れないよう、2 人が画面の上の方に入る向き）。横の 2 つの向きのうち島のまん中から外向きの方
@@ -280,7 +281,8 @@ async function main() {
       let px = -dz / dl, pz = dx / dl; const mx = (chest.x + H.ch.position.x) / 2, mz = (chest.z + H.ch.position.z) / 2;
       if (px * chest.x + pz * chest.z < 0) { px = -px; pz = -pz; }
       const K = zoomK();
-      controls.target.set(mx, -0.1 * K, mz); camera.position.set(mx + px * 6.8 * K - (dx / dl) * 1.2, 4.0 * K, mz + pz * 6.8 * K - (dz / dl) * 1.2); }
+      // 見る所を下げて、宝箱と飛び出す中身を画面の上の方に（下に出るカードに隠れない）
+      controls.target.set(mx, -0.7 * K, mz); camera.position.set(mx + px * 6.8 * K - (dx / dl) * 1.2, 4.0 * K, mz + pz * 6.8 * K - (dz / dl) * 1.2); }
     say('宝箱だ！');
     let r = { first: true };
     try { r = await store.claimTreasure(v.key); day = await store.today(); } catch (e) { say(e.message); }
@@ -293,14 +295,14 @@ async function main() {
     }, 750);
     setTimeout(() => {
       // 宝探しは競争ではない（だれでも毎日 1 回掘り出せる）。順位や「いちばん」は出さない
-      onCardClose = () => { H.mode = 'idle'; T.busy = false; T.reveal = false; say(treasureMsg()); };
+      onCardClose = () => { H.mode = 'idle'; T.busy = false; T.reveal = false; if (tab === 'treasure') dpan.hidden = false; say(treasureMsg()); };
       const gn = got ? `${(items[got[0]] || {}).name || got[0]}${got[1] > 1 ? ` ×${got[1]}` : ''}` : '';
       showCard(`<div class="pc-fish"><div class="pc-img${got ? '' : ' chestimg'}">${got ? `<img class="pixel" src="icons/${esc(got[0])}.png" alt="" width="64" height="64">` : icon('gift', { size: 44 })}</div>` +
         `<h3>${got ? `${esc(gn)}が出てきた！` : '見つけた！'}</h3>` +
         (got ? `<p class="pc-tags"><span class="tag" style="background:${look.color};color:#1a1830">${esc(look.name)}</span></p>` : '') +
-        `<p>${esc(atName(v))} さんが、きょうの宝箱を掘り出して開けました。${got ? '中の物は持ち物に入ります。' : ''}</p>` + legendLine() +
-        `<p class="muted">${W.mode === 'live' ? '明日はまた別の所にうまります。' : '見本なので記録しません。明日はまた別の所にうまります。'}</p><button type="button" class="btn pc-ok">やったね</button></div>`);
-    }, got ? 2300 : 750);
+        `<p>${got ? '持ち物に入ります。' : ''}${W.mode === 'live' ? '明日はまた別の所にうまります。' : '（見本なので記録しません）'}</p>` + legendLine() +
+        `<button type="button" class="btn pc-ok">やったね</button></div>`); // 短くして、カードが宝箱にかからない高さに
+    }, got ? 2800 : 750);
   }
   // 宝箱から飛び出す中身：絵（板の絵）と、うしろの丸い光（段の色）。宝箱の口から上へポンと出て、少しはねて、ふわふわ浮く
   const loot = { g: new THREE.Group(), t0: null };
@@ -509,7 +511,7 @@ async function main() {
     H.ch.updateMatrixWorld(); _v.set(0, 2.45, 0).applyMatrix4(H.ch.matrixWorld).project(camera);
     const r = renderer.domElement;
     tag.style.transform = `translate(${(_v.x * 0.5 + 0.5) * r.clientWidth}px, ${(-_v.y * 0.5 + 0.5) * r.clientHeight}px) translate(-50%, -100%)`;
-    tag.hidden = _v.z > 1 || H.mode === 'show';
+    tag.hidden = _v.z > 1 || H.mode === 'show' || (tab === 'treasure' && T.reveal); // 宝箱を開けている間は名札を隠す（飛び出した中身に重ならない）
     if (!alert.hidden) { _v.copy(bob.position).setY(bob.position.y + 0.8).project(camera); alert.style.transform = `translate(${(_v.x * 0.5 + 0.5) * r.clientWidth}px, ${(-_v.y * 0.5 + 0.5) * r.clientHeight}px) translate(-50%, -100%)`; }
   }
   renderer.setAnimationLoop(frame);
