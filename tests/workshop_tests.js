@@ -223,7 +223,7 @@ module.exports = function workshopTests({ at, t, ROOT }) {
     assert.ok(/confirmBox\('島のチェストへ送る'/.test(bag), '送る前に確かめる画面');
     assert.ok(/store\.openBox\(\)/.test(bag) && /j\.stop/.test(bag) && /j\.offset/.test(bag), '止まる所は受け口の答え');
     assert.ok(!/rollBox|Math\.random/.test(bag) && !/rollBox|rollLegend/.test(main), '画面で中身を決めない');
-    assert.ok(/store\.last\.got/.test(main) && /showLoot/.test(main) && !/「宝箱」で開けられます/.test(main), '宝探しは掘った場で開けて中身を見せる（帯は回さない）');
+    assert.ok(/store\.last\.got/.test(main) && /chestUiTick/.test(main) && /タップで開ける/.test(main) && !/「宝箱」で開けられます/.test(main), '宝探しは掘った場で開けて中身を見せる（帯は回さない）');
     assert.ok(/出る物と確率を見る/.test(bag) && /あと <b>/.test(bag), '確率と、次の段まであと何回');
     assert.ok(!/(課金|購入|円で|￥|\$\d+円|ドルで)/.test(bag + main), '本物のお金で買う仕組みはない');
     assert.ok(!/いちばん乗り|いちばんに|最初に見つけ/.test(main), '宝探しは競争の言い方をしない');

@@ -918,6 +918,20 @@ html.pm-notags .nametag { visibility: hidden; }
 .pcard .btn { margin-top: 6px; min-width: 120px; min-height: 40px; font-weight: 700; justify-self: start; }
 .pcard p { font-size: 14px; } .pcard p.muted { font-size: 12px; }
 .pc-miss .ic { color: #3f78b8; }
+.pcard.ptop { top: 12px; bottom: auto; } /* 宝探しで開けた時は上に出す（下の宝箱にかからない） */
+/* 宝探しで掘り出した宝箱：画面の真ん中の下に出て、タップで開く（動きは js/play/main.js の chestUiTick） */
+.pchest { --tc: #ffd75a; position: absolute; left: 50%; bottom: 18px; width: 128px; height: 128px; margin-left: -64px; z-index: 4; pointer-events: none; }
+.pchest[hidden] { display: none; }
+.pcx-box { position: absolute; inset: 0; padding: 0; border: 0; background: none; cursor: pointer; pointer-events: auto; z-index: 3; opacity: 0; }
+.pchest.open .pcx-box { cursor: default; }
+.pcx-box img { position: absolute; left: 0; top: 0; width: 128px; height: 128px; image-rendering: pixelated; }
+.pcx-base { filter: drop-shadow(0 4px 0 rgba(0,0,0,.35)); }
+.pcx-lid { transform-origin: 50% 34%; }
+.pcx-box:focus-visible { outline: 3px solid #2f7de1; outline-offset: 2px; border-radius: 12px; }
+.pcx-item { position: absolute; left: 50%; top: 20px; width: 64px; height: 64px; image-rendering: pixelated; z-index: 4; opacity: 0; transform: translate3d(-50%,0,0); filter: drop-shadow(0 3px 0 rgba(0,0,0,.35)); pointer-events: none; }
+.pcx-glow { position: absolute; left: 50%; top: -20px; width: 150px; height: 150px; border-radius: 50%; z-index: 2; opacity: 0; transform: translate3d(-50%,0,0); pointer-events: none; background: radial-gradient(circle, color-mix(in srgb, var(--tc) 75%, #fff) 0%, color-mix(in srgb, var(--tc) 45%, transparent) 40%, transparent 70%); }
+.pcx-beam { position: absolute; left: 14px; width: 100px; bottom: 82px; height: 150px; z-index: 1; opacity: 0; transform-origin: 50% 100%; pointer-events: none; mix-blend-mode: screen; background: linear-gradient(to top, color-mix(in srgb, var(--tc) 40%, #fff) 0%, color-mix(in srgb, var(--tc) 50%, transparent) 35%, transparent 100%); clip-path: polygon(18% 100%, 82% 100%, 100% 0, 0 0); }
+.pcx-hint { position: absolute; left: 50%; top: -34px; transform: translateX(-50%); white-space: nowrap; padding: 4px 12px; border-radius: 999px; background: rgba(30,34,40,.72); color: #fff; font-size: 13px; font-weight: 700; opacity: 0; pointer-events: none; }
 .pinfo { margin-top: 12px; }
 .pinfo h2 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; }
 .pinfo p { margin: 0 0 6px; }

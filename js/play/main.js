@@ -281,50 +281,73 @@ async function main() {
       let px = -dz / dl, pz = dx / dl; const mx = (chest.x + H.ch.position.x) / 2, mz = (chest.z + H.ch.position.z) / 2;
       if (px * chest.x + pz * chest.z < 0) { px = -px; pz = -pz; }
       const K = zoomK();
-      // 見る所を下げて、宝箱と飛び出す中身を画面の上の方に（下に出るカードに隠れない）
-      controls.target.set(mx, -0.7 * K, mz); camera.position.set(mx + px * 6.8 * K - (dx / dl) * 1.2, 4.0 * K, mz + pz * 6.8 * K - (dz / dl) * 1.2); }
+      // 村人と 3D の宝箱は画面のまん中あたりに（下には開ける宝箱、上には開けたあとのカードが出る）
+      // 横に少しずらして、村人と 3D の宝箱を画面のまん中（2D の宝箱と飛び出す中身の所）からよける
+      const sx = (dx / dl) * 1.1 * K, sz = (dz / dl) * 1.1 * K;
+      controls.target.set(mx + sx, -0.5 * K, mz + sz); camera.position.set(mx + sx + px * 6.8 * K - (dx / dl) * 1.2, 4.0 * K, mz + sz + pz * 6.8 * K - (dz / dl) * 1.2); }
     say('宝箱だ！');
     let r = { first: true };
     try { r = await store.claimTreasure(v.key); day = await store.today(); } catch (e) { say(e.message); }
-    // 掘った場で宝箱がパカッと開き、中身（受け口が決めた物）がポンと飛び出す。持ち物には中身が入る（宝箱のままでは入れない）
+    // 掘り出した宝箱は、画面の真ん中の下に出てきて止まる。タップするとパカッと開き、中身（受け口が決めた物）がポンと飛び出す。
+    // 持ち物には中身が入る（宝箱のままでは入れない）
     const got = store.last && store.last.got, look = TIER_LOOK[(store.last && store.last.tier) || 'common'] || TIER_LOOK.common;
-    if (got) showLoot(got[0], look.color);
-    setTimeout(() => {
-      T.openAt = clock.getElapsedTime(); if (got) loot.t0 = T.openAt + 0.3;
-      H.mode = 'cheer'; H.cheerAt = clock.getElapsedTime();
-    }, 750);
+    say('');
+    Object.assign(PC, { got, look, inAt: clock.getElapsedTime() + 0.35, openAt: null, popped: false });
+    pcItem.src = got ? `icons/${got[0]}.png` : 'icons/treasure_box.png'; pcItem.style.opacity = '0';
+    pcLid.src = 'icons/chest_lid.png'; pch.style.setProperty('--tc', look.color); pch.classList.remove('open'); pch.hidden = false;
+  }
+  // ---------- 掘り出した宝箱（画面の上に出す 2D の宝箱。動きは clock で毎コマ決める） ----------
+  const pch = document.createElement('div'); pch.className = 'pchest'; pch.hidden = true;
+  pch.innerHTML = '<i class="pcx-beam"></i><i class="pcx-glow"></i><img class="pixel pcx-item" alt="" width="64" height="64">' +
+    '<button type="button" class="pcx-box" aria-label="宝箱を開ける"><img class="pixel pcx-base" src="icons/chest_base.png" alt="" width="128" height="128"><img class="pixel pcx-lid" src="icons/chest_lid.png" alt="" width="128" height="128"></button>' +
+    '<span class="pcx-hint">タップで開ける</span>';
+  stage.append(pch);
+  const pcBox = pch.querySelector('.pcx-box'), pcLid = pch.querySelector('.pcx-lid'), pcItem = pch.querySelector('.pcx-item'), pcGlow = pch.querySelector('.pcx-glow'), pcHint = pch.querySelector('.pcx-hint'), pcBeam = pch.querySelector('.pcx-beam');
+  new Image().src = 'icons/chest_lid_open.png'; // 開いたふたを先に読んでおく
+  const PC = { got: null, look: null, inAt: null, openAt: null, popped: false };
+  pcBox.addEventListener('click', () => {
+    if (PC.inAt == null || PC.openAt != null || clock.getElapsedTime() < PC.inAt + 0.45) return;
+    PC.openAt = clock.getElapsedTime(); pch.classList.add('open');
+    T.openAt = PC.openAt; // 3D の宝箱のふたもいっしょに開く
+    H.mode = 'cheer'; H.cheerAt = PC.openAt;
+    const { got, look } = PC;
     setTimeout(() => {
       // 宝探しは競争ではない（だれでも毎日 1 回掘り出せる）。順位や「いちばん」は出さない
-      onCardClose = () => { H.mode = 'idle'; T.busy = false; T.reveal = false; if (tab === 'treasure') dpan.hidden = false; say(treasureMsg()); };
+      card.classList.add('ptop'); // カードは上に出す（下の宝箱と、飛び出した中身にかからない）
+      onCardClose = () => { pch.hidden = true; PC.inAt = null; card.classList.remove('ptop'); H.mode = 'idle'; T.busy = false; T.reveal = false; if (tab === 'treasure') dpan.hidden = false; say(treasureMsg()); };
       const gn = got ? `${(items[got[0]] || {}).name || got[0]}${got[1] > 1 ? ` ×${got[1]}` : ''}` : '';
       showCard(`<div class="pc-fish"><div class="pc-img${got ? '' : ' chestimg'}">${got ? `<img class="pixel" src="icons/${esc(got[0])}.png" alt="" width="64" height="64">` : icon('gift', { size: 44 })}</div>` +
         `<h3>${got ? `${esc(gn)}が出てきた！` : '見つけた！'}</h3>` +
         (got ? `<p class="pc-tags"><span class="tag" style="background:${look.color};color:#1a1830">${esc(look.name)}</span></p>` : '') +
         `<p>${got ? '持ち物に入ります。' : ''}${W.mode === 'live' ? '明日はまた別の所にうまります。' : '（見本なので記録しません）'}</p>` + legendLine() +
-        `<button type="button" class="btn pc-ok">やったね</button></div>`); // 短くして、カードが宝箱にかからない高さに
-    }, got ? 2800 : 750);
-  }
-  // 宝箱から飛び出す中身：絵（板の絵）と、うしろの丸い光（段の色）。宝箱の口から上へポンと出て、少しはねて、ふわふわ浮く
-  const loot = { g: new THREE.Group(), t0: null };
-  { const glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
-    loot.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, opacity: 0 }));
-    loot.item = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false, alphaTest: 0.1 }));
-    loot.glow.renderOrder = 10; loot.item.renderOrder = 11; loot.g.add(loot.glow, loot.item); loot.g.visible = false; S.scene.add(loot.g); }
-  function showLoot(key, color) {
-    const tex = new THREE.TextureLoader().load(`icons/${key}.png`); tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.colorSpace = THREE.SRGBColorSpace;
-    loot.item.material.map = tex; loot.item.material.needsUpdate = true; loot.glow.material.color.set(color);
-    loot.g.position.set(chest.x, 0, chest.z); loot.g.visible = false; loot.t0 = null;
-  }
-  function lootTick(t) {
-    if (loot.t0 == null || t < loot.t0) { loot.g.visible = false; return; }
-    const k = t - loot.t0; loot.g.visible = true;
-    // 0〜0.5 秒：口（高さ 0.6）から 1.9 まで飛び出す（行きすぎて少しもどる）。そのあとはふわふわ
-    const u = Math.min(1, k / 0.5), back = 1 + 2.2 * Math.pow(u - 1, 3) + 1.2 * Math.pow(u - 1, 2);
-    const y = 0.6 + 1.5 * back + (k > 0.5 ? Math.sin((k - 0.5) * 2.6) * 0.06 : 0);
-    const s = 0.3 + 0.75 * Math.min(1, k / 0.35), sq = k < 0.5 ? 1 : 1 + Math.sin(Math.min(1, (k - 0.5) / 0.3) * Math.PI) * 0.12 * (1 - Math.min(1, (k - 0.5) / 0.3));
-    loot.item.position.y = y; loot.item.scale.set(s * sq, s / sq, 1);
-    loot.glow.position.y = y; const gs = 1.5 + 0.3 * Math.sin(k * 3); loot.glow.scale.set(gs, gs, 1);
-    loot.glow.material.opacity = Math.min(0.85, k * 2.5) * (0.75 + 0.25 * Math.sin(k * 5));
+        `<button type="button" class="btn pc-ok">やったね</button></div>`);
+    }, 1500);
+  });
+  const clamp01 = (x) => Math.max(0, Math.min(1, x)), easeBack = (u) => 1 + 2.2 * Math.pow(u - 1, 3) + 1.2 * Math.pow(u - 1, 2);
+  function chestUiTick(t) {
+    if (pch.hidden || PC.inAt == null) return;
+    // 下から出てきて止まる（少し行きすぎてもどる）。開ける前は、ときどきカタカタゆれる
+    const u = clamp01((t - PC.inAt) / 0.45), y = (1 - easeBack(u)) * 160;
+    const waiting = PC.openAt == null && u >= 1;
+    const rot = waiting && Math.sin(t * 1.9) > 0.55 ? Math.sin(t * 28) * 4 : 0;
+    let pop = 0;
+    if (PC.openAt != null) { const k = t - PC.openAt; pop = Math.max(0, 1 - k / 0.35) * 0.08; }
+    pcBox.style.opacity = t < PC.inAt ? '0' : '1';
+    pcBox.style.transform = `translate3d(0,${y.toFixed(1)}px,0) rotate(${rot.toFixed(2)}deg) scale(${(1 + pop).toFixed(3)})`;
+    pcHint.style.opacity = waiting ? String(0.75 + 0.25 * Math.sin(t * 5)) : '0';
+    if (PC.openAt == null) { pcLid.style.transform = waiting && rot ? 'translate3d(0,-4px,0)' : ''; pcGlow.style.opacity = '0'; pcItem.style.opacity = '0'; pcBeam.style.opacity = '0'; return; }
+    const k = t - PC.openAt;
+    // ふた：少し持ち上がってから、パカッと開く（開いた勢いで少しのびて、もどる）
+    if (k < 0.12) pcLid.style.transform = `translate3d(0,${-Math.round(k / 0.12 * 2) * 4}px,0)`;
+    else { if (!PC.popped) { PC.popped = true; pcLid.src = 'icons/chest_lid_open.png'; } const b = clamp01((k - 0.12) / 0.4); pcLid.style.transform = `scale(1,${(1 + Math.sin(b * Math.PI) * 0.18 * (1 - b)).toFixed(3)})`; }
+    const lb = clamp01((k - 0.12) / 0.3); pcBeam.style.opacity = String(lb * (0.85 + 0.15 * Math.sin(k * 6))); pcBeam.style.transform = `scale(${(0.6 + 0.4 * lb).toFixed(3)},${lb.toFixed(3)})`; // 開いた口から光
+    // 中身：口から上へポンと出て、ふわふわ浮く。うしろに段の色の光
+    const k2 = k - 0.15;
+    if (k2 > 0) {
+      const v2 = clamp01(k2 / 0.5), iy = -(30 + 150 * easeBack(v2)) + (k2 > 0.5 ? Math.sin((k2 - 0.5) * 2.6) * 4 : 0), s = 0.4 + 0.9 * clamp01(k2 / 0.3);
+      pcItem.style.opacity = '1'; pcItem.style.transform = `translate3d(-50%,${iy.toFixed(1)}px,0) scale(${s.toFixed(3)})`;
+      pcGlow.style.opacity = String(Math.min(0.9, k2 * 3) * (0.8 + 0.2 * Math.sin(k2 * 5))); pcGlow.style.transform = `translate3d(-50%,${iy.toFixed(1)}px,0) scale(${(0.6 + 0.6 * clamp01(k2 / 0.4)).toFixed(3)})`;
+    }
   }
   // 物の中か（探知機の輪・柄が入らないように。物はどれも回していない箱：半分の幅と高さ）
   const OBJ_HALF = { tree: 0.5, rock: 0.5, bush: 0.63, field: 1.12 }, OBJ_TOP = { tree: 99, rock: 1.4, bush: 1.2, field: 0.22 };
@@ -499,7 +522,7 @@ async function main() {
     if (H.mode === 'work' && H.work && H.work.o.kind === 'tree') { const k = Math.sin(t * 20) * 0.012 * Math.max(0, Math.sin((t - H.work.t0) * 10)); H.work.o.g.userData.leaves.rotation.z = k; }
     waterTick(t, dt);
     if (T.openAt != null) chest.g.userData.open = Math.min(1, (t - T.openAt) / 0.8);
-    lootTick(t); if (tab !== 'treasure') loot.g.visible = false;
+    chestUiTick(t);
     tickScene(S, t);
     for (let i = pops.length - 1; i >= 0; i--) { const p = pops[i], k = (t - p.t0) / 1.4; p.s.position.y += dt * 0.9; p.s.material.opacity = 1 - Math.max(0, k - 0.5) * 2; if (k >= 1) { S.scene.remove(p.s); pops.splice(i, 1); } }
     // おてつだいの間は、カメラが村人について行く（回した向き・遠さはそのまま）
