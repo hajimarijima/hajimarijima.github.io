@@ -102,7 +102,10 @@
    "food": "魚"
   },
   "hidden": false,
-  "display": "kbokn0219"
+  "display": "kbokn0219",
+  "titles": [
+   "big_catch"
+  ]
  },
  {
   "key": "e59b5baeec",
@@ -157,7 +160,10 @@
   "hidden": false,
   "display": "_mayu1030",
   "joinedAt": "17:45",
-  "skinBody": "female"
+  "skinBody": "female",
+  "titles": [
+   "big_catch"
+  ]
  },
  {
   "key": "90b16eb3df",
@@ -229,7 +235,10 @@
   },
   "hidden": false,
   "display": "jgpdbj.331",
-  "joinedAt": "17:45"
+  "joinedAt": "17:45",
+  "titles": [
+   "big_catch"
+  ]
  },
  {
   "key": "7657063664",
@@ -266,7 +275,10 @@
   "hidden": false,
   "display": "chunchun_diary_01",
   "profileAt": "2026-11-26T08:21:43.000Z",
-  "joinedAt": "17:45"
+  "joinedAt": "17:45",
+  "titles": [
+   "big_catch"
+  ]
  },
  {
   "key": "b88fde425a",
@@ -302,7 +314,10 @@
   },
   "hidden": false,
   "display": "toa.1029",
-  "joinedAt": "19:07"
+  "joinedAt": "19:07",
+  "titles": [
+   "big_catch"
+  ]
  },
  {
   "key": "4e90987092",
@@ -439,13 +454,16 @@
   "joinedDay": 0,
   "source": "comment",
   "startTool": "axe",
-  "birthday": "05-15",
+  "birthday": "06-15",
   "profile": {
    "food": "りんご"
   },
   "hidden": false,
   "display": "kou6.15",
-  "joinedAt": "12:19"
+  "joinedAt": "12:19",
+  "oreAt": "2026-11-27T03:20:49.702Z",
+  "oreMode": "keep",
+  "profileAt": "2026-11-27T03:20:49.702Z"
  },
  {
   "key": "f513f79825",

@@ -2,52 +2,106 @@
  "title": "はじまり島",
  "seed": "machi-12",
  "startDate": "2026-11-27",
- "day": 0,
- "date": "2026-11-26",
+ "day": 1,
+ "date": "2026-11-27",
  "demo": false,
  "resources": {
-  "wood": 0,
-  "stone": 0,
-  "food": 10
+  "wood": 26,
+  "stone": 50,
+  "food": 47
  },
  "totals": {
-  "wood": 0,
-  "stone": 0,
-  "food": 0
+  "wood": 27,
+  "stone": 50,
+  "food": 37.6
  },
  "followers": 25,
- "followerLog": [],
+ "followerLog": [
+  {
+   "day": 1,
+   "followers": 25
+  }
+ ],
  "reached": [],
- "vote": null,
+ "vote": {
+  "kind": "what",
+  "question": "何を建てる？",
+  "openedDay": 1,
+  "closesDay": 2,
+  "opensAt": "2026-11-27T05:47:27.274Z",
+  "closesAt": "2026-11-27T15:00:00+09:00",
+  "options": [
+   {
+    "key": "A",
+    "build": "hut",
+    "name": "小屋"
+   },
+   {
+    "key": "B",
+    "build": "storehouse",
+    "name": "倉庫"
+   },
+   {
+    "key": "C",
+    "build": "workbench",
+    "name": "作業台"
+   }
+  ],
+  "votes": {
+   "A": 0,
+   "B": 0,
+   "C": 0
+  },
+  "manual": {
+   "A": 0,
+   "B": 0,
+   "C": 0
+  },
+  "voters": 0,
+  "timeline": [
+   {
+    "t": "2026-11-27T05:47:27.274Z",
+    "A": 0,
+    "B": 0,
+    "C": 0
+   },
+   {
+    "t": "2026-11-27T06:00:00.000Z",
+    "A": 0,
+    "B": 0,
+    "C": 0
+   }
+  ],
+  "counted": {
+   "A": 0,
+   "B": 0,
+   "C": 0
+  },
+  "commentCount": 0
+ },
  "votes": [
   {
-   "kind": "base",
-   "question": "拠点はどこにする？",
-   "openedDay": 0,
-   "closesDay": 1,
-   "opensAt": "2026-11-26T00:00:00+09:00",
-   "closesAt": null,
+   "kind": "what",
+   "question": "何を建てる？",
+   "openedDay": 1,
+   "closesDay": 2,
+   "opensAt": "2026-11-27T05:47:27.274Z",
+   "closesAt": "2026-11-27T15:00:00+09:00",
    "options": [
     {
      "key": "A",
-     "name": "浜辺の近く",
-     "x": 8,
-     "z": 31,
-     "desc": "島の南のはし。海が目の前で、砂浜まで歩いてすぐ。海べで釣りもできる"
+     "build": "hut",
+     "name": "小屋"
     },
     {
      "key": "B",
-     "name": "池のそば",
-     "x": -27,
-     "z": 2,
-     "desc": "島の西。池のすぐそばで釣りができる。となりは広い野原"
+     "build": "storehouse",
+     "name": "倉庫"
     },
     {
      "key": "C",
-     "name": "森の入口",
-     "x": 14,
-     "z": -28,
-     "desc": "島の北。森のすぐ手前で、木がたくさん取れる。隣の島にも近い"
+     "build": "workbench",
+     "name": "作業台"
     }
    ],
    "votes": {
@@ -63,13 +117,13 @@
    "voters": 0,
    "timeline": [
     {
-     "t": "2026-11-25T15:00:00.000Z",
+     "t": "2026-11-27T05:47:27.274Z",
      "A": 0,
      "B": 0,
      "C": 0
     },
     {
-     "t": "2026-11-25T18:00:00.000Z",
+     "t": "2026-11-27T06:00:00.000Z",
      "A": 0,
      "B": 0,
      "C": 0
@@ -80,17 +134,118 @@
     "B": 0,
     "C": 0
    },
-   "commentCount": 0,
-   "tallied": "2026-11-26T05:59:07.983Z",
-   "waiting": true
+   "commentCount": 0
+  },
+  {
+   "kind": "where",
+   "question": "どこに建てる？",
+   "openedDay": 1,
+   "closesDay": 2,
+   "opensAt": "2026-11-27T15:00:00+09:00",
+   "closesAt": "2026-11-28T00:00:00+09:00",
+   "options": [
+    {
+     "key": "A",
+     "name": "海のそば",
+     "x": -24.59,
+     "z": 25.82,
+     "plot": 14
+    },
+    {
+     "key": "B",
+     "name": "北の森の入口",
+     "x": -29.41,
+     "z": -21.82,
+     "plot": 15
+    },
+    {
+     "key": "C",
+     "name": "広場の近く",
+     "x": -29.38,
+     "z": 12.82,
+     "plot": 1
+    }
+   ],
+   "votes": {
+    "A": 0,
+    "B": 0,
+    "C": 0
+   },
+   "manual": {
+    "A": 0,
+    "B": 0,
+    "C": 0
+   },
+   "voters": 0,
+   "timeline": [
+    {
+     "t": "2026-11-27T06:00:00.000Z",
+     "A": 0,
+     "B": 0,
+     "C": 0
+    },
+    {
+     "t": "2026-11-27T09:00:00.000Z",
+     "A": 0,
+     "B": 0,
+     "C": 0
+    }
+   ],
+   "counted": {
+    "A": 0,
+    "B": 0,
+    "C": 0
+   },
+   "commentCount": 0
   }
  ],
  "decisions": [],
  "plan": null,
- "pool": null,
+ "pool": [
+  "hut",
+  "storehouse",
+  "workbench",
+  "farm",
+  "house",
+  "pen",
+  "well",
+  "canal",
+  "fence",
+  "workshop",
+  "watch",
+  "garden",
+  "shop",
+  "plaza",
+  "lamps",
+  "house",
+  "wall",
+  "inn"
+ ],
  "toolGoal": null,
  "store": {
-  "berry": 30
+  "berry": 70,
+  "cobble": 50,
+  "wool": 8,
+  "fish_funa": 5,
+  "fish_bluegill": 3,
+  "apple": 9,
+  "seeds": 12,
+  "fish_masu": 4,
+  "fish_namazu": 1,
+  "fish_saba": 4,
+  "fish_mebaru": 1,
+  "flower_r": 2,
+  "fish_aji": 5,
+  "log": 26,
+  "stump": 3,
+  "planks": 1,
+  "flower_y": 5,
+  "fish_dojou": 4,
+  "old_boot": 1,
+  "fish_koi": 1,
+  "fish_ugui": 1,
+  "fish_kasago": 1,
+  "old_coin": 1
  },
  "bonus": {
   "wood": 0,
@@ -98,5 +253,294 @@
   "food": 0
  },
  "weather": "晴れ",
- "updated": null
+ "updated": "2026-11-27T05:47:27.339Z",
+ "startedAt": "2026-11-27T05:47:27.274Z",
+ "firsts": {
+  "fish": 1,
+  "apple_tree": 1,
+  "shark": 1,
+  "bed": 1,
+  "treasure": 1,
+  "night_foes": 1
+ },
+ "base": {
+  "kind": "base",
+  "question": "拠点はどこにする？",
+  "key": "B",
+  "name": "池のそば",
+  "x": -27,
+  "z": 2,
+  "day": 1,
+  "openedDay": 0,
+  "votes": {
+   "A": 0,
+   "B": 0,
+   "C": 0
+  },
+  "voters": 0,
+  "tie": false,
+  "none": true,
+  "pct": {
+   "A": 0,
+   "B": 0,
+   "C": 0
+  },
+  "options": [
+   {
+    "key": "A",
+    "name": "浜辺の近く",
+    "x": 8,
+    "z": 31,
+    "desc": "島の南のはし。海が目の前で、砂浜まで歩いてすぐ。海べで釣りもできる"
+   },
+   {
+    "key": "B",
+    "name": "池のそば",
+    "x": -27,
+    "z": 2,
+    "desc": "島の西。池のすぐそばで釣りができる。となりは広い野原"
+   },
+   {
+    "key": "C",
+    "name": "森の入口",
+    "x": 14,
+    "z": -28,
+    "desc": "島の北。森のすぐ手前で、木がたくさん取れる。隣の島にも近い"
+   }
+  ],
+  "opensAt": "2026-11-26T00:00:00+09:00",
+  "closesAt": "2026-11-27T05:47:27.274Z",
+  "timeline": [
+   {
+    "t": "2026-11-25T15:00:00.000Z",
+    "A": 0,
+    "B": 0,
+    "C": 0
+   },
+   {
+    "t": "2026-11-25T18:00:00.000Z",
+    "A": 0,
+    "B": 0,
+    "C": 0
+   }
+  ]
+ },
+ "res": {
+  "wood": 26.25,
+  "stone": 50,
+  "food": 47.800000000000004
+ },
+ "fishing": {
+  "top": {
+   "fish_masu": [
+    [
+     35,
+     "54ca827060",
+     1
+    ],
+    [
+     24,
+     "fecbebe3e7",
+     1
+    ],
+    [
+     19,
+     "54ca827060",
+     1
+    ],
+    [
+     18,
+     "54ca827060",
+     1
+    ]
+   ],
+   "fish_funa": [
+    [
+     26,
+     "fecbebe3e7",
+     1
+    ],
+    [
+     16,
+     "6764b0cb0a",
+     1
+    ],
+    [
+     12,
+     "54ca827060",
+     1
+    ],
+    [
+     10,
+     "fecbebe3e7",
+     1
+    ],
+    [
+     8,
+     "fecbebe3e7",
+     1
+    ]
+   ],
+   "fish_bluegill": [
+    [
+     18,
+     "fecbebe3e7",
+     1
+    ],
+    [
+     12,
+     "54ca827060",
+     1
+    ],
+    [
+     11,
+     "54ca827060",
+     1
+    ]
+   ],
+   "fish_saba": [
+    [
+     43,
+     "23aa0db579",
+     1
+    ],
+    [
+     21,
+     "23aa0db579",
+     1
+    ],
+    [
+     20,
+     "cef1e22a99",
+     1
+    ],
+    [
+     20,
+     "23aa0db579",
+     1
+    ]
+   ],
+   "fish_namazu": [
+    [
+     40,
+     "54ca827060",
+     1
+    ]
+   ],
+   "fish_mebaru": [
+    [
+     23,
+     "cef1e22a99",
+     1
+    ]
+   ],
+   "fish_aji": [
+    [
+     34,
+     "cef1e22a99",
+     1
+    ],
+    [
+     27,
+     "23aa0db579",
+     1
+    ],
+    [
+     20,
+     "23aa0db579",
+     1
+    ],
+    [
+     18,
+     "cef1e22a99",
+     1
+    ],
+    [
+     14,
+     "23aa0db579",
+     1
+    ]
+   ],
+   "fish_dojou": [
+    [
+     16,
+     "fecbebe3e7",
+     1
+    ],
+    [
+     12,
+     "6764b0cb0a",
+     1
+    ],
+    [
+     9,
+     "54ca827060",
+     1
+    ],
+    [
+     9,
+     "6764b0cb0a",
+     1
+    ]
+   ],
+   "fish_koi": [
+    [
+     27,
+     "6764b0cb0a",
+     1
+    ]
+   ],
+   "fish_ugui": [
+    [
+     19,
+     "54ca827060",
+     1
+    ]
+   ],
+   "fish_kasago": [
+    [
+     15,
+     "23aa0db579",
+     1
+    ]
+   ]
+  },
+  "catches": 30
+ },
+ "nextTool": {
+  "item": "stone_pickaxe",
+  "ok": false,
+  "text": "作業台がいる"
+ },
+ "expansion": {},
+ "night": null,
+ "today": {
+  "weather": "晴れ",
+  "jobs": {
+   "wood": 6,
+   "stone": 6,
+   "food": 12
+  },
+  "gained": {
+   "wood": 27,
+   "stone": 50,
+   "food": 37.6
+  },
+  "built": [],
+  "trips": 33,
+  "crafted": [],
+  "leveled": [
+   "square"
+  ],
+  "birthdays": [],
+  "events": [
+   {
+    "id": "winter",
+    "name": "冬祭り",
+    "day": 2,
+    "icon": "snowflake"
+   }
+  ],
+  "talks": 3
+ }
 }
