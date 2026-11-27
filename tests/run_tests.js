@@ -3008,7 +3008,7 @@ t('DM で入居：言葉の読み取り・config は切ってある・返事の�
   assert.ok(/DM/.test(cfg.dm.howTo) && cfg.dm.howToSteps.length >= 2, 'サイトの住み方に使う文');
   // 切ってある時は何もしない
   const S = { villagers: [] };
-  const r = DM.dmJoins(S, [{ id: 'a'.repeat(32), igsid: '5551', username: 'dm_taro', follows: true, text: '住みたい', at: '2026-11-27T01:00:00Z' }], { config: cfg, hidden: new Set(), date: '2026-11-27', day: 0 });
+  const r = DM.dmJoins(S, [{ id: 'a'.repeat(32), igsid: '5551', username: 'dm_taro', follows: true, text: '住みたい', at: '2026-11-27T01:00:00Z' }], { config: { ...cfg, dm: { ...cfg.dm, enabled: false } }, hidden: new Set(), date: '2026-11-27', day: 0 });
   assert.strictEqual(r.registered.length + r.replies.length, 0); assert.strictEqual(S.villagers.length, 0);
 });
 t('DM で入居：コメントと同じ人は二重にならない・フォローしていない人・道具と誕生日も読む・名前をかくす人はあだ名', () => {
