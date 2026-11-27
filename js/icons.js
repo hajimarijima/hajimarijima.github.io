@@ -57,7 +57,8 @@ export const ICONS = {
   // 写真モード
   camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
-  'arrow-left': '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',  // 下はこのサイトで描いた、Lucide に似せた線の絵（Lucide には無い・形を正しく覚えていないもの）
+  'arrow-left': '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  maximize: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>', // 全画面（js/fullscreen.js）  // 下はこのサイトで描いた、Lucide に似せた線の絵（Lucide には無い・形を正しく覚えていないもの）
   bridge: '<path d="M2 6h20"/><path d="M4 6v15"/><path d="M20 6v15"/><path d="M4 19c2.5-6 5-9 8-9s5.5 3 8 9"/><path d="M8 6v6"/><path d="M12 6v4"/><path d="M16 6v6"/>',
   'paw-print': '<path d="M8 17.5c0-2.8 1.8-5 4-5s4 2.2 4 5c0 1.6-1.4 2.5-4 2.5s-4-.9-4-2.5Z"/><circle cx="5.5" cy="10.5" r="1.8"/><circle cx="9.5" cy="6.5" r="1.8"/><circle cx="14.5" cy="6.5" r="1.8"/><circle cx="18.5" cy="10.5" r="1.8"/>',
   shark: '<path d="M5 16C7 10 10.5 5.5 16 4c-1.2 3.6-1.2 8 1 12"/><path d="M2 20c1.5 0 2.5-1 4-1s2.5 1 4 1 2.5-1 4-1 2.5 1 4 1 2.5-1 4-1"/>',
