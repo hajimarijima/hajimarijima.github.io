@@ -14,7 +14,7 @@
   "joinWord": "住みたい",
   "mbtiOn": true,
   "mbtiOnNote": "コメントで MBTI（INFP・ENTJ・INFP-T など）を受け付けて、村人のページとカードに「MBTI：INFP」と出すか。書いた人だけに出る（書いていない人には入れない）。false にすると読まないし出さない。サイトの案内の例（住みたい ピッケル 12/11 りんご INFP）からも INFP が消える",
-  "votePostUrl": "",
+  "votePostUrl": "https://www.instagram.com/reel/DgPClzuBOeJ/",
   "votePostUrlNote": "投票の投稿（インスタ）の URL をここに貼る。例 \"https://www.instagram.com/p/XXXXXXXX/\"。貼ると、投票のページと町のページの投票の帯に「インスタの投稿にコメントして投票する」ボタンが出る。投票はこの投稿のコメントだけで数える。スマホからは GitHub の Actions →「投稿の URL を変える」→ Run workflow に URL を貼るだけで変えられる（ここを手で書きかえてもよい）。空のあいだは Secrets の IG_VOTE_MEDIA を使う",
   "joinPostUrl": "",
   "joinPostUrlNote": "「住みたい」を集める投稿（インスタ）の URL。いくつもある時は [\"URL1\", \"URL2\"] のように並べる（古い投稿も並べておけば、そこへの「住みたい」も受け付けつづける）。Actions の「投稿の URL を変える」で貼ると、ここに足される。空のあいだは Secrets の IG_JOIN_MEDIA を使う",
