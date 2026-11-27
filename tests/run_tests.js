@@ -3590,6 +3590,84 @@ t('sim.js：誕生日パーティ（同じ日の人はまとめて 1 回・経�
   for (const k of Object.keys(life2)) for (const [it, n] of Object.entries(life2[k].ores || {})) assert.ok(['coal', 'iron', 'gold', 'diamond'].includes(it) && n >= 0, it);
 });
 
+// ---------- 引っ越し（tools/moveout.js）：本物の data を一時フォルダに写して試す（本物の data/ では動かさない） ----------
+t('引っ越し：その人の id がどこにも残らない・空き家にもどる・前のコメントでは住み直さず、新しい「住みたい」で住める', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-moveout-'));
+  const src = path.join(ROOT, 'data');
+  fs.cpSync(src, dir, { recursive: true, filter: (p) => !['inbox', 'import'].includes(path.relative(src, p).split(/[\\/]/)[0]) });
+  assert.ok(!fs.existsSync(path.join(dir, 'inbox')), 'inbox は写さない');
+  assert.notStrictEqual(path.resolve(dir), path.resolve(src));
+  const env = { ...process.env, TOWN_DATA: dir, TOWN_SALT_QUIET: '1' };
+  delete env.TOWN_SALT; delete env.GITHUB_ACTIONS; delete env.TOWN_HIDDEN;
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+  const realBefore = fs.readFileSync(path.join(src, 'villagers.json'), 'utf8');
+  // 何日か動かして、関係・おしゃべり・建てた人の名簿などができてから試す
+  node('tools/sim.js', '--days', '6', '--now', '2026-12-03T12:00:00+09:00');
+  const readV = () => JSON.parse(fs.readFileSync(path.join(dir, 'villagers.json'), 'utf8'));
+  const allText = () => {
+    const files = [];
+    const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else files.push(p); } };
+    walk(dir);
+    return Object.fromEntries(files.map((f) => [path.relative(dir, f), fs.readFileSync(f, 'utf8')]));
+  };
+  // いちばん多く参照されている、名前のある人を選ぶ
+  const vs0 = readV(), txt0 = allText();
+  const count = (k) => Object.values(txt0).reduce((a, s) => a + s.split(k).length - 1, 0);
+  const v = vs0.filter((x) => x.name && !x.hidden).sort((a, b) => count(b.key) - count(a.key))[0];
+  assert.ok(v && count(v.key) > 5, '参照のある村人がいる');
+  const K = v.key;
+  // テストの塩で名前の印を合わせる（本物の印は本物の塩で作ってあるため）
+  for (const x of vs0) if (x.key === K) { x.userHash = P.userHash(x.name); delete x.igId; delete x.igAlt; }
+  fs.writeFileSync(path.join(dir, 'villagers.json'), JSON.stringify(vs0, null, 1) + '\n');
+  const lifeBefore = STORE.readLife(dir);
+  const home = lifeBefore[K].home;
+  // --dry：一覧は出すが、何も書かない
+  const snap = allText();
+  const dry = node('tools/moveout.js', v.name, '--dry', '--now', '2026-12-03T13:00:00+09:00');
+  assert.ok(/ためし/.test(dry) && dry.includes(K), dry);
+  assert.deepStrictEqual(allText(), snap, '--dry では何も書かない');
+  // 本番：ユーザー名で引っ越し
+  const out = node('tools/moveout.js', '@' + v.name, '--now', '2026-12-03T13:00:00+09:00');
+  assert.ok(/引っ越しました/.test(out), out);
+  const after = allText();
+  for (const f of ['villagers.json', 'world.json', 'social.json', 'life.json', 'state.json', 'mail.json', 'visits.json', 'decor.json', 'requests.json']) {
+    if (after[f] != null) assert.ok(!after[f].includes(K), `${f} に id が残っている`);
+  }
+  for (const [f, s] of Object.entries(after)) if (f.startsWith('diary')) assert.ok(!s.includes(K), `${f} に日記が残っている`);
+  const hist = JSON.parse(after['history.json']);
+  assert.ok(!hist.some((h) => (h.who || []).includes(K)), '歴史の who に残っていない');
+  assert.strictEqual(hist[hist.length - 1].type, 'moveout');
+  assert.strictEqual(hist[hist.length - 1].text, `${v.display}さんが島を引っ越した。`);
+  assert.ok(!readV().some((x) => x.key === K));
+  const lifeAfter = STORE.readLife(dir);
+  assert.ok(!lifeAfter[K]);
+  if (home) assert.ok(Object.values(lifeAfter).filter((L) => L.home === home).length < Object.values(lifeBefore).filter((L) => L.home === home).length, '家に空きができた');
+  const moved = JSON.parse(after['moved.json']);
+  assert.ok(moved.some((m) => m.u === P.userHash(v.name)) && !after['moved.json'].includes(K) && !after['moved.json'].includes(v.name), 'moved.json は印だけ');
+  // 引っ越したあとも町はふつうに動く
+  node('tools/sim.js', '--now', '2026-12-04T12:00:00+09:00');
+  assert.ok(!readV().some((x) => x.name === v.name));
+  // 前の「住みたい」コメント（引っ越す前）だけでは住み直さない
+  const inboxDir = path.join(dir, 'inbox'); fs.mkdirSync(inboxDir, { recursive: true });
+  const inbox = path.join(inboxDir, 'instagram.json');
+  const oldC = { id: 'c-old', text: '住みたい', timestamp: '2026-11-20T10:00:00+0000', username: v.name, from: { username: v.name } };
+  fs.writeFileSync(inbox, JSON.stringify({ joinComments: [oldC] }));
+  node('tools/join.js', '--now', '2026-12-04T13:00:00+09:00');
+  assert.ok(!readV().some((x) => x.name === v.name), '前のコメントで住み直した');
+  // 引っ越したあとの新しい「住みたい」：ふつうに新しく住む（「もう住んでいます」にならない）
+  fs.writeFileSync(inbox, JSON.stringify({ joinComments: [oldC, { id: 'c-new', text: '住みたい ピッケル', timestamp: '2026-12-04T05:00:00+0000', username: v.name, from: { username: v.name } }] }));
+  const jo = node('tools/join.js', '--now', '2026-12-04T15:00:00+09:00');
+  assert.ok(/新しく 1 人/.test(jo), jo);
+  const nv = readV().find((x) => x.name === v.name);
+  assert.ok(nv, '新しく住んだ');
+  const nl = STORE.readLife(dir)[nv.key];
+  assert.ok(nl && nl.diary.length === 1 && /今日から村に住む/.test(nl.diary[0].text), '新しい暮らし・日記が 1 行目から');
+  assert.strictEqual(readV().filter((x) => x.name === v.name).length, 1);
+  // 本物の data/ は変わっていない
+  assert.strictEqual(fs.readFileSync(path.join(src, 'villagers.json'), 'utf8'), realBefore, '本物の data/ をさわった');
+  assert.ok(!fs.existsSync(path.join(src, 'moved.json')));
+});
+
 // ---------- 手紙と家の飾り（tests/home_tests.js） ----------
 require('./home_tests.js')({ t, at, ROOT });
 // ---------- 誰かの家に遊びに行く（tests/visit_tests.js） ----------

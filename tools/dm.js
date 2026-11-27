@@ -60,7 +60,7 @@ const houseUrl = (dc, key) => {
 //   dms：[{ id, igsid, username, follows, text, at }]（tools/dm.js pull が置く data/inbox/dm.json の items）
 //   返り値：{ registered: [新しく来た村人], known: [もう住んでいた村人], replies: [{ ids, text, kind, v }], profUpdated }
 //   replies の v は、町に迎えたあと（welcomeNow のあと）に replyTexts() で文を作るために持っておく
-function dmJoins(S, dms, { config, owners = [], hidden, date, day, enemies = false } = {}) {
+function dmJoins(S, dms, { config, owners = [], hidden, date, day, enemies = false, moved = [] } = {}) {
   const dc = dmConfig(config);
   const out = { registered: [], known: [], replies: [], skipped: 0, profUpdated: 0 };
   if (!dc.enabled) return out;
@@ -92,6 +92,7 @@ function dmJoins(S, dms, { config, owners = [], hidden, date, day, enemies = fal
     const from = { id: igsid, username: username || (known && known.name) || '' };
     const fake = (dc.readOptions ? hits : [last]).map((x) => ({ text: dc.readOptions ? asJoin(x.m.text) : JW, timestamp: x.m.at || new Date().toISOString(), from }));
     const r = P.registrationsFrom(fake, JW, config.startTools, { enemies, mbti: config.mbtiOn !== false })[0] || {};
+    if (!known && P.movedBefore(moved, r)) { out.replies.push({ ids: g.ids, text: null, kind: 'ignore' }); out.skipped++; continue; } // 引っ越す前の DM（tools/moveout.js）
     const v = P.upsertVillager(S.villagers, { igId: igsid, username: username || (known && known.name), joined: date, joinedDay: day, source: 'comment', startTool: r.startTool, birthday: r.birthday, food: r.food }, hidden);
     if (v) { v.via = 'dm'; out.registered.push(v); }
     const who = v || P.findVillager(S.villagers, { igId: igsid, username });

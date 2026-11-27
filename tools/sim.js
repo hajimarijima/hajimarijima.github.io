@@ -178,7 +178,9 @@ function stepDay(S) {
   // ---- 1. 参加の登録（「参加したい」コメント） ----
   if (inbox && inbox.joinComments) {
     const enemiesOn = !!(config.enemies && config.enemies.enabled);
+    const moved = P.loadMoved(DATA); // 引っ越した人（tools/moveout.js）：引っ越す前の「住みたい」では住み直さない
     for (const r of P.registrationsFrom(inbox.joinComments, config.joinWord, config.startTools, { enemies: enemiesOn })) {
+      if (P.movedBefore(moved, r) && !P.findVillager(villagers, r)) continue;
       const v = P.upsertVillager(villagers, { igId: r.igId, username: r.username, joined: date, joinedDay: day, source: 'comment', startTool: r.startTool, birthday: r.birthday, food: r.food }, hidden);
       if (v) v._new = true;
     }

@@ -1,0 +1,54 @@
+# 住人の「引っ越し」（管理者が手で動かす。町から消して、家・畑などを空きにもどす。tools/moveout.js）
+# 動かし方：Actions → moveout → Run workflow → username（ユーザー名か村人の id）を入れて、dry を選ぶ
+#   dry が true（既定）：消すものの一覧をログに出すだけ（何も書かない）
+#   dry が false：本当に引っ越しさせて、変わった data をコミットする
+# Cloudflare の KV（?me= の専用リンクなど）はさわらない
+name: moveout
+
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: "引っ越しさせる人のユーザー名（@ なしでもよい）か村人の id"
+        required: true
+        type: string
+      dry:
+        description: "ためしだけ（true：一覧を出すだけ・false：本当に消してコミット）"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+# 町のファイルを書く仕事どうし（join・daily と同じ town）：同時に書かない
+concurrency:
+  group: town
+  cancel-in-progress: false
+
+jobs:
+  moveout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: 引っ越し
+        run: |
+          if [ "$DRY" = "true" ]; then node tools/moveout.js "$WHO" --dry; else node tools/moveout.js "$WHO"; fi
+        env:
+          WHO: ${{ inputs.username }}
+          DRY: ${{ inputs.dry }}
+          TOWN_SALT: ${{ secrets.TOWN_SALT }}
+          TOWN_HIDDEN: ${{ secrets.TOWN_HIDDEN }}
+      - name: 結果をコミット
+        if: ${{ !inputs.dry }}
+        run: |
+          git config user.name "town-bot"
+          git config user.email "town-bot@users.noreply.github.com"
+          # 引っ越しで変わるファイル（村人・暮らし・日記・歴史・関係・地図・手紙など・引っ越した印）。data/inbox/ は .gitignore で除外
+          for f in data/villagers.json data/world.json data/state.json data/life.json data/history.json data/social.json data/diary data/mail.json data/visits.json data/decor.json data/requests.json data/requests_seen.json data/moved.json; do
+            if [ -e "$f" ]; then git add "$f"; fi
+          done
+          git diff --cached --quiet || (git commit -m "住人の引っ越し" && git push)

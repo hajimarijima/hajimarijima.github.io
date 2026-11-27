@@ -42,8 +42,10 @@ if (removed) console.log(`持ち主のアカウントを村人から ${removed} 
 
 let registered = 0;
 const comments = (inbox && inbox.joinComments) || [];
+const moved = P.loadMoved(DATA); // 引っ越した人（tools/moveout.js）：引っ越す前の「住みたい」では住み直さない
 for (const r of P.registrationsFrom(comments, config.joinWord, config.startTools, { enemies })) {
   if (owners.includes(String(r.username || '').toLowerCase())) continue;
+  if (P.movedBefore(moved, r) && !P.findVillager(S.villagers, r)) continue;
   const v = P.upsertVillager(S.villagers, { igId: r.igId, username: r.username, joined: date, joinedDay: day, source: 'comment', startTool: r.startTool, birthday: r.birthday, food: r.food }, hidden);
   if (v) registered++;
 }
@@ -52,7 +54,7 @@ const DM = require('./dm');
 const dmFile = opt('--dm', path.join(DATA, 'inbox', 'dm.json'));
 const dmRepliesFile = path.join(path.dirname(dmFile), 'dm_replies.json');
 const dmItems = fs.existsSync(dmFile) ? (JSON.parse(fs.readFileSync(dmFile, 'utf8')).items || []) : [];
-const dmRes = DM.dmJoins(S, dmItems, { config, owners, hidden, date, day, enemies });
+const dmRes = DM.dmJoins(S, dmItems, { config, owners, hidden, date, day, enemies, moved });
 registered += dmRes.registered.length;
 if (dmItems.length) console.log(`DM：${dmItems.length} 件・新しく住んだ人 ${dmRes.registered.length} 人・もう住んでいた人 ${dmRes.known.length} 人`);
 for (const v of S.villagers) P.applyPrivacy(v, hidden);

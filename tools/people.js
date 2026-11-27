@@ -125,7 +125,7 @@ function registrationsFrom(comments, word, startTools, opts = {}) {
     const id = u.igId ? 'ig:' + u.igId : 'user:' + norm(u.username).toLowerCase();
     const prev = byUser.get(id);
     const tool = startTools ? parseStartTool(c.text, startTools, opts) : null;
-    const r = { ...(prev || {}), ...u, firstAt: prev ? prev.firstAt : c.timestamp };
+    const r = { ...(prev || {}), ...u, firstAt: prev ? prev.firstAt : c.timestamp, lastAt: c.timestamp };
     if (tool) r.startTool = tool;
     const p = parseCommentProfile(c.text, { word, startTools, mbti: opts.mbti !== false, join: true });
     if (p.birthday) { r.birthday = p.birthday; r.bdAt = c.timestamp; }
@@ -459,4 +459,20 @@ function readFollowerExport(json) {
 // hidden.json に書く印（hmac:...）
 const hiddenEntry = (username) => 'hmac:' + userHash(username);
 
-module.exports = { saltIsDev, hiddenEntry, norm, igHash, userHash, keyFor, nickname, loadHidden, applyPrivacy, findVillager, upsertVillager, registrationsFrom, isJoin, JOIN_WORDS, parseStartTool, startToolByLabel, startToolById, parseBirthday, parseFood, parseMbti, parseCommentProfile, profileUpdatesFrom, applyCommentProfiles, FOODS, autoBirthday, autoFood, fillJoinProfile, nameBirthday, fitGenderSkin, skinTag, parseChoice, tallyVote, readFollowerExport, commentUser };
+// ---------- 引っ越した人（tools/moveout.js が data/moved.json に書く） ----------
+// [{ u: userHash, ig: [igHash…], at: 引っ越した時刻 }]（塩入りの印だけ。名前・村人の番号は入れない）。
+// 前に書いた「住みたい」コメントはインスタに残るので、引っ越した時刻より前のコメント・DM では住み直さない。
+// 引っ越したあとに新しく「住みたい」と書けば、ふつうに新しく住める
+function loadMoved(dataDir) {
+  const f = path.join(dataDir, 'moved.json');
+  try { const j = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : []; return Array.isArray(j) ? j : []; } catch { return []; }
+}
+// r = { igId, username, lastAt }（registrationsFrom の 1 人分）。引っ越す前の申しこみなら true
+function movedBefore(moved, r) {
+  if (!moved || !moved.length || !r) return false;
+  const u = r.username ? userHash(r.username) : null, ig = r.igId ? igHash(r.igId) : null;
+  const at = Date.parse(r.lastAt || 0) || 0;
+  return moved.some((m) => ((u && m.u === u) || (ig && (m.ig || []).includes(ig))) && at <= Date.parse(m.at));
+}
+
+module.exports = { loadMoved, movedBefore, saltIsDev, hiddenEntry, norm, igHash, userHash, keyFor, nickname, loadHidden, applyPrivacy, findVillager, upsertVillager, registrationsFrom, isJoin, JOIN_WORDS, parseStartTool, startToolByLabel, startToolById, parseBirthday, parseFood, parseMbti, parseCommentProfile, profileUpdatesFrom, applyCommentProfiles, FOODS, autoBirthday, autoFood, fillJoinProfile, nameBirthday, fitGenderSkin, skinTag, parseChoice, tallyVote, readFollowerExport, commentUser };
