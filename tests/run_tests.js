@@ -1489,6 +1489,10 @@ t('海の島々：重ならず、橋は陸から陸へ（とちゅうで別の�
   const sea = w0.islands.filter((i) => i.look);
   assert.ok(sea.length >= 8, '海の島が 8 つ以上 ' + sea.length);
   assert.ok(sea.every((i) => i.name && !ISX.isOpen(i)), 'どれも名前があり、はじめは行けない');
+  // 橋がかかる島は、どれも村人が住める大きさ（北の島に近い。いちばん細い所でも半径 22 以上）。橋のない小島は飾りで 2 つまで
+  const bridged = sea.filter((i) => w0.bridges.some((b) => b.to === i.id));
+  assert.ok(bridged.length >= 8 && sea.length - bridged.length <= 2, '開く島 ' + bridged.length + '・飾りの小島 ' + (sea.length - bridged.length));
+  for (const i of bridged) { let m = 1e9; for (let a = 0; a < Math.PI * 2; a += 0.05) m = Math.min(m, ISX.radiusAt(i, a)); assert.ok(i.r >= 26 && m >= 22, `${i.id} が小さい（r ${i.r}・細い所 ${m.toFixed(1)}）`); }
   for (const a of w0.islands) for (const b of w0.islands) {
     if (a === b) continue;
     for (let k = 0; k < 72; k++) { const p = ISX.shorePoint(a, (k / 72) * Math.PI * 2); assert.ok(ISX.shoreDist(b, p.x, p.z) < -10, `${a.id} と ${b.id} が近すぎる`); }
@@ -1520,7 +1524,10 @@ t('海の島々：北の島のあと、1 つずつ橋を作って開き、開い
     state = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
     world = STORE.readWorld(dir);
     assert.ok(Object.values(state.expansion || {}).filter((e) => !e.built).length <= 1, '同時に作る橋は 1 つ（' + d + ' 日目）');
-    for (const isl of world.islands.filter((i) => i.look && i.open === state.day)) assert.ok(world.trees.some((t) => t.state === 'tree' && ISX.shoreDist(isl, t.x, t.z) > 0), '開いた日に木が置かれる ' + isl.id);
+    for (const isl of world.islands.filter((i) => i.look && i.open === state.day)) {
+      assert.ok(world.trees.some((t) => t.state === 'tree' && ISX.shoreDist(isl, t.x, t.z) > 0), '開いた日に木が置かれる ' + isl.id);
+      assert.ok(world.plots.filter((p) => p.island === isl.id).length >= 8, '開いた日に家の区画が 8 つ以上 ' + isl.id);
+    }
   }
   fs.rmSync(dir, { recursive: true, force: true });
   const opened = world.islands.filter((i) => i.look && i.open);

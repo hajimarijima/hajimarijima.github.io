@@ -20,18 +20,21 @@ const FARLAND = { id: 'far', x: 310, z: -190, r: 235, wob: [[0.05, 3, 0.4], [0.0
 //   look：small（小島）・rocky（岩の多い島。まわりの海に岩の柱）・long（細長い島）・forest（森の島）・beach（砂浜の広い島）
 //   from：橋をかける元の島（その島が開いてから、こちらへの橋を作り始める。config.json の expansion.bridges に開く条件）
 //   開くまでは、地形（js/terrain_gen.js）が見た目だけの木と岩を少しだけ出す。橋ができた日に sim.js が populateIsland で本物の木・岩・区画を置く
+//   開く島はどれも北の島（半径 32）に近い大きさ（半径 26〜29）で、家が何軒も建つ。from のない小島（ことり島・こじま）は飾りで、開かない
+//   並び：はじまり島のまわりの輪（中心から約 100）に 5 つ、その外の輪（約 157）に 4 つ。橋はどれも 25〜33
 const SEA_ISLES = [
-  { id: 'kotori', name: 'ことり島', x: -34, z: -68, r: 7, wob: [[0.12, 3, 0.5], [0.06, 5, 1.2]], look: 'small', from: 'main' },
-  { id: 'iwa', name: 'いわ島', x: 86, z: 32, r: 18, wob: [[0.14, 4, 0.9], [0.07, 7, 2.2], [0.04, 11, 0.4]], look: 'rocky', from: 'main' },
-  { id: 'kujira', name: 'くじら島', x: -108, z: 2, r: 25, wob: [[0.42, 2, Math.PI / 2], [0.08, 3, 0.6], [0.03, 7, 1.4]], look: 'long', from: 'main' },
-  { id: 'kame', name: 'かめ島', x: -62, z: 62, r: 16, wob: [[0.05, 3, 1.1], [0.03, 6, 0.2]], look: 'forest', from: 'main' },
-  { id: 'minami', name: 'みなみ島', x: -14, z: 96, r: 21, wob: [[0.22, 2, 0.3], [0.05, 5, 2.6]], look: 'beach', from: 'kame' },
-  { id: 'kojima', name: 'こじま', x: 64, z: 72, r: 9, wob: [[0.08, 3, 2.0]], look: 'beach', from: 'iwa' },
-  { id: 'mori', name: 'もり島', x: -148, z: -60, r: 30, wob: [[0.07, 3, 0.2], [0.05, 5, 1.8], [0.02, 9, 0.7]], look: 'forest', from: 'kujira' },
-  { id: 'umineko', name: 'うみねこ島', x: 92, z: 110, r: 20, wob: [[0.18, 3, 0.8], [0.06, 5, 0.1]], look: 'rocky', from: 'kojima' },
-  { id: 'takara', name: 'たから島', x: 22, z: 156, r: 22, wob: [[0.1, 3, 2.4], [0.05, 4, 1.0]], look: 'beach', from: 'minami' },
-  { id: 'hoshi', name: 'ほし島', x: -112, z: -112, r: 15, wob: [[0.26, 5, 0.3]], look: 'rocky', from: 'mori' },
-  { id: 'yuuhi', name: 'ゆうひ島', x: -190, z: 30, r: 28, wob: [[0.06, 3, 1.5], [0.04, 5, 0.4]], look: 'forest', from: 'kujira' },
+  { id: 'iwa', name: 'いわ島', x: 87, z: 50, r: 27, wob: [[0.08, 4, 0.9], [0.04, 7, 2.2]], look: 'rocky', from: 'main' },
+  { id: 'minami', name: 'みなみ島', x: 19, z: 99, r: 28, wob: [[0.1, 2, 0.3], [0.04, 5, 2.6]], look: 'beach', from: 'main' },
+  { id: 'kame', name: 'かめ島', x: -62, z: 80, r: 28, wob: [[0.05, 3, 1.1], [0.03, 6, 0.2]], look: 'forest', from: 'main' },
+  { id: 'kujira', name: 'くじら島', x: -104, z: 5, r: 29, wob: [[0.18, 2, 0], [0.04, 3, 0.6]], look: 'long', from: 'main' },
+  { id: 'mori', name: 'もり島', x: -70, z: -73, r: 29, wob: [[0.06, 3, 0.2], [0.04, 5, 1.8]], look: 'forest', from: 'main' },
+  { id: 'umineko', name: 'うみねこ島', x: 89, z: 128, r: 26, wob: [[0.09, 3, 0.8], [0.04, 5, 0.1]], look: 'rocky', from: 'iwa' },
+  { id: 'takara', name: 'たから島', x: -38, z: 151, r: 27, wob: [[0.08, 3, 2.4], [0.04, 4, 1.0]], look: 'beach', from: 'minami' },
+  { id: 'yuuhi', name: 'ゆうひ島', x: -141, z: 72, r: 29, wob: [[0.06, 3, 1.5], [0.04, 5, 0.4]], look: 'forest', from: 'kame' },
+  { id: 'hoshi', name: 'ほし島', x: -146, z: -59, r: 26, wob: [[0.09, 5, 0.3], [0.04, 3, 1.2]], look: 'rocky', from: 'mori' },
+  // 飾りの小島（橋はかからない）
+  { id: 'kotori', name: 'ことり島', x: 44, z: -67, r: 6.5, wob: [[0.12, 3, 0.5], [0.06, 5, 1.2]], look: 'small' },
+  { id: 'kojima', name: 'こじま', x: 104, z: -5, r: 7, wob: [[0.14, 3, 2.0], [0.06, 5, 0.7]], look: 'rocky' },
 ];
 // world.islands に足す形（from は橋のほうに持たせる）と、その橋（まだかかっていない）
 function seaIslands() { return SEA_ISLES.map(({ from, ...i }) => ({ ...i, wob: i.wob.map((w) => w.slice()), open: 0 })); }
@@ -201,11 +204,12 @@ function populateIsland(world, isl, { seed, ores, gather } = {}) {
     trees.push(TM.treeAt(sp.x, sp.z)); taken.add(kk);
   }
   // 家を建てる区画：島のまん中のまわりの輪（岸から 10 以上・橋のたもとの外）。小さな島はなし
+  //   北の島（半径 32 に 10 と 18 の輪）と同じ形で、島の大きさに合わせて輪を縮める
   if (isl.r >= 15) {
-    const rings = isl.r >= 25 ? [[9, 6, 0.3], [17, 10, 0.1]] : [[8, 5, 0.4]];
+    const rings = [[isl.r * 0.33, 6, 0.3], [isl.r * 0.6, 10, 0.1]];
     for (const [rr, n, off] of rings) for (let i = 0; i < n; i++) {
       const a = off + (i / n) * Math.PI * 2, p = { x: +(isl.x + Math.cos(a) * rr).toFixed(2), z: +(isl.z + Math.sin(a) * rr).toFixed(2), island: isl.id };
-      if (IS.shoreDist(isl, p.x, p.z) >= 10 && !nearBridge(p.x, p.z, 7)) plots.push(p);
+      if (IS.shoreDist(isl, p.x, p.z) >= 8.5 && !nearBridge(p.x, p.z, 7)) plots.push(p);
     }
   }
   // 区画の上の木と岩はよける

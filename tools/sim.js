@@ -72,7 +72,10 @@ function siteOptions(world, state) {
   const mainFree = free.filter((p) => !p.island);
   const sea = (mainFree.length ? mainFree : free).slice().sort((a, b) => b.z - a.z || r(a) - r(b))[0];
   const mid = free.filter((p) => p !== sea && !p.island).sort((a, b) => r(a) - r(b))[0] || free.find((p) => p !== sea);
-  const forest = free.filter((p) => p !== sea && p !== mid && p.z < 10).sort((a, b) => trees(b) - trees(a) || r(b) - r(a))[0] || free.find((p) => p !== sea && p !== mid);
+  // 森の入口：橋がかかった島に空いた区画があれば、その島の区画（いちばん新しく開いた島から。島へ引っ越して家を建てられるように）
+  const opened = (world.islands || []).filter((i) => i.id !== IS.MAIN && i.open).sort((a, b) => b.open - a.open || (a.id < b.id ? -1 : 1));
+  const islFree = opened.map((i) => free.filter((p) => p.island === i.id && p !== sea && p !== mid)).find((l) => l.length) || [];
+  const forest = islFree.sort((a, b) => trees(b) - trees(a) || r(a) - r(b))[0] || free.filter((p) => p !== sea && p !== mid && p.z < 10).sort((a, b) => trees(b) - trees(a) || r(b) - r(a))[0] || free.find((p) => p !== sea && p !== mid);
   const dir = (p) => (Math.abs(p.x - C.x) > Math.abs(p.z - C.z) ? (p.x > C.x ? '東' : '西') : (p.z < C.z ? '北' : '南'));
   return [
     { name: '海のそば', x: sea.x, z: sea.z, plot: sea.plot },
