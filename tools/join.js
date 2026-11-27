@@ -100,9 +100,12 @@ if (bv) {
   if (due) {
     const hist = (type, text, extra) => S.history.push({ day, date, type, text, ...(extra || {}) });
     const r = BASE.decideBase({ ...S, inbox }, { day, now: NOW, hist });
-    for (const v of S.villagers) { const L = S.life[v.key], d = L && L.diary[L.diary.length - 1]; if (d && d.day === day) d.text += r.diary; }
-    stateChanged = baseWorld = true;
-    console.log(r.text);
+    if (r) {
+      for (const v of S.villagers) { const L = S.life[v.key], d = L && L.diary[L.diary.length - 1]; if (d && d.day === day) d.text += r.diary; }
+      baseWorld = true;
+      console.log(r.text);
+    } else console.log('拠点の投票はまだ 0 票なので、決めずに続ける');
+    stateChanged = true;
   } else if (inbox && inbox.voteComments) {
     const before = JSON.stringify([bv.votes, bv.voters, bv.commentCount]);
     BASE.tallyBase(bv, { inbox, config, now: NOW });

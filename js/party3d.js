@@ -264,7 +264,8 @@ function todayEvents(state) {
     for (const e of eventList(T().config)) if (ids.includes(e.id)) out.push({ id: e.id, name: e.name, day: 1, ...(e.id === 'fishing' && ppl[2] ? { winner: ppl[2].v.key } : {}) });
     return out;
   }
-  return ((state && state.today && state.today.events) || []).filter((e) => e && e.id);
+  const off = T().config && T().config.islandEventsOff; // 暦の行事を止めている間は、データに残っていても出さない（誕生日は出す）
+  return ((state && state.today && state.today.events) || []).filter((e) => e && e.id && (!off || e.id === 'birthday'));
 }
 
 // ---------- 上のカードと島のいまに「今日は…」 ----------

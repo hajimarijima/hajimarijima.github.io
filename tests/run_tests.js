@@ -92,7 +92,7 @@ t('名前かくし：公開ファイルのどこからも、かくした人の�
   fs.writeFileSync(path.join(dir, 'hidden.json'), JSON.stringify(['hmac:' + hm('user:' + uname).slice(0, 16)]));
   const env = { ...process.env, TOWN_DATA: dir, TOWN_SALT: SALT, TOWN_SALT_QUIET: '1' };
   const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
-  node('tools/init.js', '--seed', 'test', '--start', '2026-11-01');
+  node('tools/init.js', '--seed', 'test', '--start', '2026-11-01', '--fixed-base');
   const inboxDir = path.join(dir, 'inbox'); fs.mkdirSync(inboxDir);
   const inbox = path.join(inboxDir, 'instagram.json'); // 生のコメントは inbox/ にだけ置く（.gitignore で公開しない）
   fs.writeFileSync(inbox, JSON.stringify({ followers: sample.followers, joinComments: sample.joinComments, voteComments: null }));
@@ -133,7 +133,7 @@ t('sim.js にコメントを入れると村人が増え、投票が数えられ�
   fs.writeFileSync(path.join(dir, 'hidden.json'), JSON.stringify(['secret_cat']));
   const env = { ...process.env, TOWN_DATA: dir };
   const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
-  node('tools/init.js', '--seed', 'test', '--start', '2026-11-01');
+  node('tools/init.js', '--seed', 'test', '--start', '2026-11-01', '--fixed-base');
   // 1 日目：参加の登録とフォロワー 12 人 → 投票が開く
   const inbox = path.join(dir, 'inbox.json');
   fs.writeFileSync(inbox, JSON.stringify({ followers: sample.followers, joinComments: sample.joinComments, voteComments: null }));
@@ -1316,7 +1316,7 @@ t('すぐの入居：join.js で 0 日目に住み始め、daily（--gate）は�
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
   const env = { ...process.env, TOWN_DATA: dir };
   const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
-  node('tools/init.js', '--seed', 'jt', '--start', '2026-11-01');
+  node('tools/init.js', '--seed', 'jt', '--start', '2026-11-01', '--fixed-base');
   fs.mkdirSync(path.join(dir, 'inbox'));
   const inbox = path.join(dir, 'inbox', 'instagram.json');
   const cm = (id, u, text, ts) => ({ from: { id, username: u }, text, timestamp: ts });
@@ -1737,11 +1737,12 @@ t('拠点の投票：1 日目にする朝に決まり、そこにチェスト・
   assert.ok(mp.every((p) => Math.hypot(p.x - C.x, p.z - C.z) < 42), '区画は拠点のまわり（輪は 12〜40）');
   assert.ok(Date.parse(r.st.votes.find((v) => v.kind === 'what').opensAt) >= Date.parse(r.st.base.closesAt) - 1000, '拠点の票は「何を」に数えない');
   for (const b of r.w12.buildings) assert.ok(b.plot === 'ring' || b.island || Math.hypot(b.x - C.x, b.z - C.z) < 30 || /coast/.test(b.plot), '建物は拠点のまわり ' + b.id);
-  // 票がない時：決めておいた場所（config の fallback ＝ B）
+  // 票がない時：決めない（1 日目になっても拠点の投票は開いたまま。次の朝にまた数える）
   const r0 = run(null);
-  const B = r0.cfg.baseVote.candidates[1];
-  assert.ok(r0.st.base.key === 'B' && r0.st.base.none && r0.w.square.x === B.x, '票なしは B');
-  assert.ok(r0.hist.some((h) => h.type === 'base' && /票が入らなかった/.test(h.text)), '歴史にそう書く');
+  assert.strictEqual(r0.st.day, 1);
+  assert.ok(!r0.st.base, '0 票では拠点を決めない');
+  const ov = r0.st.votes.find((v) => v.kind === 'base');
+  assert.ok(ov && ov.closesDay === 2, '拠点の投票は開いたまま（次の朝に数える）');
 });
 t('拠点の投票：config の until を過ぎたら、0 日目のうちに受付（join.js）で決まる', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-base2-'));
@@ -1979,7 +1980,7 @@ t('住みたい：join.js で入った人に誕生日・食べ物が入り、前
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
   const env = { ...process.env, TOWN_DATA: dir };
   const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
-  node('tools/init.js', '--seed', 'bd', '--start', '2026-11-01');
+  node('tools/init.js', '--seed', 'bd', '--start', '2026-11-01', '--fixed-base');
   // 前からいる人（誕生日・食べ物なし）
   fs.writeFileSync(path.join(dir, 'villagers.json'), JSON.stringify([{ key: '51dd020030', igId: P.igHash('8000'), name: 'old_one', userHash: P.userHash('old_one'), skin: 1, joined: '2026-11-26', joinedDay: 0, source: 'comment', startTool: 'pickaxe' }]));
   fs.mkdirSync(path.join(dir, 'inbox'));
@@ -2879,7 +2880,7 @@ t('役職の変更：join.js（一時フォルダ）で住人の仕事が変わ�
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
   const env = { ...process.env, TOWN_DATA: dir };
   const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
-  node('tools/init.js', '--seed', 'jb', '--start', '2026-11-01');
+  node('tools/init.js', '--seed', 'jb', '--start', '2026-11-01', '--fixed-base');
   fs.mkdirSync(path.join(dir, 'inbox'));
   const cm = (id, u, text, ts) => ({ id: u + ts, from: { id, username: u }, text, timestamp: ts });
   const inbox = (cs) => fs.writeFileSync(path.join(dir, 'inbox', 'instagram.json'), JSON.stringify({ joinComments: cs }));
@@ -3035,7 +3036,7 @@ t('対決投票：join.js（一時フォルダ）で数えて締め、画面の�
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
   const env = { ...process.env, TOWN_DATA: dir };
   const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
-  node('tools/init.js', '--seed', 'du', '--start', '2026-11-01');
+  node('tools/init.js', '--seed', 'du', '--start', '2026-11-01', '--fixed-base');
   fs.mkdirSync(path.join(dir, 'inbox'));
   const cm = (id, u, text, ts) => ({ id: u + ts, from: { id, username: u }, text, timestamp: ts });
   fs.writeFileSync(path.join(dir, 'inbox', 'instagram.json'), JSON.stringify({
@@ -3168,7 +3169,7 @@ t('DM で入居：join.js（一時フォルダ）で住み、返事のファイ�
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
   const env = { ...process.env, TOWN_DATA: dir, TOWN_SALT: 'dm-test-salt', TOWN_SALT_QUIET: '1' };
   const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
-  node('tools/init.js', '--seed', 'dm', '--start', '2026-11-01');
+  node('tools/init.js', '--seed', 'dm', '--start', '2026-11-01', '--fixed-base');
   fs.mkdirSync(path.join(dir, 'inbox'));
   fs.writeFileSync(path.join(dir, 'inbox', 'instagram.json'), JSON.stringify({ joinComments: [{ from: { id: '424242', username: 'comment_first' }, text: '住みたい', timestamp: '2026-11-27T00:00:00Z' }] }));
   const id = (c) => c.repeat(32);
@@ -3666,7 +3667,8 @@ t('島の行事：暦の窓（年をまたぐ時も）・冬祭りの日数・�
   assert.deepStrictEqual(ev[0].who, ['a', 'b']);
   const nm = { a: 'ゆい', b: 'そら' };
   assert.strictEqual(EVM.todayLine(ev[0], (k) => nm[k]), '今日は ゆい さん・そら さんの誕生日');
-  assert.strictEqual(EVM.todayLine(ev[1], (k) => nm[k]), '今日は冬祭り（2日目）');
+  assert.strictEqual(EVM.todayLine(ev[1], (k) => nm[k]), '今日は冬祭り');
+  assert.deepStrictEqual(EVM.seasonalOn('2026-11-27', { islandEventsOff: true }), [], '設定で行事を止められる');
   assert.strictEqual(EVM.partyTitle(['ゆい']), 'ゆいさんの誕生日パーティ');
   // 設定で行事を変えられる
   assert.deepStrictEqual(EVM.seasonalOn('2026-03-03', { islandEvents: [{ id: 'hina', name: 'ひなまつり', from: '03-03', to: '03-03' }] }).map((e) => e.name), ['ひなまつり']);
@@ -3718,10 +3720,10 @@ t('鍛冶屋：鉱石を自分で持つ人の装備は、本人の鉱石を先�
 });
 t('sim.js：誕生日パーティ（同じ日の人はまとめて 1 回・経験値と贈り物・年表）・冬祭り・鉱石の持ち方', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-party-'));
-  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(liveCfg()));
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ ...liveCfg(), islandEventsOff: false })); // 本番は行事を止めているが、ここでは行事の動きを確かめる
   const env = { ...process.env, TOWN_DATA: dir };
   const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
-  node('tools/init.js', '--seed', 'party', '--start', '2026-11-20');
+  node('tools/init.js', '--seed', 'party', '--start', '2026-11-20', '--fixed-base');
   const inbox = path.join(dir, 'inbox.json');
   fs.writeFileSync(inbox, JSON.stringify({ followers: sample.followers, joinComments: sample.joinComments, voteComments: null }));
   node('tools/sim.js', '--inbox', inbox, '--now', '2026-11-20T12:00:00+09:00');

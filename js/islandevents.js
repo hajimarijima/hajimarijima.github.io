@@ -25,6 +25,7 @@ export function eventList(config) {
 }
 // その日（'YYYY-MM-DD'）に開く行事。何日目か（day）も付ける
 export function seasonalOn(date, config) {
+  if (config && config.islandEventsOff) return []; // 町がまだ育っていない間は、暦の行事（冬祭りなど）を開かない
   const md = String(date || '').slice(5, 10);
   const out = [];
   for (const e of eventList(config)) {
@@ -50,7 +51,7 @@ export function partyTitle(names) { return `${sanList(names)}の誕生日パー�
 // トップのカード・島のいまの一行「今日は ○○ さんの誕生日」「今日は冬祭り（2日目）」
 export function todayLine(ev, nameOf) {
   if (ev.id === 'birthday') return `今日は ${(ev.who || []).map((k) => nameOf(k) + ' さん').join('・')}の誕生日`;
-  return `今日は${ev.name}${ev.day > 1 ? `（${ev.day}日目）` : ''}`;
+  return `今日は${ev.name}`; // 行事の何日目かは出さない（町の「〇日目」とまぎらわしい）
 }
 // 誕生日の贈り物：好きな食べ物があればそれ、なければ名前の印から（同じ人はいつも同じ）
 const FOOD_ITEM = { 'りんご': 'apple', '魚': 'fish_funa', '木の実': 'berry', 'にんじん': 'carrot', 'じゃがいも': 'potato', 'たまご': 'egg', 'ミルク': 'milk', 'きのこ': 'mushroom' };

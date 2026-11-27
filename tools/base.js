@@ -107,6 +107,8 @@ function decideBase(S, { day, now = new Date(), hist }) {
   const vote = voteOf(state);
   if (!vote) return null;
   const tl = tallyBase(vote, { inbox: S.inbox, config, now });
+  // 1 票も入っていない時は決めない（投票を開けたまま、次の朝にまた数える）。0 票で勝手に決まらないように
+  if (!(vote.voters > 0) && !KEYS.some((k) => vote.votes[k] > 0)) { vote.closesAt = null; vote.closesDay = (day || 0) + 1; return null; }
   vote.closedAt = vote.closesAt && Date.parse(vote.closesAt) < now.getTime() ? vote.closesAt : now.toISOString();
   const w = winnerOf(vote, config);
   const opt = vote.options.find((o) => o.key === w.key);
