@@ -425,10 +425,17 @@ function keepSpot() {
   if (S.pal) placePal();
   if (!S.moved) { aim(p, bestView(p)); faceCamera(); }
 }
+// ポーズと回り込みは人を選んだ時だけ使えるので、だれも選んでいない（町を自由に撮る）時は出さない
+function whoOnly() {
+  el.querySelector('.pm-poses').hidden = !S.who;
+  el.querySelector('.pm-orbit').style.display = S.who ? '' : 'none'; // .pm-row button の display が hidden より強いので
+  if (S.on) layout();
+}
 function choose(key) {
   const p = (T().people || []).find((q) => q.v.key === key);
   if (S.who && S.who !== p) { dismissPal(); release(S.who); }
   S.who = p || null;
+  whoOnly();
   const who = el.querySelector('.pm-who');
   if (!p) { who.textContent = ''; return; }
   if (S.props) for (const r of S.props.values()) setPropHidden(r, false);
@@ -457,7 +464,7 @@ function open(key) {
     dispatchEvent(new Event('resize')); // 町を全画面の大きさで描き直す
     layout();
     if (key) choose(key);
-    else { // 人を選ばない時は、少し上から寄って、縦長の枠に島が大きく入るように（空ともやばかりにならない）
+    else { whoOnly(); // 人を選ばない時は、少し上から寄って、縦長の枠に島が大きく入るように（空ともやばかりにならない）
       const t = T(), tg = t.controls.target, c = t.camera.position;
       const d = c.distanceTo(tg), az = Math.atan2(c.x - tg.x, c.z - tg.z);
       t.lookAt(tg.x, tg.z, Math.max(30, d * 0.82), az, 0.4);

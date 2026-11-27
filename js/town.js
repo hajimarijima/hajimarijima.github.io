@@ -12,7 +12,7 @@ const setShield = (ch, on) => { if (ch.userData.parts) setShield0(ch, on); };
 import { mat, box, hash, rnd, makeTree, makeRock, makeBush, makeBuilding, makeHouse, obstaclesFor, routeAround as routeAround0, declutter, makeRoads, setTownCenter } from './world3d.js';
 import { makeField, makePond, animatePond, makeBobber, makeAnimal, animateAnimal, animalPos, makeShark, animateShark } from './farm3d.js';
 import { bodyQuad, bodyOf, insidePen, clearOfPen, penSlot, outsidePen, penFencePoints, fleeHeading, fwd, faceOf, angDiff, toLocal, toWorld, quadsOverlap, quadDepth, sharkPos } from './animalmove.js'; // 動物が逃げる・柵の中・海のサメ
-import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote, startNote, joinText, titleBadges, bestFishText, mbtiText } from './common.js';
+import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote, startNote, joinText, titleBadges, bestFishText, mbtiText, mdText } from './common.js';
 import { makeSky, jstHour, parseTime, phaseName } from './daynight.js';
 import { hourOf, hourText, isNight } from './hours.js';
 import { tagName, igUrl, searchVillagers, findExact } from './search.js';
@@ -2524,6 +2524,8 @@ async function main() {
 
   // ---------- 村人カード ----------
   const card = document.getElementById('card');
+  // プロフィール：誕生日・好きな食べ物・MBTI（くわしくのページと同じ値）
+  const profLine = (v) => [v.birthday && '誕生日 ' + mdText(v.birthday), v.profile && v.profile.food && '好きな食べ物 ' + v.profile.food, mbtiText(v, config)].filter(Boolean).join('・');
   async function openCard(v) {
     const L = life[v.key] || {};
     card.hidden = false; card.classList.remove('pjcard');
@@ -2534,7 +2536,7 @@ async function main() {
     who.className = 'who';
     const now = hourOf(L, curHour);
     const tb = titleBadges(v, config, L);
-    who.innerHTML = `<b>${esc(v.display)}</b>${tb ? `<span class="cardtitles">${tb}</span>` : ''}<span class="muted">${esc((now && `${curHour}時・${hourText(now)}`) || ACTION[L.action] || JOB[L.job] || '')}・${esc(homeName(L, world, config, state))}</span><span class="lvline">Lv${L.level || 1}・枠 ${L.slots || config.inventory.base}/${config.inventory.max}</span>${gearNames(L, config.items).length ? `<span class="gearline">装備：${esc(gearNames(L, config.items).join('・'))}</span>` : ''}${bestFishText(L, config) ? `<span class="lvline">${esc(bestFishText(L, config))}</span>` : ''}${mbtiText(v, config) ? `<span class="lvline">${esc(mbtiText(v, config))}</span>` : ''}<span class="gauges">${gaugeHtml('heart', L.hp, (config.needs || {}).max || 20)}${gaugeHtml('food', L.hunger, (config.needs || {}).max || 20)}</span>`;
+    who.innerHTML = `<b>${esc(v.display)}</b>${tb ? `<span class="cardtitles">${tb}</span>` : ''}<span class="muted">${esc((now && `${curHour}時・${hourText(now)}`) || ACTION[L.action] || JOB[L.job] || '')}・${esc(homeName(L, world, config, state))}</span><span class="lvline">Lv${L.level || 1}・枠 ${L.slots || config.inventory.base}/${config.inventory.max}</span>${gearNames(L, config.items).length ? `<span class="gearline">装備：${esc(gearNames(L, config.items).join('・'))}</span>` : ''}${bestFishText(L, config) ? `<span class="lvline">${esc(bestFishText(L, config))}</span>` : ''}${profLine(v) ? `<span class="lvline">${esc(profLine(v))}</span>` : ''}<span class="gauges">${gaugeHtml('heart', L.hp, (config.needs || {}).max || 20)}${gaugeHtml('food', L.hunger, (config.needs || {}).max || 20)}</span>`;
     const a = document.createElement('a');
     a.className = 'btn'; a.href = villagerUrl(v); a.textContent = 'くわしく';
     const x = document.createElement('button');
