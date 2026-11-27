@@ -304,6 +304,13 @@ export function setupTabs(root) {
       e.preventDefault(); show('timeline');
       const d = root.querySelector('#tab-timeline .tl-ep:not([hidden]) details'); if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     });
+    // 地図の「町のチェスト」・「あつまり具合を見る」：島のいまのタブにして、チェストの所へ（タブが閉じていると何も起きなかった）
+    document.addEventListener('click', (e) => {
+      const a = e.target.closest('a[href="#chestcard"]'); if (!a) return;
+      const h = document.getElementById('chestcard'); if (!h) return;
+      e.preventDefault(); show('now');
+      h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }
   return show;
 }
