@@ -3,7 +3,8 @@
 // 宝箱の中身・帯の並び・止まる所は受け口が先に決めて返す。画面はそれに合わせて止めるだけ。
 import { esc } from '../common.js';
 import { icon } from '../icons.js';
-import { wsCfg, wsTool, wsName, isLegend, invCounts, craftUse, recipeLock, badgeNext, applyOp, boxTiers, groupCount, WS_GROUPS, WS_TIER_ORDER, TIER_LOOK, pct } from '../workshop.js';
+import { wsCfg, wsTool, wsName, isLegend, invCounts, craftUse, recipeLock, badgeNext, applyOp, boxTiers, groupCount, WS_GROUPS, WS_TIER_ORDER, TIER_LOOK, pct,
+  gearCfg, gearOf, gearStats, armorName, armorIcon, armorCost, armorDef, stoneIcon, modText, modRange, GEAR_PARTS, GEAR_MATS, GEAR_FAM, GEAR_MODS, GEAR_LIVE } from '../workshop.js';
 
 const KIND_ORDER = ['fishing_rod', 'axe', 'pickaxe', 'shovel', 'hoe', 'sword'];
 const KIND_NAME = { fishing_rod: '釣りざお', axe: '斧', pickaxe: 'つるはし', shovel: 'シャベル', hoe: 'くわ', sword: '剣' };
@@ -14,13 +15,16 @@ export function makeBag({ root, store, config, L, guest, mode, onChange }) {
   const img = (k, s = 32) => `<img class="pixel" src="icons/${esc(k)}.png" alt="" width="${s}" height="${s}" loading="lazy" onerror="this.style.visibility='hidden'">`;
   const rcls = (k) => (isLegend(config, k) ? ' r-legend' : k === 'treasure_box' ? ' r-rare' : ''); // 激レアは黄色く光らせる（村人カードの★と同じ rarity: legend）
   let S = null, sub = 'send', pick = {}, sel = null, busy = false, msg = '';
+  let gsel = null, glock = null, gflash = null; // 防具タブ：選んだ石・固定するモッド・振り直した石（光らせる）
+  const GC = gearCfg(config), gear = () => gearOf(S || {});
+  const FAM_IC = { atk: 'swords', def: 'heart', life: 'sprout' };
 
   async function refresh() {
     try { S = await store.shop(); } catch (e) { S = null; msg = e.message; }
     render();
   }
   const counts = () => invCounts(S ? S.inv : []);
-  const tryOp = (op) => { if (!S) return { ok: false, why: '読みこみ中' }; const T = { ...L, inv: S.inv.map((s) => (s ? { ...s } : null)), slots: S.slots }; return applyOp(config, T, op, null); };
+  const tryOp = (op) => { if (!S) return { ok: false, why: '読みこみ中' }; const T = { ...L, inv: S.inv.map((s) => (s ? { ...s } : null)), slots: S.slots, gear: S.gear || null }; return applyOp(config, T, op, null); };
 
   function render() {
     if (!S) { root.innerHTML = `<h2>${icon('backpack', { size: 20 })}<span>持ち物</span></h2><p class="muted">${esc(msg || '読みこんでいます…')}</p>`; return; }
@@ -30,7 +34,7 @@ export function makeBag({ root, store, config, L, guest, mode, onChange }) {
       `<div class="bg-slots">${slots.map((s) => s ? `<span class="bg-slot${rcls(s.item)}" title="${esc(nm(s.item))}">${img(s.item)}${wsTool(s.item) ? (s.max ? `<i class="bg-dur" style="width:${Math.round((s.dur / s.max) * 100)}%"></i>` : '') : `<b>${s.n}</b>`}</span>` : '<span class="bg-slot empty"></span>').join('')}</div>` +
       ((S.gains && S.gains.length) || pend.length ? `<p class="muted bg-note">${icon('clock', { size: 14 })}<span>まだ島に届いていない分も入れて見せています（次の毎日の更新・朝 6 時に本当に動きます）。</span></p>` : '') +
       (msg ? `<p class="bg-msg" role="status">${esc(msg)}</p>` : '') +
-      `<div class="bg-tabs" role="tablist">${[['send', 'package', 'チェストへ'], ['craft', 'hammer', '作る'], ['trade', 'rotate-cw', '交換所'], ['box', 'gift', '宝箱'], ['skill', 'award', '熟練度']].map(([k, ic, t]) => `<button type="button" class="bg-tab${sub === k ? ' on' : ''}" data-sub="${k}" role="tab" aria-selected="${sub === k}">${icon(ic, { size: 16 })}<span>${t}</span></button>`).join('')}</div>` +
+      `<div class="bg-tabs" role="tablist">${[['send', 'package', 'チェスト<i class="bg-tx">へ</i>'], ['craft', 'hammer', '作る'], ['gear', 'crown', '防具'], ['trade', 'rotate-cw', '交換所'], ['box', 'gift', '宝箱'], ['skill', 'award', '熟練度']].map(([k, ic, t]) => `<button type="button" class="bg-tab${sub === k ? ' on' : ''}" data-sub="${k}" role="tab" aria-selected="${sub === k}">${icon(ic, { size: 16 })}<span>${t}</span></button>`).join('')}</div>` +
       `<div class="bg-body">${body()}</div>`;
     root.querySelectorAll('.bg-tab').forEach((b) => b.addEventListener('click', () => { sub = b.dataset.sub; msg = ''; render(); }));
     wire();
@@ -49,16 +53,77 @@ export function makeBag({ root, store, config, L, guest, mode, onChange }) {
   function craftBody() {
     const CC = config.crafting || {}, R = CC.recipes || {}, c = counts();
     const keys = Object.keys(R).filter((k) => wsTool(k));
-    if (!sel || !R[sel]) sel = keys.find((k) => !recipeLock(config, k, L)) || keys[0];
+    if (!sel || (!R[sel] && !armorOf(sel))) sel = keys.find((k) => !recipeLock(config, k, L)) || keys[0];
     const cell = (k) => { const lock = recipeLock(config, k, L), ok = !lock && tryOp({ t: 'craft', recipe: k }).ok; return `<button type="button" class="bg-rc${sel === k ? ' on' : ''}${lock ? ' lock' : ok ? ' can' : ''}" data-rc="${esc(k)}" title="${esc(nm(k))}">${img(k, 28)}${lock ? '<i class="bg-lk"></i>' : ''}</button>`; };
     const rows = KIND_ORDER.map((kind) => { const ks = keys.filter((k) => R[k].tool === kind).sort((a, b) => WS_TIER_ORDER.indexOf(R[a].tier) - WS_TIER_ORDER.indexOf(R[b].tier)); return ks.length ? `<div class="bg-rk"><span>${KIND_NAME[kind] || kind}</span><div>${ks.map(cell).join('')}</div></div>` : ''; }).join('');
+    // 防具（いつでも作れる。穴の数は作った時に決まる）
+    const acell = (part, mat) => { const k = `armor:${part}:${mat}`, ok = tryOp({ t: 'armor', part, mat, holes: 0, aid: 'tryxx' }).ok; return `<button type="button" class="bg-rc${sel === k ? ' on' : ''}${ok ? ' can' : ''}" data-rc="${esc(k)}" title="${esc(armorName(config, part, mat))}">${img(armorIcon(part, mat), 28)}</button>`; };
+    const arows = `<div class="bg-rk bg-rk-ar"><span>防具</span><small>穴の数は作った時に決まる</small></div>` + GEAR_PARTS.map((part) => `<div class="bg-rk"><span>${esc(GC.parts[part].name)}</span><div>${GEAR_MATS.map((m) => acell(part, m)).join('')}</div></div>`).join('');
+    const A = armorOf(sel);
+    if (A) {
+      const cost = armorCost(config, A.part, A.mat), t = tryOp({ t: 'armor', part: A.part, mat: A.mat, holes: 0, aid: 'tryxx' });
+      const mats = Object.entries(cost).map(([k, n]) => `<span class="bg-mat${(c[k] || 0) >= n ? ' ok' : ''}">${img(k, 20)}${esc(nm(k))} ${n}<small>（${c[k] || 0}）</small></span>`).join('');
+      return craftHead() + `<div class="bg-rgrid">${rows}${arows}</div>` +
+        `<div class="bg-rd"><span class="bg-ic big">${img(armorIcon(A.part, A.mat), 40)}</span><div><b>${esc(armorName(config, A.part, A.mat))}<small class="gr-def">守り +${armorDef(config, A.part, A.mat)}</small></b><div class="bg-mats">${mats}</div>` +
+        `<p class="gr-holesp">穴の数 ${GC.holes.map((p, i) => `<span>${holeDots(i)}${pct(p)}</span>`).join('')}</p>` +
+        (!t.ok ? `<p class="bg-why">${esc(t.why)}</p>` : '') +
+        `<button type="button" class="btn bg-go" data-act="armor"${t.ok ? '' : ' disabled'}>${icon('hammer', { size: 18 })}<span>作る…</span></button></div></div>`;
+    }
     const r = R[sel], lock = recipeLock(config, sel, L), p = craftUse(c, r, CC), t = tryOp({ t: 'craft', recipe: sel });
     const mats = Object.entries(r.from).map(([k, n]) => `<span class="bg-mat${(c[k] || 0) >= n ? ' ok' : ''}">${img(k, 20)}${esc(nm(k))} ${n}<small>（${c[k] || 0}）</small></span>`).join('');
-    return `<p class="muted">持ち物の材料で道具を作ります。板・棒が足りない時は原木から作ります（原木 1 → 板 4・板 2 → 棒 4）。良い道具は、熟練度（バッジ）が上がると作れるようになります。</p>` +
-      `<div class="bg-rgrid">${rows}</div>` +
+    return craftHead() +
+      `<div class="bg-rgrid">${rows}${arows}</div>` +
       `<div class="bg-rd${isLegend(config, sel) ? ' r-legend' : ''}"><span class="bg-ic big">${img(sel, 40)}</span><div><b>${esc(nm(sel))}</b><div class="bg-mats">${mats}</div>` +
       (lock ? `<p class="bg-why">${esc(lock.text)}</p>` : !p.ok ? `<p class="bg-why">材料が足りない：${esc(Object.entries(p.missing).map(([k, n]) => `${nm(k)} あと ${n}`).join('・'))}</p>` : !t.ok ? `<p class="bg-why">${esc(t.why)}</p>` : '') +
       `<button type="button" class="btn bg-go" data-act="craft"${lock || !t.ok ? ' disabled' : ''}>${icon('hammer', { size: 18 })}<span>作る…</span></button></div></div>`;
+  }
+  function armorOf(k) { const m = /^armor:(head|chest|legs|feet):(\w+)$/.exec(k || ''); return m && GC.mats[m[2]] ? { part: m[1], mat: m[2] } : null; }
+  const craftHead = () => '<p class="muted">持ち物の材料で道具や防具を作ります。板・棒が足りない時は原木から作ります（原木 1 → 板 4・板 2 → 棒 4）。良い道具は、熟練度（バッジ）が上がると作れるようになります。防具は材料があればいつでも作れます。</p>';
+  const holeDots = (n) => `<i class="gr-hd">${Array.from({ length: 3 }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('')}</i>`;
+  // ---------- 防具とストーン ----------
+  const stLook = (s) => (s.u ? { name: 'ユニーク', color: '#ff7a3d' } : TIER_LOOK[s.c] || TIER_LOOK.common);
+  const stName = (s) => `${GEAR_FAM[s.f]}の石`;
+  const stImg = (s, n = 28) => img(stoneIcon(s), n);
+  const crushGot = (s) => (GC.shards[s.c] || 1) + (s.u ? GC.shards.unique : 0);
+  const modLi = (k, v, opt = {}) => `<li class="gr-mod${k.startsWith('u_') ? ' u' : ''}${opt.lock ? ' lk' : ''}">${opt.pick ? `<label><input type="radio" name="grlock" value="${esc(k)}"${glock === k ? ' checked' : ''}>` : '<span>'}<b>${esc(modText(k, v))}</b>${GEAR_MODS[k][5] ? `<small>${esc(GEAR_MODS[k][5])}</small>` : ''}${opt.pick ? '</label>' : '</span>'}${opt.range ? `<small class="gr-rg">${esc(opt.range)}</small>` : ''}</li>`;
+  function gearBody() {
+    const G = gear(), st = gearStats(config, G), on = G.on;
+    const all = [...G.stones.map((s) => ({ s })), ...G.armor.flatMap((a) => a.st.map((s, j) => (s ? { s, a, j } : null)).filter(Boolean))];
+    const pick = gsel ? all.find((x) => x.s.id === gsel) : null; if (!pick) gsel = null;
+    const loose = pick && !pick.a;
+    const part = (p) => {
+      const a = G.armor.find((x) => x.id === on[p]);
+      if (!a) return `<div class="gr-part none"><span class="gr-pn">${esc(GC.parts[p].name)}</span><span class="gr-pi off">${img(armorIcon(p, 'leather'), 40)}</span><small>まだない</small></div>`;
+      const holes = a.st.map((s, j) => `<button type="button" class="gr-hole${s ? ' full' : ''}${s && s.id === gsel ? ' on' : ''}${loose ? ' can' : ''}" data-armor="${esc(a.id)}" data-hole="${j}" aria-label="穴 ${j + 1}${s ? '（' + esc(stName(s)) + '）' : '（空き）'}"${s ? ` style="--sc:${stLook(s).color}"` : ''}>${s ? stImg(s, 24) : ''}</button>`).join('');
+      return `<div class="gr-part"><span class="gr-pn">${esc(GC.parts[p].name)}</span><span class="gr-pi">${img(armorIcon(a.part, a.mat), 40)}</span><small class="gr-an">${esc(armorName(config, a.part, a.mat))}</small><div class="gr-holes">${holes || '<small class="muted">穴なし</small>'}</div></div>`;
+    };
+    const fx = Object.entries(st.sum).sort((a, b) => Object.keys(GEAR_MODS).indexOf(a[0]) - Object.keys(GEAR_MODS).indexOf(b[0])).map(([k, v]) => `<li class="${GEAR_LIVE.includes(k) ? 'live' : ''}"><span>${esc(modText(k, v))}</span><small>${GEAR_LIVE.includes(k) ? '効いている' : GEAR_MODS[k] && GEAR_MODS[k][0] === 'life' ? 'これから効く' : '戦いができたら'}</small></li>`).join('');
+    const sets = Object.entries(GEAR_FAM).map(([f, n]) => { const c = st.fams[f] || 0, k = st.sets[f] || 0; return `<span class="gr-set${k ? ' on' : ''}">${icon(FAM_IC[f], { size: 14 })}${esc(n)} ${c}/3${k ? `<b>セット${k > 1 ? ' ×' + k : ''}</b>` : ''}</span>`; }).join('');
+    const stones = G.stones.map((s) => `<button type="button" class="gr-st${s.id === gsel ? ' on' : ''}${s.u ? ' u' : ''}" data-st="${esc(s.id)}" style="--sc:${stLook(s).color}" title="${esc(stLook(s).name)}・${esc(stName(s))}">${stImg(s, 28)}<i class="gr-fi">${icon(FAM_IC[s.f], { size: 11 })}</i></button>`).join('');
+    let det = '';
+    if (pick) {
+      const s = pick.s, lk = stLook(s), cost1 = GC.reroll, cost2 = GC.rerollLock;
+      det = `<div class="gr-sd${gflash === s.id ? ' flash' : ''}" style="--sc:${lk.color}"><span class="bg-ic big gr-sdi">${stImg(s, 40)}</span><div><b><span class="gr-tag">${esc(lk.name)}</span>${esc(stName(s))}</b>` +
+        `<ul class="gr-mods">${s.u ? modLi(s.u[0], s.u[1]) : ''}${s.m.map(([k, v]) => modLi(k, v, { pick: s.m.length > 1, range: (modRange(config, k, s.c) || []).join('〜') })).join('')}</ul>` +
+        (s.m.length > 1 ? '<small class="muted gr-lkn">◯ を選ぶと、そのモッドを残して振り直せます</small>' : '') +
+        `<div class="gr-btns">` +
+        (loose ? `<span class="gr-hint">${icon('pointer', { size: 14 })}上の防具の穴をタップしてはめる</span>` : `<button type="button" class="btn sub bg-go" data-act="unsocket">外す</button>`) +
+        `<button type="button" class="btn sub bg-go" data-act="reroll"${G.shards >= cost1 ? '' : ' disabled'}>振り直す<small>かけら ${cost1}</small></button>` +
+        (s.m.length > 1 ? `<button type="button" class="btn sub bg-go" data-act="rerollLock"${G.shards >= cost2 && glock ? '' : ' disabled'}>固定して振り直す<small>かけら ${cost2}</small></button>` : '') +
+        (loose ? `<button type="button" class="btn sub bg-go gr-crush" data-act="crush">砕く<small>かけら +${crushGot(s)}</small></button>` : '') +
+        '</div></div></div>';
+    }
+    const spare = G.armor.filter((a) => on[a.part] !== a.id);
+    const spareHtml = spare.length ? `<h3 class="gr-h">${icon('package', { size: 16 })}<span>しまってある防具</span></h3><ul class="bg-list">${spare.map((a) => `<li class="bg-row gr-spare"><span class="bg-ic">${img(armorIcon(a.part, a.mat), 28)}</span><span class="bg-nm">${esc(armorName(config, a.part, a.mat))}<small>穴 ${a.holes}${a.st.some(Boolean) ? `・石 ${a.st.filter(Boolean).length}` : ''}</small></span><span class="gr-sb"><button type="button" class="btn sub bg-go" data-act="wear" data-id="${esc(a.id)}">つける</button><button type="button" class="btn sub bg-go" data-act="scrap" data-id="${esc(a.id)}">手放す</button></span></li>`).join('')}</ul>` : '';
+    const odds = GC.colors.map(([c, p]) => `<span><i class="bg-dot" style="background:${(TIER_LOOK[c] || {}).color}"></i>${esc((TIER_LOOK[c] || {}).name || c)} ${pct(p)}</span>`).join('') + `<span><i class="bg-dot" style="background:#ff7a3d"></i>ユニーク ${pct(GC.uniqueP)}</span>`;
+    return `<p class="muted">防具の穴にストーンをはめると、モッドの力がつきます。同じ系統の石を 3 つはめるとセット効果。戦いはまだないので、攻め・守りは数だけ持っておけます（くらしの一部は今も効きます）。</p>` +
+      `<div class="gr-top"><span>${icon('heart', { size: 16 })}守り <b>${st.def}</b></span><span>${icon('gem', { size: 16 })}はめた石 <b>${st.n}</b></span><span class="gr-sh">${img('stone_shard', 20)}かけら <b>${G.shards}</b></span></div>` +
+      `<div class="gr-parts">${GEAR_PARTS.map(part).join('')}</div>` +
+      `<div class="gr-sets">${sets}</div>` +
+      (fx ? `<ul class="gr-fx">${fx}</ul>` : '') +
+      `<h3 class="gr-h">${icon('gem', { size: 16 })}<span>ストーン</span><small>${G.stones.length} / ${GC.maxStones}</small></h3>` +
+      (stones ? `<div class="gr-stones">${stones}</div>` : '<p class="muted">まだありません。宝箱・宝探し・釣りで、ときどき見つかります。</p>') + det + spareHtml +
+      `<details class="bg-odds"><summary>ストーンの出かたを見る</summary><p class="gr-odds">${odds}</p><p class="muted">宝箱を開けた時 ${pct(GC.drop.box)}・宝探し ${pct(GC.drop.treasure)}・釣り ${pct(GC.drop.fish)} の見こみで見つかります。モッドは 1〜4 個（${GC.modCount.map((p, i) => `${i + 1} 個 ${pct(p)}`).join('・')}）。色が上がるほど、数の上限が上がります。いらない石を砕くとかけらになり、かけら ${GC.reroll} 個でモッドをぜんぶ振り直し、${GC.rerollLock} 個で 1 つ残して振り直せます。</p></details>`;
   }
   // ---------- 交換所 ----------
   function tradeBody() {
@@ -96,7 +161,7 @@ export function makeBag({ root, store, config, L, guest, mode, onChange }) {
     }).join('') + '</ul>';
   }
   const body = () => (guest ? '<p class="muted">つながると、自分の持ち物で遊べます（DM で「住みたい」と送ると専用のリンクが届きます）。</p>' : '') +
-    (sub === 'send' ? sendBody() : sub === 'craft' ? craftBody() : sub === 'trade' ? tradeBody() : sub === 'box' ? boxBody() : skillBody());
+    (sub === 'send' ? sendBody() : sub === 'craft' ? craftBody() : sub === 'gear' ? gearBody() : sub === 'trade' ? tradeBody() : sub === 'box' ? boxBody() : skillBody());
 
   function wire() {
     root.querySelectorAll('.bg-step button').forEach((b) => b.addEventListener('click', () => {
@@ -106,6 +171,13 @@ export function makeBag({ root, store, config, L, guest, mode, onChange }) {
     }));
     root.querySelectorAll('.bg-rc').forEach((b) => b.addEventListener('click', () => { sel = b.dataset.rc; render(); }));
     root.querySelectorAll('.bg-go').forEach((b) => b.addEventListener('click', () => act(b.dataset.act, b.dataset.id)));
+    root.querySelectorAll('.gr-st').forEach((b) => b.addEventListener('click', () => { gsel = gsel === b.dataset.st ? null : b.dataset.st; glock = null; gflash = null; render(); }));
+    root.querySelectorAll('.gr-hole').forEach((b) => b.addEventListener('click', () => {
+      const G = gear(), a = G.armor.find((x) => x.id === b.dataset.armor), j = Number(b.dataset.hole), s = a && a.st[j];
+      if (gsel && G.stones.some((x) => x.id === gsel)) return act('socket', { armor: a.id, hole: j, stone: gsel });
+      gsel = s ? (gsel === s.id ? null : s.id) : null; glock = null; gflash = null; render();
+    }));
+    root.querySelectorAll('input[name="grlock"]').forEach((r) => r.addEventListener('change', () => { glock = r.value; render(); }));
   }
 
   // ---------- 確かめる画面 ----------
@@ -137,15 +209,55 @@ export function makeBag({ root, store, config, L, guest, mode, onChange }) {
       ok = await confirmBox('交換する', '<p>わたす物</p>' + itemsHtml(Object.entries(T.give)) + '<p>もらう物</p>' + itemsHtml(Object.entries(T.get)), '交換する');
       op = { t: 'trade', trade: id };
     } else if (kind === 'open') return openBox();
+    else if (kind === 'armor') {
+      const A = armorOf(sel); if (!A) return;
+      ok = await confirmBox(`${armorName(config, A.part, A.mat)}を作る`, `<div class="bm-make">${img(armorIcon(A.part, A.mat), 40)}<span>使う材料</span></div>` + itemsHtml(Object.entries(armorCost(config, A.part, A.mat))) + `<p class="muted">穴の数（0〜3 個）は、作った時に決まります。</p>`, '作る');
+      op = { t: 'armor', part: A.part, mat: A.mat };
+    } else if (kind === 'wear') { ok = true; op = { t: 'wear', armor: id }; }
+    else if (kind === 'scrap') {
+      const a = gear().armor.find((x) => x.id === id); if (!a) return;
+      ok = await confirmBox(`${armorName(config, a.part, a.mat)}を手放す`, `<div class="bm-make">${img(armorIcon(a.part, a.mat), 40)}</div><p class="muted">手放した防具はもどりません。はめていた石は持ち物にもどります。</p>`, '手放す');
+      op = { t: 'scrap', armor: id };
+    } else if (kind === 'socket') { ok = true; op = { t: 'socket', ...id }; }
+    else if (kind === 'unsocket') {
+      const G = gear(), a = G.armor.find((x) => x.st.some((s) => s && s.id === gsel)); if (!a) return;
+      ok = true; op = { t: 'unsocket', armor: a.id, hole: a.st.findIndex((s) => s && s.id === gsel) };
+    } else if (kind === 'crush') {
+      const s = gear().stones.find((x) => x.id === gsel); if (!s) return;
+      ok = await confirmBox('ストーンを砕く', `<div class="bm-make">${stImg(s, 40)}<span>${esc(stLook(s).name)}・${esc(stName(s))}</span></div><ul class="gr-mods">${s.m.map(([k, v]) => modLi(k, v)).join('')}</ul><p class="muted">砕くと、かけら ${crushGot(s)} 個${gearStats(config, gear()).sum.shard ? '（くらしの「かけら」でもう少し）' : ''}になります。石はもどりません。</p>`, '砕く');
+      op = { t: 'crush', stone: gsel };
+    } else if (kind === 'reroll' || kind === 'rerollLock') {
+      const L2 = kind === 'rerollLock' ? glock : null, cost = L2 ? GC.rerollLock : GC.reroll;
+      ok = await confirmBox(L2 ? '1 つ残して振り直す' : 'モッドを振り直す', `<p>かけら ${cost} 個を使います（いま ${gear().shards} 個）。</p><p class="muted">${L2 ? `「${esc(GEAR_MODS[L2][1])}」はそのまま、ほかのモッドが新しくなります。` : 'モッドがぜんぶ新しくなります（数はそのまま）。'}</p>`, '振り直す');
+      op = { t: 'reroll', stone: gsel }; if (L2) op.lock = L2;
+    }
     if (!ok) return;
     busy = true; msg = '送っています…'; render();
     try {
       const j = await store.shopDo(op);
       S = j; pick = {};
-      msg = kind === 'send' ? `${j.text}をチェストへ送りました。` : kind === 'craft' ? `${j.text}を作りました！` : `${j.text}と交換しました。`;
+      const T = { send: `${j.text}をチェストへ送りました。`, craft: `${j.text}を作りました！`, trade: `${j.text}と交換しました。`, armor: `${j.text}を作りました！ 穴は ${j.op && j.op.holes} 個。「防具」でストーンをはめられます。`, wear: `${j.text}をつけました。`, scrap: `${j.text}を手放しました。`, socket: 'ストーンをはめました。', unsocket: 'ストーンを外しました。', crush: `ストーンを砕いて、${j.text}になりました。`, reroll: 'モッドを振り直しました！', rerollLock: 'モッドを振り直しました！' };
+      msg = T[kind] || j.text;
+      if (kind === 'socket' || kind === 'crush' || kind === 'scrap') gsel = null;
+      if (kind === 'reroll' || kind === 'rerollLock') { gflash = gsel; glock = null; }
       if (!S.demo) msg += '（島に入るのは次の毎日の更新）';
     } catch (e) { msg = e.message; }
     busy = false; render(); if (onChange) onChange();
+    if (gflash) spinMods();
+  }
+  // 振り直した時：モッドの行がくるくる入れかわってから止まる（並びは決まった順。中身は受け口の答え）
+  function spinMods() {
+    const ul = root.querySelector('.gr-sd.flash .gr-mods'); if (!ul) return;
+    const lis = [...ul.querySelectorAll('.gr-mod:not(.u) b')], fin = lis.map((b) => b.textContent), keys = Object.keys(GEAR_MODS).filter((k) => !k.startsWith('u_'));
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let n = 0; const t0 = performance.now();
+    const step = (now) => {
+      const u = (now - t0) / 900;
+      lis.forEach((b, i) => { if (u < 0.45 + i * 0.18) { const k = keys[(n * 7 + i * 5) % keys.length]; b.textContent = modText(k, GEAR_MODS[k][3]); b.parentElement.parentElement.classList.add('spin'); } else { b.textContent = fin[i]; b.parentElement.parentElement.classList.remove('spin'); } });
+      n++;
+      if (u < 0.45 + lis.length * 0.18) requestAnimationFrame(step); else { lis.forEach((b, i) => { b.textContent = fin[i]; }); }
+    };
+    requestAnimationFrame(step);
   }
 
   // ---------- 宝箱を開ける：画面の下に宝箱が出てきて、ゆれて開き、そこから帯が流れ出す。だんだん遅くなり、真ん中の線で止まる ----------

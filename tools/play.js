@@ -49,6 +49,14 @@ function clean(j) {
   return out;
 }
 // 工房の列（shop：{ 日付: { 村人: [{ id, t, items | recipe | trade・times | got・tier, at }] } }。t: 'gain' は遊ぶで手に入れた物）。できるかどうかは tools/workshop.js が持ち物でもう一度確かめる
+const GEAR_T = ['armor', 'wear', 'scrap', 'socket', 'unsocket', 'crush', 'reroll'];
+const cleanMods = (m) => (Array.isArray(m) ? m.slice(0, 4).filter((x) => Array.isArray(x) && /^[a-z_]{2,20}$/.test(String(x[0])) && Number.isInteger(x[1])).map((x) => [x[0], x[1]]) : []);
+function cleanStoneOp(x) {
+  if (!x || typeof x !== 'object' || !/^[A-Za-z0-9]{4,24}$/.test(String(x.id))) return null;
+  const o = { id: x.id, c: String(x.c || '').slice(0, 12), f: String(x.f || '').slice(0, 8), m: cleanMods(x.m) };
+  if (Array.isArray(x.u) && /^u_[a-z]{2,16}$/.test(String(x.u[0])) && Number.isInteger(x.u[1])) o.u = [x.u[0], x.u[1]];
+  return o;
+}
 function cleanShop(X) {
   const out = {}, ID = /^[A-Za-z0-9]{4,24}$/, IT = /^[a-z_0-9]{2,40}$/;
   for (const [d, m] of Object.entries(X || {})) {
@@ -56,8 +64,17 @@ function cleanShop(X) {
     out[d] = {};
     for (const [k, list] of Object.entries(m || {})) {
       if (!KEY.test(k) || !Array.isArray(list)) continue;
-      out[d][k] = list.filter((x) => x && ID.test(String(x.id)) && ['send', 'craft', 'trade', 'open', 'gain'].includes(x.t)).slice(0, 50).map((x) => {
+      out[d][k] = list.filter((x) => x && ID.test(String(x.id)) && ['send', 'craft', 'trade', 'open', 'gain', ...GEAR_T].includes(x.t)).slice(0, 160).map((x) => {
         const o = { id: x.id, t: x.t, at: typeof x.at === 'string' ? x.at : null };
+        // 防具とストーン（形だけそろえる。正しいかは tools/workshop.js が js/workshop.js の決まりでもう一度確かめる）
+        const s = (v) => (typeof v === 'string' ? v.slice(0, 40) : ''), n = (v) => (Number.isInteger(v) ? v : -1);
+        if (x.t === 'armor') { o.part = s(x.part); o.mat = s(x.mat); o.holes = n(x.holes); o.aid = s(x.aid); }
+        if (x.t === 'wear' || x.t === 'scrap') o.armor = s(x.armor);
+        if (x.t === 'socket' || x.t === 'unsocket') { o.armor = s(x.armor); o.hole = n(x.hole); if (x.t === 'socket') o.stone = s(x.stone); }
+        if (x.t === 'crush') o.stone = s(x.stone);
+        if (x.t === 'reroll') { o.stone = s(x.stone); if (x.lock) o.lock = s(x.lock); o.mods = cleanMods(x.mods); }
+        if (x.t === 'gain' && Array.isArray(x.stones)) o.stones = x.stones.slice(0, 4).map(cleanStoneOp).filter(Boolean);
+        if (x.t === 'open' && x.stone) o.stone = cleanStoneOp(x.stone);
         if (x.t === 'gain') o.src = ['fish', 'treasure', 'chore'].includes(x.src) ? x.src : null;
         if (x.t === 'send' || x.t === 'gain') o.items = (Array.isArray(x.items) ? x.items : []).filter((e) => Array.isArray(e) && IT.test(String(e[0])) && Number.isInteger(e[1])).slice(0, 12).map((e) => [e[0], e[1]]);
         if (x.t === 'craft') o.recipe = IT.test(String(x.recipe)) ? x.recipe : '';

@@ -41,6 +41,7 @@ function stepWorkshop(S, { day, date, play = null, hist = () => {}, now = Date.n
         if (WS.isLegend(config, it)) { stats.legend++; hist('find', `${who}さんが激レアの${nm(it)}を見つけた！`, { who: [k], item: it, rarity: 'legend' }); diary(k, `激レアの${nm(it)}を見つけた！`); }
         if (it === 'treasure_box') diary(k, '宝箱をもらった。');
       }
+      if (Array.isArray(op.stones) && op.stones.length) diary(k, `${op.src === 'fish' ? '釣りで' : op.src === 'treasure' ? '宝探しで' : ''}ストーンを見つけた。`);
       if (op.src === 'treasure' && op.items.length && op.items[0][0] !== 'treasure_box') diary(k, `宝探しで宝箱を掘り出して開けたら、${nm(op.items[0][0])}が出てきた。`); // 掘った場で開ける（中身だけが届く）
       if (Object.keys(r.toStore || {}).length) diary(k, `持ち物がいっぱいだったので、${Object.keys(r.toStore).map(nm).join('・')}は島のチェストに入れた。`);
       continue;
@@ -49,8 +50,11 @@ function stepWorkshop(S, { day, date, play = null, hist = () => {}, now = Date.n
     if (op.t === 'send') { hist('chest', `${who}さんが${r.text}を島のチェストに入れた。`, { who: [k], items: op.items }); diary(k, `${r.text}を島のチェストに入れた。`); }
     else if (op.t === 'craft') { hist('craft', `${who}さんが自分の持ち物で${r.text}を作った。`, { who: [k], item: op.recipe }); diary(k, `${r.text}を作った。`); for (const it of Object.keys(r.toStore || {})) diary(k, `前の${nm(it)}は島のチェストに入れた。`); }
     else if (op.t === 'trade') diary(k, `交換所で${r.text}と交換した。`);
+    else if (op.t === 'armor') diary(k, `${r.text}を作った（穴 ${op.holes} 個）。`); // 防具とストーン（競争にしないので年表には出さない）
+    else if (op.t === 'crush') diary(k, `ストーンを砕いて${r.text}にした。`);
+    else if (op.t === 'reroll') diary(k, 'かけらでストーンを磨き直した。');
     else if (op.t === 'open') {
-      diary(k, `宝箱を開けたら${r.text}が出てきた。`);
+      diary(k, `宝箱を開けたら${r.text.replace('・ストーン', '')}が出てきた。${op.stone ? 'ストーンも入っていた。' : ''}`);
       if (WS.isLegend(config, op.got[0])) { stats.legend++; hist('find', `${who}さんが宝箱から激レアの${nm(op.got[0])}を見つけた！`, { who: [k], item: op.got[0], rarity: 'legend' }); }
     }
   }

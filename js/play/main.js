@@ -13,7 +13,7 @@ import { makeStore } from './store.js';
 import { pickCatch, biteDelay, judgeHook, sizeWord, CHORES, jstHour, isNight, leftOf, beepInterval, beepPitch, detectWord, DETECT } from './rules.js';
 import { makeDetector, holdDetector, coilPos, makeBeeper } from './detector.js';
 import { makeBag } from './bag.js';
-import { TIER_LOOK } from '../workshop.js';
+import { TIER_LOOK, gearStats, gearBoost, stoneIcon } from '../workshop.js';
 
 nav('play.html');
 const $ = (id) => document.getElementById(id);
@@ -175,8 +175,9 @@ async function main() {
   }
   // 激レアが出た時の 1 行（抽選は受け口。store.last に答えが入る）
   function legendLine() {
-    const lg = store.last && store.last.legend;
-    return lg ? `<p class="pc-legend"><img class="pixel" src="icons/${esc(lg)}.png" alt="" width="32" height="32"><span><b class="tag legend">激レア</b> ${esc((items[lg] || {}).name || lg)}も見つけた！</span></p>` : '';
+    const lg = store.last && store.last.legend, sn = store.last && store.last.stone; // ストーン（防具の穴にはめる石）も受け口が決める
+    return (lg ? `<p class="pc-legend"><img class="pixel" src="icons/${esc(lg)}.png" alt="" width="32" height="32"><span><b class="tag legend">激レア</b> ${esc((items[lg] || {}).name || lg)}も見つけた！</span></p>` : '') +
+      (sn ? `<p class="pc-legend pc-stone" style="--sc:${sn.u ? '#ff7a3d' : (TIER_LOOK[sn.c] || TIER_LOOK.common).color}"><img class="pixel" src="icons/${esc(stoneIcon(sn))}.png" alt="" width="32" height="32"><span><b class="tag">${sn.u ? 'ユニーク' : esc((TIER_LOOK[sn.c] || TIER_LOOK.common).name)}</b> ストーンも見つけた！（持ち物の「防具」ではめられます）</span></p>` : '');
   }
   // 見本（つながっていない人）：決まった周期で投げて待って釣り上げる
   function guestFish(t) {
@@ -539,8 +540,11 @@ async function main() {
   }
   renderer.setAnimationLoop(frame);
   Object.assign(window.PLAY, { frame, F, T, C, S, H, dig, walkHere, doChore, setTab, cast, hook, chest, det, beeper }); // 確かめ用
-  const bagEl = $('bag'), bag = makeBag({ root: bagEl, store, config, L, guest, mode: W.mode });
+  // 防具のくらし「歩く速さ」を自分の村人に効かせる（持ち物が変わったら合わせなおす）
+  const gearSpeed = (s) => { H.speedMul = gearBoost(gearStats(config, (s && s.gear) || null), 'walk'); };
+  const bagEl = $('bag'), bag = makeBag({ root: bagEl, store, config, L, guest, mode: W.mode, onChange: () => gearSpeed(bag.state) });
   window.PLAY.bag = bag; // 確かめ用
+  if (!guest) store.shop().then(gearSpeed).catch(() => {});
   const q = new URLSearchParams(location.search).get('tab');
   setTab(['fish', 'treasure', 'chore', 'bag'].includes(q) ? q : 'fish');
   if (guest) tabs.forEach((b) => { if (b.dataset.tab !== 'fish') b.title = 'つながると遊べます'; });

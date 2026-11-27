@@ -46,7 +46,7 @@ export function tickHero(H, dt, t) {
       const want = Math.atan2(dx, dz), diff = angDiff(H.yaw, want);
       // 向きがずれている間はその場で回る（進む向きと体の向きをいつもそろえる）
       H.yaw += Math.sign(diff) * Math.min(Math.abs(diff), TURN * dt);
-      if (Math.abs(diff) < 0.25) { const s = Math.min(d, SPEED * dt); ch.position.x += Math.sin(H.yaw) * s; ch.position.z += Math.cos(H.yaw) * s; }
+      if (Math.abs(diff) < 0.25) { const s = Math.min(d, SPEED * (H.speedMul || 1) * dt); /* speedMul：防具のくらし「歩く速さ」 */ ch.position.x += Math.sin(H.yaw) * s; ch.position.z += Math.cos(H.yaw) * s; }
     }
   } else if (H.turnTo != null) {
     const diff = angDiff(H.yaw, H.turnTo);
