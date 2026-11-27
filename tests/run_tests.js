@@ -1975,7 +1975,8 @@ t('称号：config の一覧・最初に住んだ 1 人だけ（来た順）・�
   assert.ok(/export const titleBadges/.test(src) && /esc\(b\.name/.test(src) && /export function badgeList/.test(src));
   assert.ok(/titleBadges\(v, D\.config, L\)/.test(fs.readFileSync(path.join(ROOT, 'people.html'), 'utf8')), '住人一覧にバッジ');
   assert.ok(/badgeList\(v, D\.config\)/.test(fs.readFileSync(path.join(ROOT, 'js/villager.js'), 'utf8')), '村人ページにバッジ');
-  assert.ok(/titleBadges\(v, config, L\)/.test(fs.readFileSync(path.join(ROOT, 'js/town.js'), 'utf8')), '町のカードにバッジ');
+  // 町のタップで出るカードは短くした（バッジは名札の★と、くわしくのページで見る）
+  assert.ok(!/titleBadges\(v, config, L\)/.test(fs.readFileSync(path.join(ROOT, 'js/town.js'), 'utf8')), '町のカードは短く（バッジはくわしくのページ）');
 });
 t('称号バッジ：config の形・絵がある・自動でおくる決まり（1 人 1 回だけ）', () => {
   const TT = require('../tools/titles');
@@ -2230,7 +2231,8 @@ t('釣り：町を進めると大きさつきで記録され、データは小�
   assert.ok(/today \|\| \{\}\)\.fish/.test(town));
   // 釣ったあと魚を持ち上げて見せる（大きさは cm で決める）・頭の上の札と新記録・村人カードのいちばんの大物
   assert.ok(/pose = 'showfish'/.test(town) && /pose === 'showfish'/.test(chr), '持ち上げて見せる動き');
-  assert.ok(/'新記録！'/.test(town) && /bestFishText\(L, config\)/.test(town), '新記録の札・村人カード');
+  // いちばんの大物は、町のカードを短くしたので「くわしく」のページ（villager.js）に出す
+  assert.ok(/'新記録！'/.test(town) && /bestFishText\(L, D\.config\)/.test(fs.readFileSync(path.join(ROOT, 'js', 'villager.js'), 'utf8')), '新記録の札・くわしくのページ');
   assert.ok(/fishLenPx = \(cm\) =>/.test(chr), '魚の模型の長さは cm から');
   // 今日の魚に新記録の印（3 つ目が 1）がある時は、町の画面の「新記録！」に使う
   for (const L of Object.values(life)) for (const e of ((L.today || {}).fish || [])) assert.ok(typeof e[0] === 'string' && e[1] > 0 && (e.length === 2 || e[2] === 1));

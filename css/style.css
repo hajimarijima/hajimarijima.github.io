@@ -141,6 +141,7 @@ h2 { font-size: 17px; margin: 22px 0 10px; }
 /* プロフィール（js/cardinfo.js）：性別・ひとこと・好きな色・宝物・仲よし */
 .vcard { max-height: calc(100% - 56px); overflow-y: auto; }
 .vcard .gtag, .pgtag { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; font-size: 11px; line-height: 1.6; font-weight: 700; vertical-align: 2px; background: #eef0f4; color: #4a5060; border: 1px solid rgba(0,0,0,.12); }
+.vcard .nowline { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vcard .hitokoto { display: block; font-size: 13px; margin: 1px 0 2px; color: var(--ink); overflow-wrap: anywhere; }
 .favchip { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; white-space: nowrap; }
 .favchip i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(0,0,0,.25); }
