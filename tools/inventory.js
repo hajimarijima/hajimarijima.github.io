@@ -29,17 +29,33 @@ function lockList(level, xp, days, xpPerDay, cfg) {
 
 // ---------- 持ち物 ----------
 const isTool = (it) => !!(it && toolKind(it.item));
+// 物ごとの 1 枠の上限（config.items の stack。木・石は 64、鉱石・魚・食べ物は 16、激レア・特別な物は 8、道具は 1）。
+// sim.js が毎日 setItemStacks(config.items) で入れる。入れていない時は、呼んだ所の stack（config.inventory.stack）のまま
+let ITEM_STACK = null;
+function setItemStacks(items) { ITEM_STACK = items ? Object.fromEntries(Object.entries(items).filter(([, v]) => v && Number.isInteger(v.stack) && v.stack > 0).map(([k, v]) => [k, v.stack])) : null; }
+const lim = (item, stack) => (ITEM_STACK && ITEM_STACK[item] ? Math.min(stack, ITEM_STACK[item]) : stack);
+// 上限より多く重なっている枠を、空いた枠へ分ける（消さない。空きがなければそのまま持つ）
+function splitOver(inv, slots) {
+  ensureSize(inv, slots);
+  for (let i = 0; i < inv.length; i++) {
+    const s = inv[i]; if (!s || isTool(s)) continue;
+    const st = lim(s.item, 1e9);
+    while (s.n > st) { const j = inv.findIndex((x, k) => !x && k < slots); if (j < 0) break; const k = Math.min(st, s.n - st); inv[j] = { item: s.item, n: k }; s.n -= k; }
+  }
+  return inv;
+}
 function ensureSize(inv, slots) {
   while (inv.length < slots) inv.push(null);
   return inv;
 }
 function canFit(inv, slots, item, stack) {
-  for (let i = 0; i < slots; i++) { const s = inv[i]; if (!s) return true; if (s.item === item && !isTool(s) && s.n < stack) return true; }
+  for (let i = 0; i < slots; i++) { const s = inv[i]; if (!s) return true; if (s.item === item && !isTool(s) && s.n < lim(item, stack)) return true; }
   return false;
 }
 // 入るだけ入れて、入らなかった数を返す
 function addItem(inv, slots, item, n, stack) {
   ensureSize(inv, slots);
+  stack = lim(item, stack);
   for (let i = 0; i < slots && n > 0; i++) {
     const s = inv[i];
     if (s && s.item === item && !isTool(s) && s.n < stack) { const k = Math.min(n, stack - s.n); s.n += k; n -= k; }
@@ -103,4 +119,4 @@ function workDay({ inv, slots, budget, produce, onUnload, cfg }) {
   return { actions, trips, got };
 }
 
-module.exports = { TOOLS, toolKind, toolTier, getTool, removeTool, xpForLevel, levelFor, slotCount, lockList, ensureSize, canFit, addItem, hasTool, addTool, useTool, unload, countItems, workDay, isTool };
+module.exports = { setItemStacks, splitOver, TOOLS, toolKind, toolTier, getTool, removeTool, xpForLevel, levelFor, slotCount, lockList, ensureSize, canFit, addItem, hasTool, addTool, useTool, unload, countItems, workDay, isTool };

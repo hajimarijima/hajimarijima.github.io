@@ -140,6 +140,17 @@ function medal(tier, emblem, pips, sparkle) {
 const img = readPNG(SRC);
 const emb = {};
 ORDER.forEach((id, i) => { emb[id] = shrink(cutEmblem(img, i % 3, Math.floor(i / 3)), 28); });
+// 釣り人（熟練度のバッジ）：真ん中の絵は魚のアイコン（icons/fish_aji.png）を整数倍に広げて使う
+function iconEmblem(name, max) {
+  const I = readPNG(path.join(OUT, name + '.png'));
+  let x0 = I.w, y0 = I.h, x1 = -1, y1 = -1;
+  for (let y = 0; y < I.h; y++) for (let x = 0; x < I.w; x++) if (I.px[(y * I.w + x) * 4 + 3] > 128) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  const k = Math.max(1, Math.floor(max / Math.max(x1 - x0 + 1, y1 - y0 + 1))), out = [];
+  for (let y = 0; y < (y1 - y0 + 1) * k; y++) { const row = []; for (let x = 0; x < (x1 - x0 + 1) * k; x++) { const o = ((y0 + Math.floor(y / k)) * I.w + x0 + Math.floor(x / k)) * 4; row.push(I.px[o + 3] > 128 ? [I.px[o], I.px[o + 1], I.px[o + 2]] : null); } out.push(row); }
+  return out;
+}
+emb.fisher = iconEmblem('fish_aji', 28);
+ORDER.push('fisher');
 const made = [];
 const save = (name, px) => { writePNG(path.join(OUT, name + '.png'), S, S, px); made.push([name, px]); };
 save('badge_founder', medal(FOUNDER, emb.founder, 0, true));

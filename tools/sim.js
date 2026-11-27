@@ -87,6 +87,7 @@ function siteOptions(world, state) {
 function stepDay(S) {
   const { config, villagers, world, state, life, history, inbox, demo, hidden } = S;
   ITEMS0 = config.items;
+  I.setItemStacks(config.items); // 1 枠に重ねられる数は物ごと（config.items の stack）
   const day = state.day + 1;
   const date = addDays(state.startDate, day - 1);
   const R = makeRng(state.seed + ':day:' + day);
@@ -116,6 +117,7 @@ function stepDay(S) {
     if (!sz) return;
     const cm = FZ.rollSize(sz, RF), nm = ITEMS0[it] ? ITEMS0[it].name : it;
     const ent = [it, cm];
+    L.fished = (L.fished || 0) + 1; // 釣り人のバッジ（熟練度）の数
     (c.fishCm = c.fishCm || []).push(ent);
     if (it === 'fish_maguro' && first('maguro', `${v.display}が、海べで ${cm}cm のマグロを釣り上げた！ 島ではじめてのマグロ`, { who: [v.key], item: it, cm })) c.notes.push(`${cm}cm のマグロが釣れた！ 島ではじめて。`); // ごくまれな大物
     const r = FZ.addCatch(state, L, v.key, it, cm, day, FC.rankKeep || 10);
@@ -1796,6 +1798,7 @@ function stepDay(S) {
   require('./decor').stepDecor(S, { day, play: S.play });
   require('./mail').stepMail(S, { day, play: S.play, since: Date.parse(jst(addDays(date, -1), 0)), R: makeRng('mail:' + state.seed + ':' + day).next, built: today.built.length ? B(world.buildings.find((b) => b.id === today.built[0]).type).name : '' });
   require('./visit').stepVisit(S, { day, play: S.play, R: makeRng('visit:' + state.seed + ':' + day).next, hist }); // 誰かの家に遊びに行く（tools/visit.js）
+  require('./workshop').stepWorkshop(S, { day, date, play: S.play, hist, now: S.now || Date.now() }); syncRes(); // 工房：遊ぶで手に入れた物・チェストへ送る・作る・交換・宝箱（tools/workshop.js）
 
   // ---- 12. 夜（敵が来る・見張りが追い払う）。別の乱数なので、ここまでの結果は変わらない ----
   // 見張りの装備：剣（いちばん良い物）、なければ持っている道具、なければたいまつ、なければ素手。盾はチェストの数だけ、先の見張りから
@@ -1872,6 +1875,7 @@ const S = {
   play: read('inbox/play.json', null), // web の設定（鉱石の持ち方・誕生日）。tools/play.js pull が置く
   mail: read('mail.json', null), decor: read('decor.json', null), // 手紙と家の飾り（tools/mail.js・tools/decor.js）
   visits: read('visits.json', null), // 遊びに行った・来た人ノート（tools/visit.js）
+  workshop: read('workshop.json', null), // 工房の当てた分（tools/workshop.js。受け口が二重に数えないように読む）
 };
 S.demo = args.includes('--demo') || S.state.demo;
 const inboxFile = opt('--inbox', path.join(DATA, 'inbox', 'instagram.json'));
@@ -1917,6 +1921,7 @@ write('social.json', S.social);
 if (S.mail) write('mail.json', S.mail);
 if (S.decor) write('decor.json', S.decor);
 if (S.visits) write('visits.json', S.visits);
+if (S.workshop) write('workshop.json', S.workshop);
 require('./requests').updateFiles( // コメントがない日もファイルは作る（daily.yml の git add で使う）
 DATA, reqComments, S.config, S.state.day);
 console.log(`${S.state.day} 日目まで進めました（村人 ${S.villagers.filter((v) => v.joinedDay <= S.state.day).length} 人・建物 ${S.world.buildings.length}・フォロワー ${S.state.followers}）`);

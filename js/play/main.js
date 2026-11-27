@@ -12,6 +12,7 @@ import { makeHero, reachOf, place, walkTo, tickHero, faceTo, rodTip } from './he
 import { makeStore } from './store.js';
 import { pickCatch, biteDelay, judgeHook, sizeWord, CHORES, jstHour, isNight, leftOf, beepInterval, beepPitch, detectWord, DETECT } from './rules.js';
 import { makeDetector, holdDetector, coilPos, makeBeeper } from './detector.js';
+import { makeBag } from './bag.js';
 
 nav('play.html');
 const $ = (id) => document.getElementById(id);
@@ -24,7 +25,7 @@ async function main() {
   const life = await load('life').catch(() => ({}));
   const v = W.villager || { key: 'sample', display: '見本の村人', skin: 7 };
   const L = (life && life[v.key]) || {};
-  const store = makeStore(W), P = store.P;
+  const store = makeStore(W, L), P = store.P;
   let day = await store.today();
 
   // ---------- 上の欄：だれが遊んでいるか ----------
@@ -168,7 +169,13 @@ async function main() {
     showCard(`<div class="pc-fish"><div class="pc-img"><img class="pixel" src="icons/${esc(g.item)}.png" alt="" width="64" height="64"></div>` +
       `<h3>${esc(nm)}${g.kind === 'fish' ? ` <b class="pc-cm">${g.cm}cm</b>` : ''}</h3>` +
       `<p class="pc-tags">${g.kind === 'fish' ? `<span class="tag">${esc(sizeWord(g.item, g.cm, config))}</span>` : `<span class="tag">${g.kind === 'treasure' ? '宝物' : '落とし物'}</span>`}${g.big ? '<span class="tag hot">大物！</span>' : ''}${best ? '<span class="tag hot">自己ベスト</span>' : ''}</p>` +
+      legendLine() +
       `<p class="muted">${W.mode === 'live' ? '記録しました。' : W.mode === 'demo' ? '見本なので記録しません。' : ''}${leftText('fish')}</p><button type="button" class="btn pc-ok">つづける</button></div>`);
+  }
+  // 激レアが出た時の 1 行（抽選は受け口。store.last に答えが入る）
+  function legendLine() {
+    const lg = store.last && store.last.legend;
+    return lg ? `<p class="pc-legend"><img class="pixel" src="icons/${esc(lg)}.png" alt="" width="32" height="32"><span><b class="tag legend">激レア</b> ${esc((items[lg] || {}).name || lg)}も見つけた！</span></p>` : '';
   }
   // 見本（つながっていない人）：決まった周期で投げて待って釣り上げる
   function guestFish(t) {
@@ -279,12 +286,11 @@ async function main() {
     setTimeout(async () => {
       T.openAt = clock.getElapsedTime();
       H.mode = 'cheer'; H.cheerAt = clock.getElapsedTime();
-      const vs = await load('villagers').catch(() => []);
-      const fv = r.finder && vs.find((x) => x.key === r.finder);
+      // 宝探しは競争ではない（だれでも毎日 1 回掘り出せる）。順位や「いちばん」は出さない
       onCardClose = () => { H.mode = 'idle'; T.busy = false; T.reveal = false; say(treasureMsg()); };
-      showCard(`<div class="pc-fish"><div class="pc-img chestimg">${icon('gift', { size: 44 })}</div><h3>${r.first ? 'いちばん乗り！' : '宝箱を掘り出した！'}</h3>` +
-        `<p>${r.first ? `${esc(atName(v))} さんが、きょうの宝箱を最初に見つけました。` : `きょうのいちばん乗りは ${esc(fv ? atName(fv) : 'ほかの人')} さんでした。`}</p>` +
-        `<p class="muted">${r.first ? (W.mode === 'live' ? '年表に名前と宝さがしのバッジがのります（次の毎日の更新で）。' : '見本なので記録しません。本番では年表に名前とバッジがのります。') : '明日はまた別の所にうまります。'}</p><button type="button" class="btn pc-ok">やったね</button></div>`);
+      showCard(`<div class="pc-fish"><div class="pc-img chestimg">${icon('gift', { size: 44 })}</div><h3>見つけた！</h3>` +
+        `<p>${esc(atName(v))} さんが、きょうの宝を掘り出しました。${store.last.box ? '宝箱を 1 つもらいました（「持ち物」の「宝箱」で開けられます）。' : ''}</p>` + legendLine() +
+        `<p class="muted">${W.mode === 'live' ? '明日はまた別の所にうまります。' : '見本なので記録しません。明日はまた別の所にうまります。'}</p><button type="button" class="btn pc-ok">やったね</button></div>`);
     }, 750);
   }
   // 物の中か（探知機の輪・柄が入らないように。物はどれも回していない箱：半分の幅と高さ）
@@ -350,7 +356,7 @@ async function main() {
         if (kind === 'field') setWet(o, 1); else pop(CH.item, o);
         if (kind === 'bush') { const bs = o.g.userData.berries.children.filter((b) => b.visible); bs.slice(0, 3).forEach((b) => { b.visible = false; }); }
         left.textContent = leftText('chore'); choreBar();
-        say(`${CH.verb}！ ${kind === 'field' ? '' : CH.name + ' +1　'}${leftText('chore')}`);
+        say(`${CH.verb}！ ${kind === 'field' ? '' : CH.name + ' +1　'}${leftText('chore')}${store.last && store.last.box ? '　きょうのおてつだいをぜんぶしたので、宝箱を 1 つもらった！' : ''}`);
         C.busy = false; renderInfo();
       }, 2200);
     }));
@@ -424,8 +430,12 @@ async function main() {
     holeG.visible = k === 'treasure' && T.digAt != null;
     det.visible = false; dpan.hidden = true; mark.material.opacity = 0; T.near = false;
     tabs.forEach((b) => { const on = b.dataset.tab === k; b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
-    if (k === 'fish') toFishing(); else if (k === 'treasure') toTreasure(); else toChores();
-    renderInfo();
+    // 持ち物（工房）：3D の代わりに持ち物の欄を出す
+    const isBag = k === 'bag';
+    stage.hidden = isBag; info.hidden = isBag; bagEl.hidden = !isBag;
+    if (isBag) { H.mode = 'idle'; setTool(H.ch, null); left.hidden = true; bar.hidden = true; act.hidden = true; say(''); bag.refresh(); }
+    else if (k === 'fish') toFishing(); else if (k === 'treasure') toTreasure(); else toChores();
+    if (!isBag) renderInfo();
     try { history.replaceState(null, '', location.pathname + location.search.replace(/([?&])tab=[a-z]+&?/, '$1').replace(/[?&]$/, '') + (k === 'fish' ? '' : (location.search.replace(/([?&])tab=[a-z]+&?/, '$1').replace(/[?&]$/, '') ? '&' : '?') + 'tab=' + k)); } catch (e) { /* なくてもよい */ }
   }
   tabs.forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
@@ -436,7 +446,7 @@ async function main() {
       info.innerHTML = `<h2>${icon('fish', { size: 20 })}<span>浜の釣り</span></h2><p class="muted">釣れる魚と大きさは、島の釣りと同じ決まりです（海の魚。夜は夜の魚も）。1 日 ${P.fishPerDay} 回まで（逃げても 1 回）。</p>` +
         (cs.length ? '<div class="pcatch">' + cs.map(([it, cm]) => `<span class="tag"><img class="pixel" src="icons/${esc(it)}.png" alt="" width="20" height="20">${esc((items[it] || {}).name || it)}${cm ? ` ${cm}cm` : ''}</span>`).join('') + '</div>' : `<p class="muted">${guest ? '' : 'きょうはまだ釣っていません。'}</p>`);
     } else if (tab === 'treasure') {
-      info.innerHTML = `<h2>${icon('gift', { size: 20 })}<span>宝探し</span></h2><p class="muted">毎日 1 つ、島のどこかの地面の中に宝箱がうまっています。村人は金属探知機を持っていて、宝に近づくほど「ピッ、ピッ」の間が短くなります。地面をタップして歩き、音が「ピピピピ…」と続けて鳴る所で「掘る」。いちばんに掘り出した人は、年表に名前と宝さがしのバッジがのります。</p><p class="muted">音が出ない時は、右上のランプの点めつと、携帯なら小さな震えでもわかります。</p>`;
+      info.innerHTML = `<h2>${icon('gift', { size: 20 })}<span>宝探し</span></h2><p class="muted">毎日 1 つ、島のどこかの地面の中に宝箱がうまっています。村人は金属探知機を持っていて、宝に近づくほど「ピッ、ピッ」の間が短くなります。地面をタップして歩き、音が「ピピピピ…」と続けて鳴る所で「掘る」。掘り出すと宝箱が 1 つもらえて、まれに激レアの物も出てきます。宝はみんなが 1 日 1 回ずつ掘り出せます。</p><p class="muted">音が出ない時は、右上のランプの点めつと、携帯なら小さな震えでもわかります。</p>`;
     } else {
       info.innerHTML = `<h2>${icon('trees', { size: 20 })}<span>毎日のおてつだい</span></h2><p class="muted">木・石・木の実を集めたり、畑に水をやったり。1 日 ${P.chorePerDay} 回までできます。みんなで集めた合計が ${P.choreGoal} に届くと、島のみんなが助かります。</p>`;
     }
@@ -472,8 +482,10 @@ async function main() {
   }
   renderer.setAnimationLoop(frame);
   Object.assign(window.PLAY, { frame, F, T, C, S, H, dig, walkHere, doChore, setTab, cast, hook, chest, det, beeper }); // 確かめ用
+  const bagEl = $('bag'), bag = makeBag({ root: bagEl, store, config, L, guest, mode: W.mode });
+  window.PLAY.bag = bag; // 確かめ用
   const q = new URLSearchParams(location.search).get('tab');
-  setTab(['fish', 'treasure', 'chore'].includes(q) ? q : 'fish');
+  setTab(['fish', 'treasure', 'chore', 'bag'].includes(q) ? q : 'fish');
   if (guest) tabs.forEach((b) => { if (b.dataset.tab !== 'fish') b.title = 'つながると遊べます'; });
 }
 

@@ -3469,7 +3469,7 @@ at('自分の村人：DM のリンク（印）・/me・遊びの回数・宝箱�
     // 宝箱：最初の人だけいちばん乗り
     r = await call('/play/treasure', tb, {}); assert.ok(r.j.first); assert.strictEqual(r.j.treasure.villager, 'bob');
     r = await call('/play/treasure', t2, {}); assert.ok(!r.j.first); assert.strictEqual(r.j.treasure.villager, 'bob');
-    r = await call('/me', t2); assert.deepStrictEqual(r.j.day, { fish: 2, chores: 1, treasure: true }); assert.strictEqual(r.j.choreTotal, 3); assert.strictEqual(r.j.settings.oreMode, 'storage');
+    r = await call('/me', t2); assert.deepStrictEqual(r.j.day, { fish: 2, chores: 1, treasure: true, box: 1, legend: [] }, '掘った人は宝箱を 1 つもらう'); assert.strictEqual(r.j.choreTotal, 3); assert.strictEqual(r.j.settings.oreMode, 'storage');
     // pull：合言葉が要る。印では読めない
     assert.strictEqual((await call('/play/pull', t2)).status, 403);
     r = await call('/play/pull?days=2', QT);
@@ -3890,6 +3890,7 @@ require('./home_tests.js')({ t, at, ROOT });
 // ---------- 誰かの家に遊びに行く（tests/visit_tests.js） ----------
 require('./visit_tests.js')({ t, at, ROOT });
 require('./treasure_tests.js')({ t, at, ROOT }); // 遊ぶの宝探し（金属探知機）
+require('./workshop_tests.js')({ t, at, ROOT }); // 工房（チェストへ送る・作る・交換所・宝箱・熟練度・激レア・1 枠の上限）
 require('./cardinfo_tests.js')({ t, at, ROOT }); // 村人カードのプロフィール（性別・ひとこと・仲のよい人・好きな色…）
 
 (async () => {

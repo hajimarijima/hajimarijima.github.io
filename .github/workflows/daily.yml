@@ -90,6 +90,6 @@ jobs:
           git config user.name "town-bot"
           git config user.email "town-bot@users.noreply.github.com"
           git add data/config.json data/villagers.json data/world.json data/state.json data/life.json data/history.json data/social.json data/diary data/requests.json data/requests_seen.json
-          for f in data/mail.json data/decor.json data/visits.json; do if [ -e "$f" ]; then git add "$f"; fi; done
+          for f in data/mail.json data/decor.json data/visits.json data/workshop.json; do if [ -e "$f" ]; then git add "$f"; fi; done
           git diff --cached --quiet || git commit -m "町は $(node -p "require('./data/state.json').day") 日目"
           git push

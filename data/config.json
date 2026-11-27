@@ -42,7 +42,7 @@
       "retry": "うまく受け付けられませんでした。少したってから、もう一度「{word}」と送ってね"
     },
     "messagesNote": "返事の DM の文。{name} は島での名前（名前をかくす人はあだ名）、{url} は家のリンク、{word} は送ってくれた言葉。リンクは 1 つだけ：受け口がその人専用のリンク（?v=村人&me=印。開くと家に寄ってカードが開き、自分の村人として遊べる）を入れる。作れない時は houseUrl の家のリンク（?v=）。{url} を書かなければ最後に足す",
-    "howTo": "インスタの @comment_de_sodatsu をフォローして、DM で「住みたい」と送ると、すぐ島に住めます。返事の DM で、あなたの家のリンクが届きます。道具・性別・誕生日・好きな食べ物もいっしょに書けます（例「住みたい ピッケル 女の子 12/11 りんご」）。「ひとこと よろしくね」「趣味 釣り」「色 水色」も書けます。住んだあとも「性別 女の子」「ひとこと よろしく」「誕生日 12/11」のように DM すると変えられます。",
+    "howTo": "インスタの @comment_de_sodatsu をフォローして、DM で「住みたい」と送ると、すぐ島に住めます。返事の DM で、あなたの家のリンクが届きます。道具・誕生日・好きな食べ物もいっしょに書けます（例「住みたい ピッケル 12/11 りんご」）。",
     "howToSteps": [
       "インスタで @comment_de_sodatsu をフォローする",
       "@comment_de_sodatsu に DM で「住みたい」と送る（「住みたい ピッケル 12/11 りんご」のように、道具・誕生日・好きな食べ物も書ける）",
@@ -329,284 +329,346 @@
   },
   "items": {
     "log": {
+      "stack": 64,
       "name": "原木",
       "value": {
         "wood": 1
       }
     },
     "cobble": {
+      "stack": 64,
       "name": "丸石",
       "value": {
         "stone": 1
       }
     },
     "coal": {
+      "stack": 16,
       "name": "石炭",
       "value": {}
     },
     "iron": {
+      "stack": 16,
       "name": "鉄鉱石",
       "value": {}
     },
     "wheat": {
+      "stack": 16,
       "name": "小麦",
       "value": {
         "food": 0.34
       }
     },
     "seeds": {
+      "stack": 64,
       "name": "種",
       "value": {}
     },
     "berry": {
+      "stack": 16,
       "name": "木の実",
       "value": {
         "food": 0.34
       }
     },
     "apple": {
+      "stack": 16,
       "name": "りんご",
       "value": {
         "food": 0.5
       }
     },
     "flower_r": {
+      "stack": 16,
       "name": "赤い花",
       "value": {}
     },
     "flower_y": {
+      "stack": 16,
       "name": "黄色い花",
       "value": {}
     },
     "sapling": {
+      "stack": 64,
       "name": "苗木",
       "value": {}
     },
     "gold": {
+      "stack": 16,
       "name": "金鉱石",
       "value": {}
     },
     "diamond": {
+      "stack": 16,
       "name": "ダイヤ",
       "value": {}
     },
     "planks": {
+      "stack": 64,
       "name": "板",
       "value": {
         "wood": 0.25
       }
     },
     "stick": {
+      "stack": 64,
       "name": "棒",
       "value": {}
     },
     "beam": {
+      "stack": 64,
       "name": "柱",
       "value": {},
       "part": true
     },
     "stone_block": {
+      "stack": 64,
       "name": "石材",
       "value": {},
       "part": true
     },
     "roof_tile": {
+      "stack": 64,
       "name": "屋根板",
       "value": {},
       "part": true
     },
     "door": {
+      "stack": 8,
       "name": "扉",
       "value": {},
       "part": true
     },
     "wood_pickaxe": {
+      "stack": 1,
       "name": "木のつるはし",
       "tool": true
     },
     "stone_pickaxe": {
+      "stack": 1,
       "name": "石のつるはし",
       "tool": true
     },
     "iron_pickaxe": {
+      "stack": 1,
       "name": "鉄のつるはし",
       "tool": true
     },
     "wood_axe": {
+      "stack": 1,
       "name": "木の斧",
       "tool": true
     },
     "stone_axe": {
+      "stack": 1,
       "name": "石の斧",
       "tool": true
     },
     "iron_axe": {
+      "stack": 1,
       "name": "鉄の斧",
       "tool": true
     },
     "wood_hoe": {
+      "stack": 1,
       "name": "木のくわ",
       "tool": true
     },
     "wood_shovel": {
+      "stack": 1,
       "name": "木のシャベル",
       "tool": true
     },
     "wood_sword": {
+      "stack": 1,
       "name": "木の剣",
       "tool": true
     },
     "wood_fishing_rod": {
+      "stack": 1,
       "name": "木の釣りざお",
       "tool": true
     },
     "stone_shovel": {
+      "stack": 1,
       "name": "石のシャベル",
       "tool": true
     },
     "stone_hoe": {
+      "stack": 1,
       "name": "石のくわ",
       "tool": true
     },
     "stone_sword": {
+      "stack": 1,
       "name": "石の剣",
       "tool": true
     },
     "stone_fishing_rod": {
+      "stack": 1,
       "name": "石の釣りざお",
       "tool": true
     },
     "iron_shovel": {
+      "stack": 1,
       "name": "鉄のシャベル",
       "tool": true
     },
     "iron_hoe": {
+      "stack": 1,
       "name": "鉄のくわ",
       "tool": true
     },
     "iron_sword": {
+      "stack": 1,
       "name": "鉄の剣",
       "tool": true
     },
     "iron_fishing_rod": {
+      "stack": 1,
       "name": "鉄の釣りざお",
       "tool": true
     },
     "gold_pickaxe": {
+      "stack": 1,
       "name": "金のつるはし",
       "tool": true
     },
     "gold_axe": {
+      "stack": 1,
       "name": "金の斧",
       "tool": true
     },
     "gold_shovel": {
+      "stack": 1,
       "name": "金のシャベル",
       "tool": true
     },
     "gold_hoe": {
+      "stack": 1,
       "name": "金のくわ",
       "tool": true
     },
     "gold_sword": {
+      "stack": 1,
       "name": "金の剣",
       "tool": true
     },
     "gold_fishing_rod": {
+      "stack": 1,
       "name": "金の釣りざお",
       "tool": true
     },
     "diamond_pickaxe": {
+      "stack": 1,
       "name": "ダイヤのつるはし",
       "tool": true
     },
     "diamond_axe": {
+      "stack": 1,
       "name": "ダイヤの斧",
       "tool": true
     },
     "diamond_shovel": {
+      "stack": 1,
       "name": "ダイヤのシャベル",
       "tool": true
     },
     "diamond_hoe": {
+      "stack": 1,
       "name": "ダイヤのくわ",
       "tool": true
     },
     "diamond_sword": {
+      "stack": 1,
       "name": "ダイヤの剣",
       "tool": true
     },
     "diamond_fishing_rod": {
+      "stack": 1,
       "name": "ダイヤの釣りざお",
       "tool": true
     },
     "carrot": {
+      "stack": 16,
       "name": "にんじん",
       "value": {
         "food": 0.5
       }
     },
     "potato": {
+      "stack": 16,
       "name": "じゃがいも",
       "value": {
         "food": 0.6
       }
     },
     "fish_funa": {
+      "stack": 16,
       "name": "フナ",
       "value": {
         "food": 0.6
       }
     },
     "fish_koi": {
+      "stack": 16,
       "name": "コイ",
       "value": {
         "food": 0.9
       }
     },
     "fish_masu": {
+      "stack": 16,
       "name": "ニジマス",
       "value": {
         "food": 0.8
       }
     },
     "fish_namazu": {
+      "stack": 16,
       "name": "ナマズ",
       "value": {
         "food": 1
       }
     },
     "old_coin": {
+      "stack": 8,
       "name": "古い金貨",
       "value": {}
     },
     "pearl": {
+      "stack": 8,
       "name": "真珠",
       "value": {}
     },
     "old_boot": {
+      "stack": 16,
       "name": "古い長ぐつ",
       "value": {}
     },
     "driftwood": {
+      "stack": 64,
       "name": "流木",
       "value": {
         "wood": 0.5
       }
     },
     "egg": {
+      "stack": 16,
       "name": "たまご",
       "value": {
         "food": 0.4
       }
     },
     "milk": {
+      "stack": 16,
       "name": "ミルク",
       "value": {
         "food": 0.6
       }
     },
     "meat": {
+      "stack": 16,
       "name": "生肉",
       "value": {
         "food": 1
@@ -614,92 +676,119 @@
       "note": "柵の中の動物をしとめると手に入る（config.hunting）。柵がないと動物は逃げてしまう"
     },
     "wool": {
+      "stack": 16,
       "name": "羊毛",
       "value": {}
     },
     "mushroom": {
+      "stack": 16,
       "name": "きのこ",
       "value": {
         "food": 0.4
       }
     },
     "stump": {
+      "stack": 8,
       "name": "切り株",
       "value": {}
     },
     "bed": {
+      "stack": 8,
       "name": "ベッド",
       "value": {},
       "furniture": true
     },
     "fish_hotaru": {
+      "stack": 16,
       "name": "ホタルメダカ",
       "value": {
         "food": 0.5
       }
     },
     "fish_tsuki": {
+      "stack": 16,
       "name": "ツキウナギ",
       "value": {
         "food": 1.2
       }
     },
-    "fish_dojou": { "name": "ドジョウ", "value": { "food": 0.4 } },
-    "fish_bluegill": { "name": "ブルーギル", "value": { "food": 0.5 } },
-    "fish_ugui": { "name": "ウグイ", "value": { "food": 0.6 } },
-    "fish_aji": { "name": "アジ", "value": { "food": 0.6 } },
-    "fish_saba": { "name": "サバ", "value": { "food": 0.8 } },
-    "fish_mebaru": { "name": "メバル", "value": { "food": 0.7 } },
-    "fish_kasago": { "name": "カサゴ", "value": { "food": 0.8 } },
-    "fish_tai": { "name": "タイ", "value": { "food": 1.1 } },
-    "fish_maguro": { "name": "マグロ", "value": { "food": 2 } },
-    "fish_hoshi": { "name": "ホシアカリ", "value": { "food": 0.9 } },
+    "fish_dojou": { "stack": 16, "name": "ドジョウ", "value": { "food": 0.4 } },
+    "fish_bluegill": { "stack": 16, "name": "ブルーギル", "value": { "food": 0.5 } },
+    "fish_ugui": { "stack": 16, "name": "ウグイ", "value": { "food": 0.6 } },
+    "fish_aji": { "stack": 16, "name": "アジ", "value": { "food": 0.6 } },
+    "fish_saba": { "stack": 16, "name": "サバ", "value": { "food": 0.8 } },
+    "fish_mebaru": { "stack": 16, "name": "メバル", "value": { "food": 0.7 } },
+    "fish_kasago": { "stack": 16, "name": "カサゴ", "value": { "food": 0.8 } },
+    "fish_tai": { "stack": 16, "name": "タイ", "value": { "food": 1.1 } },
+    "fish_maguro": { "stack": 16, "name": "マグロ", "value": { "food": 2 } },
+    "fish_hoshi": { "stack": 16, "name": "ホシアカリ", "value": { "food": 0.9 } },
     "torch": {
+      "stack": 64,
       "name": "たいまつ",
       "value": {}
     },
     "shield": {
+      "stack": 8,
       "name": "盾",
       "value": {}
     },
     "rotten_flesh": {
+      "stack": 16,
       "name": "腐った肉",
       "value": {}
     },
     "bone": {
+      "stack": 64,
       "name": "骨",
       "value": {}
     },
     "arrow": {
+      "stack": 64,
       "name": "矢",
       "value": {}
     },
     "string": {
+      "stack": 64,
       "name": "糸",
       "value": {}
     },
     "bone_meal": {
+      "stack": 64,
       "name": "骨粉",
       "value": {}
     },
     "bow": {
+      "stack": 8,
       "name": "弓",
       "value": {}
     },
     "leather": {
+      "stack": 16,
       "name": "革",
       "value": {},
       "note": "柵の中のウシ（ときどきブタ）をしとめると手に入る（config.hunting の leather）。革の防具の材料"
     },
-    "wool_cap": { "name": "羊毛の帽子", "armor": "head" },
-    "wool_shirt": { "name": "羊毛の服", "armor": "body" },
-    "wool_boots": { "name": "羊毛のくつ", "armor": "feet" },
-    "leather_cap": { "name": "革の帽子", "armor": "head" },
-    "leather_tunic": { "name": "革の服", "armor": "body" },
-    "leather_boots": { "name": "革のくつ", "armor": "feet" },
-    "iron_cap": { "name": "鉄の帽子", "armor": "head" },
-    "iron_mail": { "name": "鉄の服", "armor": "body" },
-    "iron_boots": { "name": "鉄のくつ", "armor": "feet" }
+    "wool_cap": { "stack": 8, "name": "羊毛の帽子", "armor": "head" },
+    "wool_shirt": { "stack": 8, "name": "羊毛の服", "armor": "body" },
+    "wool_boots": { "stack": 8, "name": "羊毛のくつ", "armor": "feet" },
+    "leather_cap": { "stack": 8, "name": "革の帽子", "armor": "head" },
+    "leather_tunic": { "stack": 8, "name": "革の服", "armor": "body" },
+    "leather_boots": { "stack": 8, "name": "革のくつ", "armor": "feet" },
+    "iron_cap": { "stack": 8, "name": "鉄の帽子", "armor": "head" },
+    "iron_mail": { "stack": 8, "name": "鉄の服", "armor": "body" },
+    "iron_boots": { "stack": 8, "name": "鉄のくつ", "armor": "feet" },
+    "treasure_box": { "name": "宝箱", "stack": 8, "rarity": "rare", "note": "開けると、何かが 1 つ出てくる（遊ぶ → 持ち物 → 宝箱）" },
+    "golden_fish": { "name": "黄金の魚", "stack": 8, "rarity": "legend" },
+    "old_crown": { "name": "古い王冠", "stack": 8, "rarity": "legend" },
+    "star_shard": { "name": "星のかけら", "stack": 8, "rarity": "legend" },
+    "rainbow_shell": { "name": "虹色の貝", "stack": 8, "rarity": "legend" },
+    "moon_drop": { "name": "月のしずく", "stack": 8, "rarity": "legend" },
+    "dragon_scale": { "name": "竜のうろこ", "stack": 8, "rarity": "legend" },
+    "phoenix_feather": { "name": "火の鳥の羽", "stack": 8, "rarity": "legend" },
+    "mermaid_comb": { "name": "人魚のくし", "stack": 8, "rarity": "legend" },
+    "sun_stone": { "name": "太陽の石", "stack": 8, "rarity": "legend" },
+    "ancient_compass": { "name": "いにしえの羅針盤", "stack": 8, "rarity": "legend" },
+    "island_trophy": { "name": "島のトロフィー", "stack": 8, "rarity": "legend", "note": "交換所で激レア 3 つと交換する、特別な物" }
   },
   "buildings": {
     "hut": {
@@ -2462,6 +2551,13 @@
         "unit": " 軒",
         "tiers": [1, 5, 20, 50],
         "note": "建てるのを手伝った建物"
+      },
+      "fisher": {
+        "name": "釣り人",
+        "stat": "fished",
+        "unit": " 匹",
+        "tiers": [10, 50, 200, 500],
+        "note": "釣った魚（遊ぶの釣りもふくむ）"
       }
     }
   },
@@ -2513,5 +2609,172 @@
     "maxHours": 60,
     "builders": 4,
     "builderHours": 2.5
+  },
+  "workshop": {
+    "note": "工房（遊ぶ → 持ち物）。自分の持ち物を島のチェストへ送る・持ち物の材料で道具を作る・交換所（物と物。お金はない）・宝箱。頼みは受け口（Worker）が確かめて積み、毎日の更新（tools/workshop.js）が本当に持ち物を動かす。決まりは js/workshop.js。perDay は 1 日に頼める数",
+    "perDay": 20,
+    "unlock": {
+      "note": "レシピの解放（熟練度＝バッジ）。start は最初から作れる物。木の道具は Lv woodLevel か、その道具のバッジ（kinds）の銅。石より上は tiers の段（0 銅・1 銀・2 金・3 ダイヤ）のバッジが要る",
+      "start": ["wood_fishing_rod"],
+      "woodLevel": 2,
+      "kinds": {
+        "fishing_rod": "fisher",
+        "axe": "lumber",
+        "pickaxe": "miner",
+        "shovel": "miner",
+        "hoe": "farmer",
+        "sword": "guard"
+      },
+      "tiers": {
+        "stone": 0,
+        "iron": 1,
+        "gold": 1,
+        "diamond": 2
+      }
+    },
+    "tradesNote": "交換所の表。give の @fish は魚ならどれでも、@legend は激レアならどれでも。need があればそのバッジの段から",
+    "trades": [
+      {
+        "id": "fish_coal",
+        "give": {
+          "@fish": 3
+        },
+        "get": {
+          "coal": 2
+        }
+      },
+      {
+        "id": "fish_iron",
+        "give": {
+          "@fish": 6
+        },
+        "get": {
+          "iron": 1
+        }
+      },
+      {
+        "id": "fish_box",
+        "give": {
+          "@fish": 8
+        },
+        "get": {
+          "treasure_box": 1
+        }
+      },
+      {
+        "id": "berry_seeds",
+        "give": {
+          "berry": 8
+        },
+        "get": {
+          "seeds": 4
+        }
+      },
+      {
+        "id": "log_planks",
+        "give": {
+          "log": 4
+        },
+        "get": {
+          "stick": 4,
+          "planks": 8
+        }
+      },
+      {
+        "id": "cobble_coal",
+        "give": {
+          "cobble": 16
+        },
+        "get": {
+          "coal": 1
+        }
+      },
+      {
+        "id": "coin_gold",
+        "give": {
+          "old_coin": 2
+        },
+        "get": {
+          "gold": 1
+        }
+      },
+      {
+        "id": "pearl_diamond",
+        "give": {
+          "pearl": 2
+        },
+        "get": {
+          "diamond": 1
+        },
+        "need": {
+          "badge": "fisher",
+          "tier": 1
+        }
+      },
+      {
+        "id": "legend_diamond",
+        "give": {
+          "@legend": 1
+        },
+        "get": {
+          "diamond": 3
+        }
+      },
+      {
+        "id": "legend_rod",
+        "give": {
+          "@legend": 2
+        },
+        "get": {
+          "diamond_fishing_rod": 1
+        }
+      },
+      {
+        "id": "legend_trophy",
+        "give": {
+          "@legend": 3
+        },
+        "get": {
+          "island_trophy": 1
+        }
+      }
+    ],
+    "legend": {
+      "note": "激レア。抽選は受け口（Worker）。釣れた時に fishP、宝探しで掘った時に treasureP の見こみで、それぞれの表から 1 つ",
+      "fishP": 0.015,
+      "treasureP": 0.03,
+      "fish": [[ "golden_fish", 3 ], [ "rainbow_shell", 3 ], [ "mermaid_comb", 2 ], [ "moon_drop", 2 ]],
+      "treasure": [[ "old_crown", 3 ], [ "star_shard", 3 ], [ "ancient_compass", 3 ], [ "sun_stone", 2 ], [ "dragon_scale", 2 ], [ "phoenix_feather", 1 ]]
+    },
+    "box": {
+      "note": "宝箱。宝探しで掘ると 1 つ・おてつだいを 1 日の回数ぜんぶすると 1 つ・交換所でも。段は 5 つ（ふつう＝白・すこしレア＝緑・レア＝青・とてもレア＝紫・激レア＝黄）。開けると tiers の p の見こみでその段になり、items（[物, 数, 重み]）から 1 つ。抽選は受け口（Worker）。本物のお金で宝箱や鍵を買う仕組みは作らない",
+      "tiers": [
+        {
+          "id": "common",
+          "p": 0.62,
+          "items": [[ "log", 6, 3 ], [ "cobble", 6, 3 ], [ "berry", 4, 2 ], [ "seeds", 4, 2 ], [ "apple", 2, 1 ]]
+        },
+        {
+          "id": "uncommon",
+          "p": 0.22,
+          "items": [[ "coal", 4, 3 ], [ "iron", 1, 2 ], [ "string", 3, 1 ], [ "bone_meal", 4, 1 ]]
+        },
+        {
+          "id": "rare",
+          "p": 0.1,
+          "items": [[ "iron", 3, 3 ], [ "old_coin", 1, 2 ], [ "gold", 1, 2 ]]
+        },
+        {
+          "id": "epic",
+          "p": 0.04,
+          "items": [[ "gold", 2, 3 ], [ "pearl", 1, 2 ], [ "diamond", 1, 2 ]]
+        },
+        {
+          "id": "legend",
+          "p": 0.02,
+          "items": [[ "golden_fish", 1, 1 ], [ "old_crown", 1, 1 ], [ "star_shard", 1, 1 ], [ "rainbow_shell", 1, 1 ], [ "moon_drop", 1, 1 ], [ "dragon_scale", 1, 1 ], [ "phoenix_feather", 1, 1 ], [ "mermaid_comb", 1, 1 ], [ "sun_stone", 1, 1 ], [ "ancient_compass", 1, 1 ]]
+        }
+      ]
+    }
   }
 }

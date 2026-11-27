@@ -36,13 +36,37 @@ function clean(j) {
     out.days[d] = {};
     for (const [k, r] of Object.entries(m || {})) {
       if (!KEY.test(k) || !r) continue;
-      out.days[d][k] = { fish: +r.fish || 0, chores: +r.chores || 0, treasure: !!r.treasure, catches: (Array.isArray(r.catches) ? r.catches : []).filter((c) => Array.isArray(c) && typeof c[0] === 'string').map(([it, cm]) => [it, +cm || 0]) };
+      out.days[d][k] = { fish: +r.fish || 0, chores: +r.chores || 0, treasure: !!r.treasure, catches: (Array.isArray(r.catches) ? r.catches : []).filter((c) => Array.isArray(c) && typeof c[0] === 'string').map(([it, cm]) => [it, +cm || 0]),
+        // 工房（8)）：その日にもらった宝箱の数と激レア（抽選は受け口。持ち物に入れるのは tools/workshop.js）
+        box: Math.max(0, Math.min(20, r.box | 0)), legend: (Array.isArray(r.legend) ? r.legend : []).filter((x) => typeof x === 'string' && /^[a-z_]{2,30}$/.test(x)).slice(0, 20) };
     }
   }
   for (const [d, c] of Object.entries((j && j.chores) || {})) if (DATE.test(d) && c) out.chores[d] = { wood: +c.wood || 0, stone: +c.stone || 0, berry: +c.berry || 0, water: +c.water || 0, total: +c.total || 0 };
   for (const [d, t] of Object.entries((j && j.treasure) || {})) if (DATE.test(d) && t && KEY.test(t.villager)) out.treasure[d] = { villager: t.villager, at: t.at || null };
   if (j && (j.mail || j.decor)) Object.assign(out, cleanHome(j));
   if (j && j.visits) out.visits = cleanVisits(j.visits);
+  if (j && j.shop) out.shop = cleanShop(j.shop);
+  return out;
+}
+// 工房の列（shop：{ 日付: { 村人: [{ id, t, items | recipe | trade・times | got・tier, at }] } }。t: 'gain' は遊ぶで手に入れた物）。できるかどうかは tools/workshop.js が持ち物でもう一度確かめる
+function cleanShop(X) {
+  const out = {}, ID = /^[A-Za-z0-9]{4,24}$/, IT = /^[a-z_0-9]{2,40}$/;
+  for (const [d, m] of Object.entries(X || {})) {
+    if (!DATE.test(d)) continue;
+    out[d] = {};
+    for (const [k, list] of Object.entries(m || {})) {
+      if (!KEY.test(k) || !Array.isArray(list)) continue;
+      out[d][k] = list.filter((x) => x && ID.test(String(x.id)) && ['send', 'craft', 'trade', 'open', 'gain'].includes(x.t)).slice(0, 50).map((x) => {
+        const o = { id: x.id, t: x.t, at: typeof x.at === 'string' ? x.at : null };
+        if (x.t === 'gain') o.src = ['fish', 'treasure', 'chore'].includes(x.src) ? x.src : null;
+        if (x.t === 'send' || x.t === 'gain') o.items = (Array.isArray(x.items) ? x.items : []).filter((e) => Array.isArray(e) && IT.test(String(e[0])) && Number.isInteger(e[1])).slice(0, 12).map((e) => [e[0], e[1]]);
+        if (x.t === 'craft') o.recipe = IT.test(String(x.recipe)) ? x.recipe : '';
+        if (x.t === 'trade') { o.trade = IT.test(String(x.trade)) ? x.trade : ''; o.times = Number.isInteger(x.times) ? x.times : 1; }
+        if (x.t === 'open') { o.got = Array.isArray(x.got) && IT.test(String(x.got[0])) && Number.isInteger(x.got[1]) ? [x.got[0], x.got[1]] : null; o.tier = typeof x.tier === 'string' ? x.tier.slice(0, 20) : null; }
+        return o;
+      });
+    }
+  }
   return out;
 }
 // 遊びに行った分（visits：{ 日付: { 村人: [{ id, to, at, note? }] } }）。行けるかどうかは sim の tools/visit.js がもう一度確かめる
