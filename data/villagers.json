@@ -411,5 +411,22 @@
   "hidden": false,
   "display": "arukkkkkkkkeeeee",
   "joinedAt": "09:41"
+ },
+ {
+  "key": "478e2b16e6",
+  "igId": "0f1156901cb9c4b8",
+  "name": "yuto_0104_saiko",
+  "userHash": "cf70b3358b015610",
+  "skin": 80,
+  "joined": "2026-11-27",
+  "joinedDay": 0,
+  "source": "comment",
+  "birthday": "01-04",
+  "profile": {
+   "food": "きのこ"
+  },
+  "hidden": false,
+  "display": "yuto_0104_saiko",
+  "joinedAt": "12:06"
  }
 ]
