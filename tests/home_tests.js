@@ -95,7 +95,7 @@ module.exports = function homeTests({ t, at, ROOT }) {
       days: { '2026-11-30': { a: { fish: 2, chores: 0, treasure: true, catches: [['fish_aji', 20]] } } },
       mail: { '2026-11-30': { a: [{ id: 'W1', to: 'c', text: 'りんごをどうぞ', gift: 'apple' }, { id: 'W2', to: 'a', text: '自分あて', gift: null }] } },
       decor: { a: { out: [['lantern', 0, 0, 0], ['lantern', 1, 0, 0], ['bench', 2, 1, 0]], in: [], at: '2026-11-30T10:00:00Z' } },
-      terms: { a: { version: 1, at: '2026-11-30T09:00:00Z' } }, // 手紙のきまりに同意した人（コメントの手紙は同意した人だけ）
+      terms: { a: { version: 99, at: '2026-11-30T09:00:00Z' } }, // 手紙のきまりに同意した人（コメントの手紙は同意した人だけ）
     };
     S.inbox.joinComments.push({ id: '7', text: '手紙 @alice 同意していない人', timestamp: new Date(now - 3100e3).toISOString(), from: { id: 'id-c', username: 'carol' } });
     let n = 0; const R = () => ((n = (n * 9301 + 49297) % 233280) / 233280);
@@ -199,7 +199,12 @@ module.exports = function homeTests({ t, at, ROOT }) {
     assert.strictEqual(W.TERMS_VER, TM.TERMS_VERSION, '版は js/terms.js と Worker で同じ');
     assert.ok(TM.agreedOk({ version: TM.TERMS_VERSION }) && !TM.agreedOk({ version: TM.TERMS_VERSION - 1 }) && !TM.agreedOk(null), '版が上がったら同意し直す');
     const h = fs.readFileSync(path.join(ROOT, 'terms.html'), 'utf8');
-    for (const w of ['公開', '悪口', '住所', '電話', '学校', 'SNS', '会う約束', '宣伝', '消したり', '送れないように', '13 歳', 'おうちの人', 'Instagram の DM']) assert.ok(h.includes(w), 'terms.html：' + w);
+    for (const w of ['公開', '悪口', '住所', '電話', '学校', 'SNS', '会う約束', '宣伝', '消したり', '送れないように', '13 歳', 'おうちの人', 'Instagram の DM', '出会うための場所ではありません', '連絡先', 'いやがらせ', 'えっちな話', 'なりすます', 'お金のやりとり', '第 2 版']) assert.ok(h.includes(w), 'terms.html：' + w);
+    assert.ok(TM.TERMS_VERSION >= 2 && TM.TERMS_POINTS.some((s) => /出会うための場所ではありません/.test(s) && /連絡先/.test(s)) && TM.TERMS_POINTS.some((s) => /なりすまし/.test(s) && /お金/.test(s)), '短いきまりにも出会い・不適切なことの禁止');
+    // 出会い・連絡先の交換につながる言葉ははじく（ふつうの言葉は通す）。Worker も同じ
+    const LT2 = await imp('js/letters.js');
+    for (const s of ['LINE交換しよ', 'ライン教えて', 'カカオやってる？', '今度会おうよ', 'どこで会える？', '裏垢あるよ', 'オフ会しない？', 'ディスコードで話そ', 'パパ活', '連絡先おしえて']) { assert.strictEqual(LT2.checkLetter(s, {}).error, 'ng', s); assert.strictEqual(W.checkLetter(s, {}).error, 'ng', 'worker：' + s); }
+    for (const s of ['オンラインで遊んだ', 'スタートラインに立った', 'カカオ豆のチョコ', 'また島で遊ぼうね', 'あえていうなら']) { assert.ok(LT2.checkLetter(s, {}).ok, s); assert.ok(W.checkLetter(s, {}).ok, 'worker：' + s); }
     assert.ok(!/マイクラ|マインクラフト/.test(h));
     // 通報で隠す・運営の道具
     const MAIL = require(path.join(ROOT, 'tools', 'mail.js'));
@@ -242,7 +247,7 @@ module.exports = function homeTests({ t, at, ROOT }) {
     const villagers = [mk('a', 'alice'), mk('c', 'carol')], life = {};
     for (const v of villagers) life[v.key] = { inv: [{ item: 'apple', n: 2 }, null, null], slots: 3, diary: [{ day: 5, text: '' }], home: null };
     const S = { config: c, villagers, life, state: { day: 5, date: '2026-12-01' }, history: [{ day: 5, kind: 'festival', event: 'winter', text: '島の行事', who: ['a', 'c'] }], world: { buildings: [] }, social: { pairs: {} }, mail: null, decor: { a: { own: { lantern: 1 }, out: [], in: [], got: [], earned: [] } }, inbox: { joinComments: [] } };
-    const play = { days: { '2026-11-30': { a: { catches: [['fish_aji', 20]], chores: 9, treasure: true } } }, mail: { '2026-11-30': { a: [{ id: 'W1', to: 'c', text: 'りんごをどうぞ', gift: 'apple' }, { id: 'W2', to: 'c', text: 'ランタンをどうぞ', gift: 'lantern' }] } }, decor: { a: { out: [['lantern', 0, 0, 0]], in: [], at: '2026-11-30T10:00:00Z' } }, terms: { a: { version: 1, at: '2026-11-30T09:00:00Z' } } };
+    const play = { days: { '2026-11-30': { a: { catches: [['fish_aji', 20]], chores: 9, treasure: true } } }, mail: { '2026-11-30': { a: [{ id: 'W1', to: 'c', text: 'りんごをどうぞ', gift: 'apple' }, { id: 'W2', to: 'c', text: 'ランタンをどうぞ', gift: 'lantern' }] } }, decor: { a: { out: [['lantern', 0, 0, 0]], in: [], at: '2026-11-30T10:00:00Z' } }, terms: { a: { version: 99, at: '2026-11-30T09:00:00Z' } } };
     const before = JSON.stringify(S.decor);
     DEC.stepDecor(S, { day: 5, play });
     let n = 0; const R = () => ((n = (n * 9301 + 49297) % 233280) / 233280);

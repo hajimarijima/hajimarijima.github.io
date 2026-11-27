@@ -473,10 +473,12 @@ export const MAIL_DEF = { perDay: 3, maxLen: 80 };
 // 手紙のきまりの版（js/terms.js の TERMS_VERSION と同じ。変えたら両方上げる）と、1 人が 1 日にできる通報の数
 //   POST /mail/agree { version } … 同意を tm:<村人> に { version, at } で残す。/mail/send は同意した人だけ（403 terms）
 //   POST /mail/report { id }     … rp:<手紙> に通報した村人を足す。pull の答えに terms: { 村人: { version, at } }・reports: { 手紙: 数 }
-export const TERMS_VER = 1;
+export const TERMS_VER = 2;
 const REPORT_PER_DAY = 10;
-export const NG_WORDS = ['しね', '死ね', 'しんでしまえ', 'ころす', '殺す', 'ころして', 'きえろ', '消えろ', 'きもい', 'きしょい', 'うざい', 'うぜえ', 'ぶす', 'でぶ', 'ぶさいく', 'くず', 'ごみくず', 'ばか', '馬鹿', 'あほ', 'まぬけ', 'だまれ', '黙れ', 'くたばれ', 'ざこ', '雑魚', 'いんきゃ', '陰キャ', 'きちがい', 'がいじ', 'ふぁっく', 'fuck', 'shit', 'bitch'];
-export const NG_OK = ['ばかり', 'ばかし', 'ばかでかい', 'くずもち', 'くずれ', 'くずし', 'くずゆ', 'ぶすっと', 'しねん', 'ざこね', 'あほうどり', 'でぶね'];
+export const NG_WORDS = ['しね', '死ね', 'しんでしまえ', 'ころす', '殺す', 'ころして', 'きえろ', '消えろ', 'きもい', 'きしょい', 'うざい', 'うぜえ', 'ぶす', 'でぶ', 'ぶさいく', 'くず', 'ごみくず', 'ばか', '馬鹿', 'あほ', 'まぬけ', 'だまれ', '黙れ', 'くたばれ', 'ざこ', '雑魚', 'いんきゃ', '陰キャ', 'きちがい', 'がいじ', 'ふぁっく', 'fuck', 'shit', 'bitch',
+  // 出会い・連絡先の交換・お金や性的なさそい（はじまり島は出会いの場ではない）
+  '会おう', '会える', '会いませんか', 'あいませんか', 'おふかい', 'オフ会', 'うらあか', '裏垢', '裏あか', 'line', 'らいん', 'かかお', 'kakao', 'でぃすこ', 'discord', 'telegram', 'てれぐら', '連絡先', 'れんらくさき', 'dmして', 'dmください', 'dmちょうだい', 'いんすたおしえ', 'いんすた教え', 'いんすた交換', '番号教え', 'ばんごうおしえ', 'ぱぱかつ', 'パパ活', 'ままかつ', 'えんこう', '援交', 'せっくす', 'えっち', 'おかねあげる', 'お金あげる', 'おかねちょうだい', 'お金ちょうだい', 'おかねおくって', 'お金送って'];
+export const NG_OK = ['ばかり', 'ばかし', 'ばかでかい', 'くずもち', 'くずれ', 'くずし', 'くずゆ', 'ぶすっと', 'しねん', 'ざこね', 'あほうどり', 'でぶね', 'おんらいん', 'online', 'outline', 'deadline', 'lineup', 'すたとらいん', 'ごるらいん', 'かかおまめ', 'かかお豆', 'かかおます', 'かかおばた', 'かかお%', 'ちょこかかお'];
 const foldText = (s) => String(s || '').normalize('NFKC').toLowerCase().replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60)).replace(/[\s　・.,、。!！?？~〜ー\-_*＊/／\\|｜'"`()（）「」『』【】[\]{}<>＜＞♪☆★♡♥]/g, '');
 const GIFT_RE = /^(log|cobble|berry|apple|flower_r|flower_y|sapling|wheat|seeds|carrot|potato|egg|milk|wool|mushroom|pearl|old_coin|driftwood|bone|string|leather|coal|iron|gold|diamond|fish_[a-z]+)$/;
 const DECOR_RE = /^(flowerbed|fence|flag|lantern|bench|barrel|planter|bed|desk|chair|shelf|lamp|plant|rug|picture)$/;

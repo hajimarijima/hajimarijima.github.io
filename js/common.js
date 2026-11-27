@@ -205,10 +205,15 @@ function gaugeIcon(kind, fill) { // fill: 2 ぜんぶ・1 半分（左）・0 �
   }));
   return (iconCache[k] = `<svg viewBox="0 0 9 8" width="16" height="14" shape-rendering="crispEdges" aria-hidden="true">${r}</svg>`);
 }
+const GAUGE_N = 8; // ハート・食べ物の絵の数
 export function gaugeHtml(kind, val, max = 20) {
   const v = Math.max(0, Math.min(max, Math.round(val ?? max)));
+  // 8 個の絵で表す（最大値の意味は同じ）。半分きざみ（16 段）に割り当てなおし、少しでも残っていれば半分は出す
+  let u = Math.round((v / max) * GAUGE_N * 2);
+  if (v > 0 && u === 0) u = 1;
+  if (v < max && u === GAUGE_N * 2) u -= 1;
   let s = '';
-  for (let i = 0; i < max / 2; i++) s += gaugeIcon(kind, v >= i * 2 + 2 ? 2 : v === i * 2 + 1 ? 1 : 0);
+  for (let i = 0; i < GAUGE_N; i++) s += gaugeIcon(kind, u >= i * 2 + 2 ? 2 : u === i * 2 + 1 ? 1 : 0);
   return `<span class="gauge" role="img" aria-label="${kind === 'heart' ? '体力' : 'おなか'} ${v}/${max}">${s}</span>`;
 }
 

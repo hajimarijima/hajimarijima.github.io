@@ -408,6 +408,11 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .gauges{display:flex;flex-direction:column;gap:3px;margin-top:4px}
 .vcard .lvline{display:block}
 .vcard .gearline{display:block;font-size:12px;color:var(--sub)}
+/* カードのゲージは文の列の中に収める（右のボタンの下へはみ出さない）。狭い時は絵を少し小さくする */
+.vcard .cardbtns{flex:none}
+.vcard .gauges{max-width:100%}
+.vcard .gauge{display:flex;max-width:100%}
+.vcard .gauge svg{flex:0 1 16px;min-width:9px;height:auto;aspect-ratio:9/8}
 
 /* 村人の一覧のページ送り */
 .pager{display:flex;gap:12px;align-items:center;justify-content:center;margin:16px 0}
