@@ -1266,7 +1266,7 @@ async function main() {
     tagEl.className = 'nametag' + (v.hidden ? ' hiddenname' : '');
     // 名前札：かくしていない人は @ユーザー名、かくしている人はあだ名（?video=1 の時は config.nameTags.video に従う）
     tagEl.textContent = tagName(v, { video: IS_VIDEO, cfg: config });
-    if ((v.titles || []).length && !IS_VIDEO) { const st = document.createElement('span'); st.className = 'tstar'; st.textContent = '★'; st.title = '称号あり'; tagEl.append(st); } // 称号のある人は名札に小さな★
+    if ((v.titles || []).includes('first_villager') && !IS_VIDEO) { const st = document.createElement('span'); st.className = 'tstar'; st.textContent = '★'; st.title = 'はじまりの村人'; tagEl.append(st); } // 名札の小さな★は、はじまりの村人だけ（ほかの称号では付けない）
     tagEl.style.pointerEvents = 'auto';
     if (favColor(v)) { tagEl.classList.add('fav'); tagEl.style.setProperty('--fav', favEdge(favColor(v))); } // 好きな色を書いた人は、名札のふちと下の線をその色に
     tagEl.addEventListener('click', (e) => { e.stopPropagation(); openCard(v); });

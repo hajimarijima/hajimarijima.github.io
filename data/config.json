@@ -185,7 +185,7 @@
     "autoNote": "道具の言葉がない人は、その日までに選ばれた数がいちばん少ない仕事の道具（つるはし・斧・釣りざお・くわ）になる"
   },
   "titles": {
-    "note": "村人の称号バッジ（リボンつきのメダルの絵）。村人の titles（id の配列）に入り、村人ページ・町のカード・住人一覧・バッジのページ（badges.html）に絵で出る。町の名札には小さな★。1 人 1 回だけもらえて、なくならない（おくった時は町の歴史と本人の日記に 1 回だけ書く。tools/titles.js）。持ち主が足す時は list に { id（英数字・変えない）, name（名前）, desc（説明）, how（もらい方。まだの人に見せる）, img（絵。icons/title_<id>.png。絵は tools/gen_title_badges.js で作る。なければ icon の文字）, auto, n } を足す。auto の種類：\"first\"＝いちばん最初に島に住んだ 1 人だけ／\"count\"＝村人の記録 stat の数が n に届いた（stat は items.apple のように書く。items.fish_* のように * で終わると、その名前で始まる物を全部足す）／\"days\"＝住んで n 日たった／\"friends\"＝友だち・親友・家族が n 人／\"fishRecord\"＝釣りランキングで島の 1 位（どれかの魚）になった／\"bridge\"＝橋づくりを手伝った／\"home\"＝自分の家ができた。auto のない称号は、villagers.json の titles に手で id を足すとおくれる",
+    "note": "村人の称号バッジ（リボンつきのメダルの絵）。村人の titles（id の配列）に入り、村人ページ・町のカード・住人一覧・バッジのページ（badges.html）に絵で出る。町の名札には小さな★。1 人 1 回だけもらえて、なくならない（おくった時は町の歴史と本人の日記に 1 回だけ書く。tools/titles.js）。持ち主が足す時は list に { id（英数字・変えない）, name（名前）, desc（説明）, how（もらい方。まだの人に見せる）, img（絵。icons/title_<id>.png。絵は tools/gen_title_badges.js で作る。なければ icon の文字）, auto, n } を足す。auto の種類：\"first\"＝いちばん最初に島に住んだ 1 人だけ／\"nth\"＝n 人目に住んだ 1 人だけ（町を出た人も数に入れる）／\"count\"＝村人の記録 stat の数が n に届いた（stat は items.apple のように書く。items.fish_* のように * で終わると、その名前で始まる物を全部足す）／\"days\"＝住んで n 日たった／\"friends\"＝友だち・親友・家族が n 人／\"fishRecord\"＝釣りランキングで島の 1 位（どれかの魚）になった／\"bridge\"＝橋づくりを手伝った／\"home\"＝自分の家ができた。auto のない称号は、villagers.json の titles に手で id を足すとおくれる。live: true の称号は、条件からはずれると外れる（大物ハンター＝いまの 1 位。毎日の sim で入れかえる。取りもどした時は歴史に書かない）。町の名札の★は、はじまりの村人だけ",
     "list": [
       {
         "id": "first_villager",
@@ -199,20 +199,20 @@
       {
         "id": "angler",
         "name": "釣り名人",
-        "desc": "魚を 20 匹釣った人",
-        "how": "魚を 20 匹釣る",
+        "desc": "全部の種類の魚を、それぞれ 500 匹以上釣った人",
+        "how": "島の魚を 1 種類ずつ、どれも 500 匹以上釣る",
         "img": "icons/title_angler.png",
-        "auto": "count",
-        "stat": "items.fish_*",
-        "n": 20
+        "auto": "allFish",
+        "n": 500
       },
       {
         "id": "big_catch",
         "name": "大物ハンター",
-        "desc": "釣りランキングで島の 1 位になった人",
-        "how": "どれかの魚で、島でいちばん大きいのを釣る",
+        "desc": "いま釣りランキングで島の 1 位の人（ぬかれると外れる）",
+        "how": "どれかの魚で、島でいちばん大きいのを釣って、1 位のままでいる",
         "img": "icons/title_big_catch.png",
-        "auto": "fishRecord"
+        "auto": "fishRecord",
+        "live": true
       },
       {
         "id": "apple_lover",
@@ -257,6 +257,33 @@
         "img": "icons/title_popular.png",
         "auto": "friends",
         "n": 5
+      },
+      {
+        "id": "villager_100",
+        "name": "100 人目の村人",
+        "desc": "はじまり島に 100 人目に住んだ人",
+        "how": "島に 100 人目に住んだ 1 人だけ",
+        "img": "icons/title_villager_100.png",
+        "auto": "nth",
+        "n": 100
+      },
+      {
+        "id": "villager_1000",
+        "name": "1000 人目の村人",
+        "desc": "はじまり島に 1000 人目に住んだ人",
+        "how": "島に 1000 人目に住んだ 1 人だけ",
+        "img": "icons/title_villager_1000.png",
+        "auto": "nth",
+        "n": 1000
+      },
+      {
+        "id": "villager_10000",
+        "name": "1 万人目の村人",
+        "desc": "はじまり島に 1 万人目に住んだ人",
+        "how": "島に 1 万人目に住んだ 1 人だけ",
+        "img": "icons/title_villager_10000.png",
+        "auto": "nth",
+        "n": 10000
       }
     ]
   },
@@ -2560,7 +2587,23 @@
         "unit": " 匹",
         "tiers": [10, 50, 200, 500],
         "note": "釣った魚（遊ぶの釣りもふくむ）"
-      }
+      },
+      "fish_funa": {"name":"フナ釣り","stat":"fishedBy.fish_funa","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったフナの数","fish":true},
+      "fish_koi": {"name":"コイ釣り","stat":"fishedBy.fish_koi","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったコイの数","fish":true},
+      "fish_masu": {"name":"ニジマス釣り","stat":"fishedBy.fish_masu","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったニジマスの数","fish":true},
+      "fish_namazu": {"name":"ナマズ釣り","stat":"fishedBy.fish_namazu","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったナマズの数","fish":true},
+      "fish_hotaru": {"name":"ホタルメダカ釣り","stat":"fishedBy.fish_hotaru","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったホタルメダカの数","fish":true},
+      "fish_tsuki": {"name":"ツキウナギ釣り","stat":"fishedBy.fish_tsuki","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったツキウナギの数","fish":true},
+      "fish_dojou": {"name":"ドジョウ釣り","stat":"fishedBy.fish_dojou","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったドジョウの数","fish":true},
+      "fish_bluegill": {"name":"ブルーギル釣り","stat":"fishedBy.fish_bluegill","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったブルーギルの数","fish":true},
+      "fish_ugui": {"name":"ウグイ釣り","stat":"fishedBy.fish_ugui","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったウグイの数","fish":true},
+      "fish_aji": {"name":"アジ釣り","stat":"fishedBy.fish_aji","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったアジの数","fish":true},
+      "fish_saba": {"name":"サバ釣り","stat":"fishedBy.fish_saba","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったサバの数","fish":true},
+      "fish_mebaru": {"name":"メバル釣り","stat":"fishedBy.fish_mebaru","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったメバルの数","fish":true},
+      "fish_kasago": {"name":"カサゴ釣り","stat":"fishedBy.fish_kasago","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったカサゴの数","fish":true},
+      "fish_tai": {"name":"タイ釣り","stat":"fishedBy.fish_tai","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったタイの数","fish":true},
+      "fish_maguro": {"name":"マグロ釣り","stat":"fishedBy.fish_maguro","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったマグロの数","fish":true},
+      "fish_hoshi": {"name":"ホシアカリ釣り","stat":"fishedBy.fish_hoshi","unit":" 匹","tiers":[10,50,200,500],"note":"釣ったホシアカリの数","fish":true}
     }
   },
   "construction": {

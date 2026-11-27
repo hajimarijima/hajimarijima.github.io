@@ -120,6 +120,7 @@ function stepDay(S) {
     const cm = FZ.rollSize(sz, RF), nm = ITEMS0[it] ? ITEMS0[it].name : it;
     const ent = [it, cm];
     L.fished = (L.fished || 0) + 1; // 釣り人のバッジ（熟練度）の数
+    (L.fishedBy = L.fishedBy || {})[it] = (L.fishedBy[it] || 0) + 1; // 魚ごとの釣った数（魚ごとのバッジ・釣り名人）
     (c.fishCm = c.fishCm || []).push(ent);
     if (it === 'fish_maguro' && first('maguro', `${v.display}が、海べで ${cm}cm のマグロを釣り上げた！ 島ではじめてのマグロ`, { who: [v.key], item: it, cm })) c.notes.push(`${cm}cm のマグロが釣れた！ 島ではじめて。`); // ごくまれな大物
     const r = FZ.addCatch(state, L, v.key, it, cm, day, FC.rankKeep || 10);

@@ -1,7 +1,9 @@
 'use strict';
 // 村人の称号バッジ（config.titles）。村人の titles に称号の id を入れる。1 人 1 回だけで、なくならない。
 // auto の種類（くわしくは config.json の titles.note）：
-//   first … いちばん最初に島に住んだ 1 人だけ
+//   first … いちばん最初に島に住んだ 1 人だけ / nth … n 人目に住んだ 1 人だけ
+//   allFish … 全部の種類の魚を、それぞれ n 匹以上釣った（L.fishedBy）
+//   live: true の称号は、条件からはずれると外れる（大物ハンター＝いまの釣りランキング 1 位）
 //   count … 村人の記録 stat の数が n に届いた（items.apple、items.fish_* のように * で終わると前が同じ物を全部足す）
 //   days … 住んで n 日 / friends … 友だち・親友・家族が n 人 / fishRecord … 釣りランキングで島の 1 位
 //   bridge … 橋づくりの係になった / home … 自分の家ができた
@@ -16,6 +18,13 @@ function firstVillager(villagers, life, day) {
   const c = villagers.map((v, i) => ({ v, i })).filter(({ v }) => life[v.key] && v.joinedDay <= day);
   c.sort((a, b) => a.v.joinedDay - b.v.joinedDay || String(a.v.joined || '').localeCompare(String(b.v.joined || '')) || a.i - b.i);
   return c.length ? c[0].v : null;
+}
+
+// n 人目に住んだ人（firstVillager と同じ並び。町を出た人も数に入れる）
+function nthVillager(villagers, life, day, n) {
+  const c = villagers.map((v, i) => ({ v, i })).filter(({ v }) => life[v.key] && v.joinedDay <= day);
+  c.sort((a, b) => a.v.joinedDay - b.v.joinedDay || String(a.v.joined || '').localeCompare(String(b.v.joined || '')) || a.i - b.i);
+  return c.length >= n ? c[n - 1].v : null;
 }
 
 // 村人の記録の数。'items.apple' → L.items.apple。'items.fish_*' → fish_ で始まる物の合計。配列は数
@@ -69,6 +78,8 @@ function bridgeCrew(state) {
 function meets(t, v, L, S, day, cache) {
   switch (t.auto) {
     case 'count': return statCount(L, t.stat) >= (t.n || 1);
+    // 全部の種類の魚（config.items の fish_*）を、それぞれ n 匹以上釣った（釣り名人）
+    case 'allFish': { const fs = Object.keys(S.config.items || {}).filter((k) => k.startsWith('fish_')); const by = L.fishedBy || {}; return fs.length > 0 && fs.every((k) => (by[k] || 0) >= (t.n || 1)); }
     case 'days': return day - (v.joinedDay || 0) >= (t.n || 1);
     case 'home': return !!L.home;
     case 'friends': return S.social ? friendCount(S.social, v.key) >= (t.n || 1) : null;
@@ -103,10 +114,10 @@ function awardTitles(S, { day, date }) {
   const cache = {};
   for (const t of list) {
     if (!t || !t.id || !t.auto) continue;
-    if (t.auto === 'first') {
+    if (t.auto === 'first' || t.auto === 'nth') {
       if (S.villagers.some((v) => (v.titles || []).includes(t.id))) continue; // もうだれかが持っている（1 人だけ）
       if ((S.history || []).some((h) => h.type === 'title' && h.title === t.id)) continue; // 前におくった（持っていた人が町を出ても、ほかの人にはおくらない）
-      const v = firstVillager(S.villagers, S.life, day);
+      const v = t.auto === 'first' ? firstVillager(S.villagers, S.life, day) : nthVillager(S.villagers, S.life, day, t.n || 100);
       if (!v) continue;
       give(S, v, t, { day, date });
       historyLine(S, t, [v], { day, date });
@@ -117,8 +128,12 @@ function awardTitles(S, { day, date }) {
     for (const v of S.villagers) {
       const L = S.life[v.key];
       if (!L || v.joinedDay > day || v.left) continue;
+      // live の称号（大物ハンター＝いまの 1 位）は、条件からはずれたら外す（調べられない時はそのまま）
+      if (t.live && (v.titles || []).includes(t.id)) { if (meets(t, v, L, S, day, cache) === false) v.titles = v.titles.filter((x) => x !== t.id); continue; }
       if ((v.titles || []).includes(t.id)) continue; // 1 人 1 回だけ
       if (meets(t, v, L, S, day, cache) !== true) continue;
+      // live の称号を取りもどした時は、町の歴史・日記に書かない（前にもらったことがある人）
+      if (t.live && (S.history || []).some((h) => h.type === 'title' && h.title === t.id && (h.who || []).includes(v.key))) { v.titles = [...(v.titles || []), t.id]; continue; }
       give(S, v, t, { day, date });
       now.push(v);
       out.push({ v, title: t });
@@ -128,4 +143,4 @@ function awardTitles(S, { day, date }) {
   return out;
 }
 
-module.exports = { firstVillager, awardTitles, statCount, friendCount, fishLeaders, bridgeCrew };
+module.exports = { firstVillager, nthVillager, awardTitles, statCount, friendCount, fishLeaders, bridgeCrew };

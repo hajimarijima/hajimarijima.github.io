@@ -153,8 +153,25 @@ const EMB = {
   ],
 };
 
+// 100・1000・1万 人目の村人：数字（左上が明るく、右下が暗い。ふちどりと影は badge() が付ける）
+// 字は 9 ドットの高さ・線は 2 ドットの太さ（小さい画面でも読める）
+const GLYPH = {
+  '1w': ['..Bb.', '.BBb.', 'BBbb.', '..bb.', '..bb.', '..bb.', '..bb.', '..bb.', '.Bbbn'],
+  '0w': ['.BBb.', 'BBnbb', 'Bb.bb', 'Bb.bb', 'Bb.bb', 'Bb.bb', 'Bb.bn', 'bbnbn', '.bnn.'],
+  '1': ['.Bb.', 'BBb.', '.bb.', '.bb.', '.bb.', '.bb.', '.bb.', '.bb.', 'Bbbn'],
+  '0': ['.Bb.', 'Bbbb', 'Bb.b', 'Bb.b', 'Bb.b', 'Bb.b', 'Bb.b', 'bbbn', '.bn.'],
+  '万': ['BBBBBBBBb', '...Bb....', '...BbBBBb', '...Bb..bb', '..Bb...bb', '..Bb...bb', '.Bb....bn', 'Bb...bbbn', 'b....nnn.'],
+};
+const word = (keys) => GLYPH[keys[0]].map((_, y) => keys.map((k) => GLYPH[k][y]).join('.'));
+EMB.villager_100 = word(['1w', '0w', '0w']);
+EMB.villager_1000 = word(['1', '0', '0', '0']);
+EMB.villager_10000 = word(['1', '万']);
+
 // メダルのふちの色・リボンの色
 const STYLE = {
+  villager_100: { rim: [184, 112, 58], ribbon: [70, 150, 70] },
+  villager_1000: { rim: [196, 204, 216], ribbon: [58, 120, 210] },
+  villager_10000: { rim: [240, 190, 52], ribbon: [204, 52, 58], sparkle: true },
   first_villager: { rim: [240, 190, 52], ribbon: [204, 52, 58], sparkle: true },
   apple_lover: { rim: [196, 204, 216], ribbon: [214, 64, 64] },
   angler: { rim: [196, 204, 216], ribbon: [58, 120, 210] },

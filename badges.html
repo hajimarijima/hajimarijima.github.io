@@ -47,7 +47,10 @@ loadAll().then((D) => {
   const TL = (D.config.titles && D.config.titles.list) || [];
   const VT = versusTitles(D.config).filter((t) => D.active.some((v) => (v.titles || []).includes(t.id)));
   document.getElementById('titles').innerHTML = [...TL, ...VT].map((t) => {
-    const own = D.active.filter((v) => (v.titles || []).includes(t.id));
+    // 大物ハンター（live）は、いまの釣りランキングの 1 位の人だけ（毎日の入れかえを待たずに、今のランキングで出す）
+    const top = (D.state.fishing && D.state.fishing.top) || null;
+    const leaders = new Set(top ? Object.values(top).map((l) => l && l[0] && l[0][1]).filter(Boolean) : []);
+    const own = t.live && t.auto === 'fishRecord' && top ? D.active.filter((v) => leaders.has(v.key)) : D.active.filter((v) => (v.titles || []).includes(t.id));
     const has = own.length > 0;
     return `<li class="bdgcard${has ? '' : ' none'}">${t.img ? img(t.img, t.name, 96) : `<span class="bdgtxt">${esc(t.icon || '★')}</span>`}<div>` +
       `<h3>${esc(t.name)}</h3><p>${esc(t.desc || '')}</p>` +

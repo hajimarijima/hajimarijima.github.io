@@ -37,7 +37,7 @@ function stepWorkshop(S, { day, date, play = null, hist = () => {}, now = Date.n
     if (op.t === 'gain') {
       stats.gains++;
       for (const [it, n] of op.items) {
-        if (op.src === 'fish' && /^fish_/.test(it)) L.fished = (L.fished || 0) + n; // 釣り人のバッジ（熟練度）の数
+        if (op.src === 'fish' && /^fish_/.test(it)) { L.fished = (L.fished || 0) + n; (L.fishedBy = L.fishedBy || {})[it] = (L.fishedBy[it] || 0) + n; } // 釣り人のバッジ（熟練度）と、魚ごとの釣った数
         if (WS.isLegend(config, it)) { stats.legend++; hist('find', `${who}さんが激レアの${nm(it)}を見つけた！`, { who: [k], item: it, rarity: 'legend' }); diary(k, `激レアの${nm(it)}を見つけた！`); }
         if (it === 'treasure_box') diary(k, '宝箱をもらった。');
       }

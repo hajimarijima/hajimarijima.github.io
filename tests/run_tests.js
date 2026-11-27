@@ -2034,12 +2034,12 @@ t('称号バッジ：config の形・絵がある・自動でおくる決まり�
   const cfg = liveCfg();
   const L = cfg.titles.list, ids = L.map((x) => x.id);
   assert.strictEqual(new Set(ids).size, ids.length, 'id が重ならない');
-  const AUTO = ['first', 'count', 'days', 'friends', 'fishRecord', 'bridge', 'home'];
+  const AUTO = ['first', 'nth', 'count', 'allFish', 'days', 'friends', 'fishRecord', 'bridge', 'home'];
   for (const x of L) {
     assert.ok(/^[a-z0-9_]+$/.test(x.id) && x.name && x.desc, x.id + ' の名前と説明');
     assert.ok(!x.auto || AUTO.includes(x.auto), x.id + ' の auto');
     if (x.auto && x.auto !== 'first') assert.ok(x.how, x.id + ' のもらい方');
-    if (['count', 'days', 'friends'].includes(x.auto)) assert.ok(x.n > 0, x.id + ' の n');
+    if (['count', 'days', 'friends', 'nth', 'allFish'].includes(x.auto)) assert.ok(x.n > 0, x.id + ' の n');
     if (x.auto === 'count') assert.ok(x.stat, x.id + ' の stat');
     if (x.img) assert.ok(fs.existsSync(path.join(ROOT, x.img)), x.id + ' の絵 ' + x.img);
   }
@@ -2053,6 +2053,8 @@ t('称号バッジ：config の形・絵がある・自動でおくる決まり�
   assert.strictEqual(TT.statCount({}, 'items.apple'), 0);
   assert.strictEqual(TT.statCount({ built: [1, 2] }, 'built'), 2);
   // 自動でおくる
+  const FISH = Object.keys(cfg.items).filter((k) => k.startsWith('fish_'));
+  const allBy = (n) => Object.fromEntries(FISH.map((k) => [k, n]));
   const mk = () => ({
     config: cfg,
     villagers: [
@@ -2062,9 +2064,9 @@ t('称号バッジ：config の形・絵がある・自動でおくる決まり�
       { key: 'w', display: 'W', joinedDay: 99 },
     ],
     life: {
-      a: { diary: [{ day: 30, date: 'x', text: 'きょう。' }], items: { fish_funa: 12, fish_koi: 8, apple: 49 }, home: null },
+      a: { diary: [{ day: 30, date: 'x', text: 'きょう。' }], items: { fish_funa: 12, fish_koi: 8, apple: 49 }, fishedBy: allBy(500), home: null },
       b: { diary: [], items: { apple: 50 }, home: 'h1' },
-      c: { diary: [], items: { fish_funa: 19, old_boot: 5 } },
+      c: { diary: [], items: { fish_funa: 19, old_boot: 5 }, fishedBy: { ...allBy(900), [FISH[0]]: 499 } },
       w: { diary: [], items: { apple: 500 } },
     },
     history: [],
@@ -2078,23 +2080,34 @@ t('称号バッジ：config の形・絵がある・自動でおくる決まり�
   const cfg2 = JSON.parse(JSON.stringify(cfg)); cfg2.titles.list.find((x) => x.id === 'popular').n = 2; S.config = cfg2;
   const r = TT.awardTitles(S, { day: 30, date: 'x' });
   assert.ok(r.length > 0);
-  assert.deepStrictEqual(got('a'), ['angler', 'first_villager', 'old_timer', 'popular'].sort(), 'a：魚 20 匹・30 日・友だち 2 人（りんご 49 はまだ）');
+  assert.deepStrictEqual(got('a'), ['angler', 'first_villager', 'old_timer', 'popular'].sort(), 'a：全部の魚 500 匹・30 日・友だち 2 人（りんご 49 はまだ）');
   assert.deepStrictEqual(got('b'), ['apple_lover', 'bridge_builder', 'homeowner', 'old_timer'].sort(), 'b：りんご 50・橋・家・30 日');
-  assert.deepStrictEqual(got('c'), ['big_catch'], 'c：コイの 1 位（魚は 19 匹で、古いくつは数えない・10 日）');
+  assert.deepStrictEqual(got('c'), ['big_catch'], 'c：コイの 1 位（1 種類だけ 499 匹なので釣り名人はまだ・10 日）');
   assert.deepStrictEqual(got('w'), [], 'まだ住んでいない人にはおくらない');
-  assert.ok(cfgN('angler').n === 20 && cfgN('old_timer').n === 30);
+  assert.ok(cfgN('angler').auto === 'allFish' && cfgN('angler').n === 500 && cfgN('big_catch').live === true && cfgN('old_timer').n === 30);
   const hs = S.history.filter((h) => h.type === 'title');
   assert.strictEqual(new Set(hs.map((h) => h.title)).size, hs.length, '歴史は称号ごとに 1 行');
   assert.strictEqual(hs.reduce((s, h) => s + h.who.length, 0), r.length, 'もらった人は全員 who に入る');
   assert.strictEqual(hs.find((h) => h.title === 'old_timer').text, 'A、B に称号『古株』がおくられた。', '同じ日の人はまとめる');
   assert.ok(S.life.a.diary[0].text.startsWith('きょう。') && S.life.a.diary[0].text.includes('称号「釣り名人」をもらった'), '今日の日記の後ろに書く');
-  // 2 回目はおくらない（同じ日も次の日も）。1 位をとられても、もらった称号はなくならない
+  // 2 回目はおくらない（同じ日も次の日も）。大物ハンター（live）は 1 位をとられると外れる
   assert.strictEqual(TT.awardTitles(S, { day: 30, date: 'x' }).length, 0, '同じ日にもう一度');
   S.state.fishing.top.fish_koi = [[70, 'b', 31]];
   const r2 = TT.awardTitles(S, { day: 31, date: 'y' });
   assert.deepStrictEqual(r2.map((x) => [x.v.key, x.title.id]), [['b', 'big_catch']], '新しい 1 位にだけ');
-  assert.ok(got('c').includes('big_catch'), 'c の大物ハンターは残る');
+  assert.ok(!got('c').includes('big_catch'), 'c の大物ハンターは外れる');
   assert.strictEqual(TT.awardTitles(S, { day: 32, date: 'z' }).length, 0);
+  // 1 位を取りもどしたら、また付く（町の歴史には 2 回目は書かない）
+  const nh = S.history.length;
+  S.state.fishing.top.fish_koi = [[80, 'c', 33]];
+  TT.awardTitles(S, { day: 33, date: 'w' });
+  assert.ok(got('c').includes('big_catch') && !got('b').includes('big_catch'), '取りもどした');
+  assert.strictEqual(S.history.length, nh, '取りもどしは歴史に書かない');
+  // n 人目の村人
+  const many = { config: { items: {}, titles: { list: [{ id: 'v3', name: '3 人目', auto: 'nth', n: 3 }] } }, villagers: ['p', 'q', 'r', 's'].map((k, i) => ({ key: k, display: k, joinedDay: i })), life: { p: {}, q: {}, r: {}, s: {} }, history: [] };
+  assert.strictEqual(TT.awardTitles(many, { day: 1, date: 'x' }).length, 0, 'まだ 2 人');
+  assert.strictEqual(TT.awardTitles(many, { day: 5, date: 'x' })[0].v.key, 'r', '3 人目');
+  assert.strictEqual(TT.awardTitles(many, { day: 6, date: 'x' }).length, 0, '1 人だけ');
   // state・social がない時（15 分ごとの受付）は、それを使う称号を飛ばす
   const S3 = mk(); delete S3.state; delete S3.social;
   TT.awardTitles(S3, { day: 30, date: 'x' });
