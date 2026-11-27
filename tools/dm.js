@@ -20,8 +20,8 @@ const P = require('./people');
 const DEFAULT_SITE = 'https://hajimarijima.github.io/';
 const DEFAULT_WORDS = ['住みたい', 'すみたい', '入居', '入村'];
 const DEFAULT_MESSAGES = {
-  welcome: '{name}さん、はじまり島へようこそ！あなたの家はこちら → {url}',
-  already: '{name}さんは、もうはじまり島に住んでいます！あなたの家はこちら → {url}',
+  welcome: '{name}さん、はじまり島へようこそ！あなたの家はこちら（あなた専用のリンクです。人に教えないでね）→ {url}',
+  already: '{name}さんは、もうはじまり島に住んでいます！あなたの家はこちら（あなた専用のリンクです。人に教えないでね）→ {url}',
   notFollowing: 'フォローしてからもう一度「{word}」と送ってね',
   retry: 'うまく受け付けられませんでした。少したってから、もう一度「{word}」と送ってね',
 };
@@ -105,13 +105,30 @@ function dmJoins(S, dms, { config, owners = [], hidden, date, day, enemies = fal
   return out;
 }
 
+// 返事の文のひな形を、リンクの場所（{url}）がちょうど 1 つの形にする。{me} も {url} と同じ。なければ最後に「 → {url}」
+function oneLink(tpl) {
+  const s = String(tpl || '').split('{me}').join('{url}');
+  if (!s.includes('{url}')) return s + ' → {url}';
+  const [a, ...b] = s.split('{url}');
+  return a + '{url}' + b.join('');
+}
+// 置きかえ前の文字（{name} など）を残さない。keepMe なら {me}（受け口が専用のリンクに置きかえる所）だけ残す
+const noLeft = (s, keepMe) => s.replace(/\{\w+\}/g, (m) => (keepMe && m === '{me}' ? m : ''));
+const VKEY = /^[A-Za-z0-9_-]{1,40}$/; // 受け口（worker.mjs の validKey）と同じ
+
 // 町に迎えたあと（表示名・かくす人のあだ名が決まってから）、返事の文を作る。dm_replies.json に書く形（v は入れない）
+//   リンクは 1 つだけ。村人の key があれば {me} を置いて受け口に任せる（受け口がこの人専用のリンク ?v=村人&me=印 に置きかえる。
+//   作れない時は house（?v= の家のリンク）に置きかえる。印は受け口の中だけ。ここには書かない）。key がなければ家のリンクをここで入れる
 function replyTexts(res, config) {
   const dc = dmConfig(config);
   return res.replies.map((r) => {
-    if (!r.v) return { ids: r.ids, text: r.text || null, kind: r.kind };
-    // villager：受け口（Worker）がこの人専用のリンク（?me=印）を作って文に入れる（印は受け口の中だけ。ここには書かない）
-    return { ids: r.ids, text: fill(dc.messages[r.kind] || dc.messages.welcome, { name: r.v.display || r.v.name || '', url: houseUrl(dc, r.v.key) }), kind: r.kind, villager: r.v.key };
+    if (!r.v) return { ids: r.ids, text: r.text ? noLeft(String(r.text), false) : null, kind: r.kind };
+    const tpl = oneLink(dc.messages[r.kind] || dc.messages.welcome);
+    const name = r.v.display || r.v.name || '';
+    const key = typeof r.v.key === 'string' && VKEY.test(r.v.key) ? r.v.key : null;
+    const house = key ? houseUrl(dc, key) : (dc.site.endsWith('/') ? dc.site : dc.site + '/');
+    if (!key) return { ids: r.ids, text: noLeft(fill(tpl, { name, url: house }), false), kind: r.kind };
+    return { ids: r.ids, text: noLeft(fill(tpl, { name, url: '{me}' }), true), kind: r.kind, villager: key, house };
   });
 }
 
@@ -134,13 +151,43 @@ async function pull({ env = process.env, fetchFn = globalThis.fetch } = {}) {
 async function done(items, { env = process.env, fetchFn = globalThis.fetch } = {}) {
   const q = queueEnv(env);
   if (!q || !items.length) return null;
-  const body = { items: items.map((x) => ({ ids: x.ids, text: x.text || null, ...(x.villager && x.text ? { villager: x.villager } : {}) })) };
+  const body = { items: items.map((x) => ({ ids: x.ids, text: x.text || null, ...(x.villager && x.text ? { villager: x.villager, ...(x.house ? { house: x.house } : {}) } : {}) })) };
   const r = await fetchFn(q.url + '/dm/done', { method: 'POST', headers: { Authorization: 'Bearer ' + q.token, 'Content-Type': 'application/json', 'User-Agent': 'town-join' }, body: JSON.stringify(body) });
   if (!r.ok) throw new Error('受け口に返事を渡せませんでした（' + r.status + '）');
   return r.json().catch(() => ({}));
 }
 
-module.exports = { dmConfig, dmJoinWord, dmJoins, replyTexts, houseUrl, pull, done, DEFAULT_WORDS, DEFAULT_MESSAGES };
+// ---------- 島（GitHub Pages）に出てから返事する ----------
+// push のすぐあとはまだサイトに出ていない（pages-build-deployment が終わるまで）。新しく来た村人（welcome）が
+// 本番の data/villagers.json に出るまで、everyMs ごとに確かめて待つ（最大 maxMs）。出なくても送る（24 時間の決まりがあるので）。
+// 新しい村人がいない返事（もう住んでいる・フォローしてね など）は待たない。
+//   返り値：{ waited: false } … 待つ人がいない ／ { waited: true, ok, ms, tries, missing }
+const newKeys = (items) => [...new Set((items || []).filter((x) => x && x.kind === 'welcome' && x.text && typeof x.villager === 'string' && VKEY.test(x.villager)).map((x) => x.villager))];
+async function waitForSite(items, { site = DEFAULT_SITE, fetchFn = globalThis.fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), now = () => Date.now(), maxMs = 5 * 60e3, everyMs = 12e3, log = () => {} } = {}) {
+  const keys = newKeys(items);
+  if (!keys.length) return { waited: false };
+  const base = (site.endsWith('/') ? site : site + '/') + 'data/villagers.json';
+  const t0 = now();
+  let tries = 0, missing = keys;
+  for (;;) {
+    tries++;
+    try {
+      const r = await fetchFn(base + '?t=' + now(), { cache: 'no-store', headers: { 'User-Agent': 'town-join', 'Cache-Control': 'no-cache' } });
+      if (r.ok) {
+        const vs = await r.json();
+        const have = new Set((Array.isArray(vs) ? vs : []).filter((v) => v && !v.gone).map((v) => v.key));
+        missing = keys.filter((k) => !have.has(k));
+      }
+    } catch (e) { /* 読めない時は、もう一度 */ }
+    const ms = now() - t0;
+    if (!missing.length) return { waited: true, ok: true, ms, tries, missing: [] };
+    if (ms + everyMs > maxMs) return { waited: true, ok: false, ms, tries, missing };
+    log(`島への反映を待っています（${Math.round(ms / 1000)} 秒・まだ ${missing.length} 人）`);
+    await sleep(everyMs);
+  }
+}
+
+module.exports = { dmConfig, dmJoinWord, dmJoins, replyTexts, houseUrl, pull, done, waitForSite, DEFAULT_WORDS, DEFAULT_MESSAGES };
 
 // ---------- コマンド ----------
 // node tools/dm.js pull   … 積んである DM を data/inbox/dm.json に置く
@@ -162,6 +209,9 @@ if (require.main === module) {
       const f = path.join(inbox, 'dm_replies.json');
       if (!fs.existsSync(f)) { console.log('DM の返事：なし'); return; }
       const items = JSON.parse(fs.readFileSync(f, 'utf8')).items || [];
+      // 新しい村人がいれば、本番の島に出てから送る（リンクを開いた時に家が出るように）
+      const w = await waitForSite(items, { site: dmConfig(config).site, log: (s) => console.log(s) });
+      if (w.waited) console.log(w.ok ? `島に反映されました（GitHub Pages の反映：push から約 ${Math.round(w.ms / 1000)} 秒・確かめた回数 ${w.tries}）` : `島への反映を ${Math.round(w.ms / 1000)} 秒待ちましたが、まだ ${w.missing.length} 人出ていません。このまま返事を送ります`);
       const r = await done(items);
       fs.unlinkSync(f);
       console.log(`DM の返事：${items.filter((x) => x.text).length} 件を渡しました（消した DM ${items.reduce((a, x) => a + x.ids.length, 0)} 件）${r && typeof r.sent === 'number' ? `・送れた ${r.sent} 件` : ''}`);

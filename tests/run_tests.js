@@ -3045,8 +3045,9 @@ t('DM で入居：コメントと同じ人は二重にならない・フォロ�
   const of = (n) => rep.find((x) => x.ids.includes(id(n)));
   assert.strictEqual(rep.reduce((a, x) => a + x.ids.length, 0), 9, 'どの DM も消す');
   assert.strictEqual(of(3), of(4)); assert.deepStrictEqual(of(3).ids, [id(3), id(4)]);
-  assert.strictEqual(of(3).text, `new_maiさん、はじまり島へようこそ！あなたの家はこちら → https://hajimarijima.github.io/?v=${mai.key}`);
-  assert.strictEqual(of(1).kind, 'already'); assert.ok(of(1).text.includes('?v=' + kaito.key) && of(2).text.includes('?v=' + kaito.key), '元の家のリンク');
+  assert.strictEqual(of(3).text, 'new_maiさん、はじまり島へようこそ！あなたの家はこちら（あなた専用のリンクです。人に教えないでね）→ {me}', 'リンクの場所は {me} 1 つ（受け口が専用のリンクに置きかえる）');
+  assert.strictEqual(of(3).villager, mai.key); assert.strictEqual(of(3).house, `https://hajimarijima.github.io/?v=${mai.key}`);
+  assert.strictEqual(of(1).kind, 'already'); assert.ok(of(1).house.endsWith('?v=' + kaito.key) && of(2).house.endsWith('?v=' + kaito.key) && of(1).text.endsWith('→ {me}'), '元の家のリンク');
   assert.strictEqual(of(5).kind, 'notFollowing'); assert.ok(/フォローしてから/.test(of(5).text));
   const sec = S.villagers.find((v) => v.hidden);
   assert.ok(of(6).text.startsWith(sec.display + 'さん') && !of(6).text.includes('secret_dm'), 'かくす人はあだ名');
@@ -3077,7 +3078,7 @@ t('DM で入居：join.js（一時フォルダ）で住み、返事のファイ�
   const life = STORE.readLife(dir);
   assert.ok(life[hana.key], 'その場で町に迎える');
   const rep = JSON.parse(fs.readFileSync(path.join(dir, 'inbox', 'dm_replies.json'), 'utf8')).items;
-  assert.ok(rep.find((x) => x.ids[0] === id('a')).text.includes('?v=' + hana.key));
+  assert.ok(rep.find((x) => x.ids[0] === id('a')).house.endsWith('?v=' + hana.key));
   assert.strictEqual(rep.find((x) => x.ids[0] === id('b')).kind, 'already');
   const pub = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
   assert.ok(!pub.includes('31415926') && !pub.includes('424242'), '公開ファイルに IGSID がない');
@@ -3436,8 +3437,8 @@ at('自分の村人：DM のリンク（印）・/me・遊びの回数・宝箱�
     const done = await W.default.fetch(new Request('https://w.example/dm/done', { method: 'POST', headers: { Authorization: 'Bearer ' + QT }, body: JSON.stringify({ items: [{ ids: ['a'.repeat(32)], text: 'ようこそ', villager: 'alice' }, { ids: ['b'.repeat(32)], text: 'ようこそ {me} だよ' }] }) }), env, {});
     assert.strictEqual((await done.json()).sent, 2);
     const m1 = sent[0].message.text, m2 = sent[1].message.text;
-    const mm = /https:\/\/isle\.example\/\?me=([A-Za-z0-9]{32})/.exec(m1);
-    assert.ok(mm && m1.startsWith('ようこそ\n'), '最後の行に専用のリンク');
+    const mm = /https:\/\/isle\.example\/\?v=alice&me=([A-Za-z0-9]{32})/.exec(m1);
+    assert.ok(mm && m1.startsWith('ようこそ\n'), '最後の行に専用のリンク（?v= も付けて家に寄る）');
     assert.strictEqual((await call('/me', mm[1])).j.villager, 'alice');
     assert.strictEqual((await call('/me', t2)).status, 401, 'DM し直すと前の印は使えない');
     assert.strictEqual(m2, 'ようこそ  だよ', '村人がない時は {me} を消すだけ（リンクは作らない）');
@@ -3447,6 +3448,22 @@ at('自分の村人：DM のリンク（印）・/me・遊びの回数・宝箱�
     await W.default.fetch(new Request('https://w.example/dm/done', { method: 'POST', headers: { Authorization: 'Bearer ' + QT }, body: JSON.stringify({ items: [{ ids: ['c'.repeat(32)], text: 'ようこそ', villager: 'carol' }] }) }), env, {});
     assert.strictEqual(sent[2].message.text, 'ようこそ', 'ME_LINKS=off ならリンクを作らない');
     assert.ok(!store.has('mev:carol'));
+    // dm.js の文（{me} が 1 つ）：専用のリンクが作れない時は家のリンク（?v=）を 1 つ。{me} は残さない
+    const H = 'https://hajimarijima.github.io/?v=carol';
+    const n = (s, sub) => s.split(sub).length - 1;
+    store.set('dmq:' + 'd'.repeat(32), JSON.stringify({ igsid: '5004', at: new Date().toISOString() }));
+    await W.default.fetch(new Request('https://w.example/dm/done', { method: 'POST', headers: { Authorization: 'Bearer ' + QT }, body: JSON.stringify({ items: [{ ids: ['d'.repeat(32)], text: 'carolさん → {me}', villager: 'carol', house: H }] }) }), env, {});
+    assert.strictEqual(sent[3].message.text, 'carolさん → ' + H, 'ME_LINKS=off なら家のリンク 1 つ');
+    assert.strictEqual(W.houseLink(env, { villager: 'carol', house: 'javascript:alert(1)' }), 'https://isle.example/?v=carol', '変な house は使わない');
+    delete env.ME_LINKS;
+    // 専用のリンクが作れた時：リンクは 1 つ（専用のリンクだけ）
+    const t3 = await W.replyText(env, { text: 'ようこそ → {me} {me}', villager: 'carol', house: H }, Date.now());
+    assert.strictEqual(n(t3, 'https://'), 1); assert.ok(/→ https:\/\/isle\.example\/\?v=carol&me=[A-Za-z0-9]{32} $/.test(t3)); assert.ok(!t3.includes('{me}'));
+    // KV が失敗した時：家のリンク 1 つにして送る
+    const badEnv = { ...env, TOWN_KV: { ...env.TOWN_KV, get: async () => null, put: async () => { throw new Error('kv down'); }, delete: async () => {} } };
+    const t4 = await W.replyText(badEnv, { text: 'ようこそ → {me}', villager: 'carol', house: H });
+    assert.strictEqual(t4, 'ようこそ → ' + H, 'KV の失敗でも家のリンク');
+    assert.strictEqual(await W.replyText(env, { text: 'ようこそ → {me}', villager: 'bad key!' }), 'ようこそ → ', '村人の key がなければ {me} を消す');
   } finally { globalThis.fetch = realFetch; W._resetSiteConfig(); W._resetDmConfig(); }
 });
 t('自分の村人：DM の返事に村人の key を渡す（印は GitHub 側に作らない）', () => {
@@ -3457,6 +3474,55 @@ t('自分の村人：DM の返事に村人の key を渡す（印は GitHub 側�
   const src = ['tools/dm.js', 'tools/play.js', 'js/mine.js', 'js/me.js'].map((f) => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('');
   assert.ok(!/newMeToken|getRandomValues/.test(fs.readFileSync(path.join(ROOT, 'tools', 'dm.js'), 'utf8')), '印は受け口だけが作る');
   assert.ok(/replaceState/.test(src), 'リンクを開いたら URL から印を消す');
+});
+t('DM の返事：リンクは 1 つ・置きかえ前の文字を残さない', () => {
+  const DM = require(path.join(ROOT, 'tools', 'dm.js'));
+  const base = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const n = (s, sub) => s.split(sub).length - 1;
+  const v = { key: 'alice', display: 'あり' };
+  const run = (messages, vv = v, kind = 'welcome') => DM.replyTexts({ replies: [{ ids: ['a'.repeat(32)], kind, v: vv }] }, { ...base, dm: { ...base.dm, messages: { ...base.dm.messages, ...messages } } })[0];
+  // 今の config の文
+  const w = run({});
+  assert.strictEqual(w.text, 'ありさん、はじまり島へようこそ！あなたの家はこちら（あなた専用のリンクです。人に教えないでね）→ {me}');
+  assert.strictEqual(w.house, 'https://hajimarijima.github.io/?v=alice');
+  assert.strictEqual(run({}, v, 'already').text, 'ありさんは、もうはじまり島に住んでいます！あなたの家はこちら（あなた専用のリンクです。人に教えないでね）→ {me}');
+  // {url} が 2 つ・{me} と {url}・リンクの場所なし・知らない {foo}：どれも {me} がちょうど 1 つで、ほかの {…} は残らない
+  for (const tpl of ['{name} {url} {url}', '{name} {me} → {url}', '{name}さん、ようこそ', '{name} {foo} {url} {word}']) {
+    const r = run({ welcome: tpl });
+    assert.strictEqual(n(r.text, '{me}'), 1, tpl); assert.ok(!/\{(?!me\})\w+\}/.test(r.text), tpl);
+    assert.ok(!r.text.includes('https://'), 'リンクを入れるのは受け口（二重にしない）');
+  }
+  // 村人の key がない・変な時：家（サイト）のリンクを 1 つだけ入れ、{me} も villager も渡さない
+  for (const vv of [{ display: 'なし' }, { key: '../x', display: 'へん' }]) {
+    const r = run({}, vv);
+    assert.strictEqual(n(r.text, 'https://'), 1); assert.ok(!/\{\w+\}/.test(r.text)); assert.ok(!('villager' in r));
+  }
+  // 村人のない返事（フォローしてね）にも {…} を残さない
+  const nf = DM.replyTexts({ replies: [{ ids: ['b'.repeat(32)], kind: 'notFollowing', text: 'フォローして {foo}' }] }, base)[0];
+  assert.strictEqual(nf.text, 'フォローして ');
+});
+at('DM の返事：島（GitHub Pages）に出てから送る', async () => {
+  const DM = require(path.join(ROOT, 'tools', 'dm.js'));
+  let clock = 0; const asked = [];
+  const opts = (seq) => ({ site: 'https://isle.example/', now: () => clock, sleep: async (ms) => { clock += ms; }, everyMs: 12e3, maxMs: 5 * 60e3,
+    fetchFn: async (u) => { asked.push(u); const x = seq.length > 1 ? seq.shift() : seq[0]; if (x instanceof Error) throw x; return new Response(JSON.stringify(x), { status: 200 }); } });
+  const welcome = { ids: ['a'.repeat(32)], text: 'よ → {me}', kind: 'welcome', villager: 'alice' };
+  // 新しい村人がいない（もう住んでいる・フォローしてね）：待たない・読みにも行かない
+  let r = await DM.waitForSite([{ ...welcome, kind: 'already' }, { ids: ['b'.repeat(32)], text: 'フォローしてね', kind: 'notFollowing' }], opts([[]]));
+  assert.deepStrictEqual(r, { waited: false }); assert.strictEqual(asked.length, 0);
+  // 3 回目で出た（1 回目は読めない）：出たらすぐ送る。キャッシュよけの ?t=
+  clock = 0;
+  r = await DM.waitForSite([welcome], opts([new Error('net'), [{ key: 'bob' }], [{ key: 'bob' }, { key: 'alice' }]]));
+  assert.deepStrictEqual([r.waited, r.ok, r.tries, r.ms], [true, true, 3, 24e3]);
+  assert.ok(/^https:\/\/isle\.example\/data\/villagers\.json\?t=\d+$/.test(asked[0]));
+  // 出ないまま：5 分で切り上げる（送るのは呼んだ側）
+  clock = 0;
+  r = await DM.waitForSite([welcome, { ...welcome, ids: ['c'.repeat(32)], villager: 'carol' }], opts([[{ key: 'alice' }]]));
+  assert.strictEqual(r.ok, false); assert.deepStrictEqual(r.missing, ['carol']); assert.ok(r.ms <= 5 * 60e3 && r.ms >= 4 * 60e3, String(r.ms));
+  // join.yml：done が push のあと・待つ時間の上限
+  const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'join.yml'), 'utf8');
+  assert.ok(/node tools\/dm\.js done/.test(wf) && /timeout-minutes: 8/.test(wf));
+  assert.ok(/waitForSite\(items/.test(fs.readFileSync(path.join(ROOT, 'tools', 'dm.js'), 'utf8')), 'done の前に待つ');
 });
 at('自分の村人：DM の done が villager を送る（text がある時だけ）', async () => {
   const DM = require(path.join(ROOT, 'tools', 'dm.js'));

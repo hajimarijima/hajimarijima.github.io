@@ -305,10 +305,7 @@ async function dmDone(request, env, nowMs = Date.now()) {
     }
     if (!to || typeof it.text !== 'string' || !it.text.trim()) continue;
     if (to.at && nowMs - Date.parse(to.at) > 24 * 3600e3) { console.log('DM：24 時間を過ぎたので返事しません'); continue; }
-    let text = it.text;
-    if (validKey(it.villager) && env.ME_LINKS !== 'off') text = meText(text, meUrl(env, await issueMe(env, it.villager, nowMs)));
-    else text = text.split('{me}').join(''); // リンクを作らない時は、文の {me} を消すだけ
-    if (await sendDm(env, to.igsid, text)) sent++;
+    if (await sendDm(env, to.igsid, await replyText(env, it, nowMs))) sent++;
   }
   return jsonRes({ sent, removed });
 }
@@ -335,11 +332,33 @@ const BD_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 export const validBirthday = (s) => { const m = typeof s === 'string' && /^(\d{2})-(\d{2})$/.exec(s); return !!m && +m[1] >= 1 && +m[1] <= 12 && +m[2] >= 1 && +m[2] <= BD_DAYS[+m[1] - 1]; };
 export const jstDate = (ms = Date.now()) => new Date(ms + 9 * 3600e3).toISOString().slice(0, 10);
 export function newMeToken() { return Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => ME_CHARS[b % ME_CHARS.length]).join(''); }
-const meUrl = (env, tok) => (env.SITE_ORIGIN || DEFAULT_SITE).replace(/\/+$/, '') + '/?me=' + tok;
-// 返事の文に専用のリンクを入れる（{me} があればそこ、なければ最後の行に足す）
+const siteOf = (env) => (env.SITE_ORIGIN || DEFAULT_SITE).replace(/\/+$/, '');
+// 専用のリンク。?v=村人 も付けて、開くとその人の家にカメラが寄ってカードが開く（js/town.js の ?v=）。印は js/mine.js が覚えて URL から消す
+const meUrl = (env, tok, villager) => siteOf(env) + '/?' + (validKey(villager) ? 'v=' + encodeURIComponent(villager) + '&' : '') + 'me=' + tok;
+// 返事の文に専用のリンクを入れる（{me} があればそこ（2 つ目からは消す）、なければ最後の行に足す）
 export function meText(text, url) {
   const s = String(text || '');
-  return s.includes('{me}') ? s.split('{me}').join(url) : `${s}\nあなた専用のリンク（開いた端末で、自分の村人として遊べます。人に教えないでね）→ ${url}`;
+  if (!s.includes('{me}')) return `${s}\nあなた専用のリンク（開いた端末で、自分の村人として遊べます。人に教えないでね）→ ${url}`;
+  const [a, ...b] = s.split('{me}');
+  return a + url + b.join('');
+}
+// 専用のリンクを作れない時（ME_LINKS が off・KV の失敗）の家のリンク。tools/dm.js が送る house（https の URL）か、村人の ?v=
+const okHouse = (u) => typeof u === 'string' && u.length <= 300 && /^https:\/\/[^\s{}<>"]+$/.test(u);
+export function houseLink(env, it) {
+  if (okHouse(it && it.house)) return it.house;
+  return validKey(it && it.villager) ? siteOf(env) + '/?v=' + encodeURIComponent(it.villager) : '';
+}
+// 送る文：リンクは必ず 1 つ。専用のリンクが作れればそれ、作れなければ家のリンク（{me} は文に残さない）
+export async function replyText(env, it, nowMs = Date.now()) {
+  const text = String(it.text);
+  let url = '';
+  if (validKey(it.villager) && env.ME_LINKS !== 'off') {
+    try { url = meUrl(env, await issueMe(env, it.villager, nowMs), it.villager); } catch (e) { console.log('DM：専用のリンクを作れませんでした（家のリンクにします）'); }
+  }
+  if (url) return meText(text, url);
+  if (!text.includes('{me}')) return text;
+  const [a, ...b] = text.split('{me}');
+  return a + houseLink(env, it) + b.join('');
 }
 // 村人に新しい印を作る（前の印は消す）
 export async function issueMe(env, villager, nowMs = Date.now()) {

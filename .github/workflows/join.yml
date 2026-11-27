@@ -75,10 +75,13 @@ jobs:
             if [ -e "$f" ]; then git add "$f"; fi
           done
           git diff --cached --quiet || (git commit -m "住む人の受付・入居" && git push)
-      # 入居がコミットできてから、DM に返事（「〇〇さん、はじまり島へようこそ！あなたの家はこちら → …?v=<村人>」）。送るのは受け口
+      # 入居がコミットできてから、DM に返事（「〇〇さん、はじまり島へようこそ！あなたの家はこちら（あなた専用のリンクです…）→ …?v=<村人>&me=<印>」）。送るのは受け口
+      # 新しく住んだ人がいる時は、本番の島（data/villagers.json）にその人が出るまで待ってから送る（12 秒ごと・最大 5 分。出なくても送る）。
+      # GitHub Pages の反映にかかった時間はログに出る。もう住んでいる人・フォローしてね の返事は待たない
       - name: DM に返事をする
         if: success()
         continue-on-error: true
+        timeout-minutes: 8
         run: node tools/dm.js done
         env:
           DM_QUEUE_URL: ${{ secrets.DM_QUEUE_URL }}
