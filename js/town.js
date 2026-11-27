@@ -32,7 +32,7 @@ import { SpatialHash, TILE } from './tilemap.js';
 import { BED, bedParts, sleeperOnBed, bedInHouse } from './beds.js';
 import { loadHomeDecor, homeDecorSolids, addHomeDecor } from './decor3d.js'; // 家の前の郵便受けと、家の外の飾り（js/decor.js）
 import { TENT, MAT, tentExit, tentPlan, tentSites, tentBed, tentFront, tentPoint, inTent } from './tents.js';
-import { islandAt, isOpen, randomLand, radiusAt, onLand, MAIN } from './island.js';
+import { islandAt, isOpen, randomLand, radiusAt, onLand, MAIN, shoreDist } from './island.js';
 import { makeClouds } from './clouds.js';
 import { seededRng, fightNight, roundsOf } from './combat.js';
 import { makeFloatText } from './floattext.js';
@@ -343,24 +343,51 @@ async function main() {
   // 夜の魔物（config.nightFoes）：3 つ目の大きな島（海の向こうの大陸）の、村に向いた岸の近くに、夜だけ土から出てうろつく。
   //   海とサメがいるので村には来ない。朝は土にもぐって煙になる。歩けるかは foemove.js（海・段・木・岩をよける）
   const NF = config.nightFoes || {};
+  //   チャンクごとに出す（島じゅうに、まばらに）。カメラの近く（near チャンク）に読み込まれたチャンクの魔物だけ作って動かし、遠くなったらしまう（重くならないように）
   const foes = [];
-  {
-    const isl = ISLANDS && NF.enabled !== false ? foeIsland(world, NF.island || 'far') : null;
-    if (isl) {
-      const area = foeArea(world, isl, NF);
-      const obstacles = foeObstacles(terrainGen.chunkObjects, area, BLOCK, CHUNK);
-      const fits = makeFoeFits({ isl, heightAt: terrainGen.heightAt, obstacles, margin: NF.shore ?? 4, area });
-      const list = spawnFoes({ list: foeKinds(NF), area, fits, heightAt: terrainGen.heightAt, seed: 'foes:' + state.day, level: NF.level ?? 0, gap: NF.gap ?? 0 });
-      for (const s of list) {
-        // 前からいる敵（ゾンビ・ガイコツ・クモ）は mobs.js の模型。模型の前は +z なので、+x 向きの入れ物に 90 度回して入れる
-        let o;
-        if (MOB_KINDS.includes(s.kind)) { o = new THREE.Group(); const m = makeMob(s.kind); m.rotation.y = Math.PI / 2; o.add(m); o.userData.mob = m; }
-        else o = makeFoe(s.kind);
-        o.visible = false; scene.add(o);
-        const smoke = makeFoeSmoke(); scene.add(smoke);
-        foes.push({ ...s, id: 'f' + s.i, o, smoke, c: { x: s.x, z: s.z }, st: 'gone', t: 0, slot: -1, bump: 0, goal: null, rest: 0 });
-      }
-      Object.assign(foes, { area, fits, isl, obstacles });
+  const foeIsl = ISLANDS && NF.enabled !== false ? foeIsland(world, NF.island || 'far') : null;
+  const FOE_CH = BLOCK * CHUNK, FOE_NEAR = LITE ? (NF.nearMobile ?? 2) : (NF.near ?? 3);
+  const foeKindList = foeKinds(NF), foePool = {}, foeChunks = new Map(); // チャンク → その魔物（いなければ null）
+  const foeU = (s) => { let h = 2166136261; for (const ch of s) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967296; };
+  // そのチャンクに魔物がいるか・どこにいるか（毎晩かわる。島の外・海べ・木の上には出ない）
+  function foeOfChunk(ci, cj) {
+    const seed = `foes:${state.day}:${ci},${cj}`;
+    if (!foeKindList.length || foeU(seed + ':p') >= (NF.perChunk ?? 0.3)) return null;
+    const kind = foeKindList[Math.floor(foeU(seed + ':k') * foeKindList.length)];
+    const area = { x: (ci + 0.5) * FOE_CH, z: (cj + 0.5) * FOE_CH, r: FOE_CH * 0.45 };
+    if (shoreDist(foeIsl, area.x, area.z) < (NF.shore ?? 4) + 2) return null;
+    const obstacles = foeObstacles(terrainGen.chunkObjects, area, BLOCK, CHUNK);
+    const fits = makeFoeFits({ isl: foeIsl, heightAt: terrainGen.heightAt, obstacles, margin: NF.shore ?? 4, area });
+    const s = spawnFoes({ list: [kind], area, fits, heightAt: terrainGen.heightAt, seed, level: NF.level ?? null })[0];
+    return s ? { ...s, i: Math.floor(foeU(seed + ':i') * 7), id: 'f' + ci + '_' + cj, area, fits } : null;
+  }
+  // 模型は種類ごとに使い回す（作り直さない）
+  function foeModel(kind) {
+    const p = foePool[kind] && foePool[kind].pop(); if (p) return p;
+    let o; // 前からいる敵（ゾンビ・ガイコツ・クモ）は mobs.js の模型。模型の前は +z なので、+x 向きの入れ物に 90 度回して入れる
+    if (MOB_KINDS.includes(kind)) { o = new THREE.Group(); const m = makeMob(kind); m.rotation.y = Math.PI / 2; o.add(m); o.userData.mob = m; }
+    else o = makeFoe(kind);
+    scene.add(o);
+    const smoke = makeFoeSmoke(); scene.add(smoke);
+    return { o, smoke };
+  }
+  function syncFoeChunks(p) {
+    if (!foeIsl) return;
+    const ci0 = Math.floor(p.x / FOE_CH), cj0 = Math.floor(p.z / FOE_CH);
+    if (foes.at === ci0 + ',' + cj0) return; foes.at = ci0 + ',' + cj0;
+    for (let k = foes.length - 1; k >= 0; k--) { // 遠くなったチャンクの魔物はしまう
+      const F = foes[k]; if (Math.max(Math.abs(F.ci - ci0), Math.abs(F.cj - cj0)) <= FOE_NEAR + 1) continue;
+      F.o.visible = false; F.smoke.visible = false; (foePool[F.kind] = foePool[F.kind] || []).push({ o: F.o, smoke: F.smoke }); foes.splice(k, 1);
+    }
+    for (let di = -FOE_NEAR; di <= FOE_NEAR; di++) for (let dj = -FOE_NEAR; dj <= FOE_NEAR; dj++) {
+      const ci = ci0 + di, cj = cj0 + dj, key = ci + ',' + cj;
+      if (foes.some((F) => F.ci === ci && F.cj === cj)) continue;
+      // 島にかからないチャンクは見ない
+      if (Math.hypot((ci + 0.5) * FOE_CH - foeIsl.x, (cj + 0.5) * FOE_CH - foeIsl.z) > foeIsl.r + FOE_CH) continue;
+      if (!foeChunks.has(key)) foeChunks.set(key, foeOfChunk(ci, cj));
+      const s = foeChunks.get(key); if (!s) continue;
+      const { o, smoke } = foeModel(s.kind); o.visible = false; smoke.visible = false;
+      foes.push({ ...s, ci, cj, o, smoke, c: { x: s.x, z: s.z }, st: 'gone', t: 0, slot: -1, bump: 0, goal: null, rest: 0 });
     }
   }
   const FOE_SPEED = { mud: 0.9, wolf: 1.7, shroom: 0.75, zombie: 0.8, skeleton: 1.0, spider: 1.6 };
@@ -372,6 +399,7 @@ async function main() {
     animateMob(m, 'walk', move > 0.5 ? time : (F.tf ?? 0));
   };
   function updateFoes(time, dt, n) {
+    syncFoeChunks(controls.target);
     if (!foes.length) return;
     const nightNow = window.TOWN.foeNight ?? (n > 0.55);
     for (const F of foes) {
@@ -399,9 +427,9 @@ async function main() {
       }
       // うろつく：行き先へ向きを変えてから前へ歩く（横歩き・後ろ歩きをしない）。ふさがれたら行き先を変える
       // ほかの魔物の体にふれる所へは行かない（もうふれている時は、はなれる動きだけ）
-      const fitsF = (x, z, f) => foes.fits(F.kind, x, z, f, F.h0) && !foes.some((G) => G !== F && G.st !== 'gone' && foesTouch(F.kind, x, z, f, G.kind, G.c.x, G.c.z, G.o.rotation.y) && !(Math.hypot(G.c.x - x, G.c.z - z) > Math.hypot(G.c.x - c.x, G.c.z - c.z)));
+      const fitsF = (x, z, f) => F.fits(F.kind, x, z, f, F.h0) && !foes.some((G) => G !== F && G.st !== 'gone' && foesTouch(F.kind, x, z, f, G.kind, G.c.x, G.c.z, G.o.rotation.y) && !(Math.hypot(G.c.x - x, G.c.z - z) > Math.hypot(G.c.x - c.x, G.c.z - c.z)));
       const slot = Math.floor((time + F.i * 3.7) / 11) + F.bump * 1000;
-      if (slot !== F.slot) { F.slot = slot; F.goal = foeGoal(foes.area, F.id, slot); F.rest = 0; }
+      if (slot !== F.slot) { F.slot = slot; F.goal = foeGoal(F.area, F.id, slot); F.rest = 0; }
       let move = 0;
       const dx = F.goal.x - c.x, dz = F.goal.z - c.z;
       if (F.rest > 0) { F.rest -= dt; if (F.rest <= 0) F.bump++; } // 立ち止まってあたりを見る。終わったら別の所へ
