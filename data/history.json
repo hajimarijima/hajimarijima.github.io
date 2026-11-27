@@ -121,8 +121,23 @@
   "time": "11:50",
   "type": "join",
   "text": "_winter0203 が村に住むことになった。",
+  "who": []
+ },
+ {
+  "day": 0,
+  "date": "2026-11-27",
+  "time": "12:00",
+  "type": "moveout",
+  "text": "_winter0203さんが島を引っ越した。"
+ },
+ {
+  "day": 0,
+  "date": "2026-11-27",
+  "time": "12:06",
+  "type": "join",
+  "text": "yuto_0104_saiko が村に住むことになった。",
   "who": [
-   "df69c3dfa3"
+   "478e2b16e6"
   ]
  }
 ]

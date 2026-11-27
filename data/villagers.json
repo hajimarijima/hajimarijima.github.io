@@ -413,21 +413,20 @@
   "joinedAt": "09:41"
  },
  {
-  "key": "df69c3dfa3",
-  "igId": "ef9e96dfd757a465",
-  "name": "_winter0203",
-  "userHash": "13ac314b93485348",
-  "skin": 77,
+  "key": "478e2b16e6",
+  "igId": "0f1156901cb9c4b8",
+  "name": "yuto_0104_saiko",
+  "userHash": "cf70b3358b015610",
+  "skin": 80,
   "joined": "2026-11-27",
   "joinedDay": 0,
   "source": "comment",
-  "birthday": "02-03",
+  "birthday": "01-04",
   "profile": {
-   "food": "木の実"
+   "food": "きのこ"
   },
   "hidden": false,
-  "display": "_winter0203",
-  "via": "dm",
-  "joinedAt": "11:50"
+  "display": "yuto_0104_saiko",
+  "joinedAt": "12:06"
  }
 ]
