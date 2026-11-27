@@ -3417,7 +3417,8 @@ t('夜の魔物：3 つ目の大きな島の上だけ（海・段・木・岩に
   const T = TG.makeTerrain({ seed: (cfg.terrain || {}).seed || 'town', seaZ: world.seaZ, islands: world.islands });
   const obstacles = FM.foeObstacles(T.chunkObjects, area, TG.BLOCK, TG.CHUNK);
   const fits = FM.makeFoeFits({ isl, heightAt: T.heightAt, obstacles, margin: NF.shore, area });
-  const foes = FM.spawnFoes({ list: kinds, area, fits, heightAt: T.heightAt, seed: 'foes:3', level: NF.level ?? 0 });
+  const foes = FM.spawnFoes({ list: kinds, area, fits, heightAt: T.heightAt, seed: 'foes:3', level: NF.level ?? 0, gap: NF.gap });
+  assert.ok(NF.gap > 0 && foes.every((f) => foes.every((g) => g === f || Math.hypot(f.x - g.x, f.z - g.z) > 3)), 'かたまって出ない（まばら）');
   assert.strictEqual(foes.length, kinds.length, '全員置ける');
   for (const f of foes) {
     assert.ok(fits(f.kind, f.x, f.z, f.face, f.h0), '置いた所は歩ける所');

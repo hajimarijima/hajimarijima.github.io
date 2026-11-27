@@ -350,7 +350,7 @@ async function main() {
       const area = foeArea(world, isl, NF);
       const obstacles = foeObstacles(terrainGen.chunkObjects, area, BLOCK, CHUNK);
       const fits = makeFoeFits({ isl, heightAt: terrainGen.heightAt, obstacles, margin: NF.shore ?? 4, area });
-      const list = spawnFoes({ list: foeKinds(NF), area, fits, heightAt: terrainGen.heightAt, seed: 'foes:' + state.day, level: NF.level ?? 0 });
+      const list = spawnFoes({ list: foeKinds(NF), area, fits, heightAt: terrainGen.heightAt, seed: 'foes:' + state.day, level: NF.level ?? 0, gap: NF.gap ?? 0 });
       for (const s of list) {
         // 前からいる敵（ゾンビ・ガイコツ・クモ）は mobs.js の模型。模型の前は +z なので、+x 向きの入れ物に 90 度回して入れる
         let o;

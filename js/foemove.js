@@ -87,11 +87,18 @@ export function foeObstacles(chunkObjects, area, BLOCK, CHUNK) {
 // n 体の魔物を、area の中の歩ける所に置く（毎晩同じ並びにならないよう seed に日を入れる）。体どうしも重ならない
 //   list：種類の並び（foeKinds）。なければ kinds を n 体ぶん順に
 //   level：この高さの地面だけに置く（ふつうは 0＝浜ぞいの低い所。段の上の森には置かない。村から海ごしに見える所）
-export function spawnFoes({ n, kinds = FOE_KINDS, list = null, area, fits, heightAt, seed = 'foes', level = null }) {
+//   gap：ほかの魔物から、少なくともこれだけはなす（かたまって出ないように。置けない時は少しずつ近くてもよくする）
+export function spawnFoes({ n, kinds = FOE_KINDS, list = null, area, fits, heightAt, seed = 'foes', level = null, gap = 0 }) {
   const out = [], L = list || Array.from({ length: n }, (_, i) => kinds[i % kinds.length]);
   for (let i = 0; i < L.length; i++) {
     const kind = L[i];
     for (let t = 0; t < 1200; t++) {
+      const g = gap * Math.max(0, 1 - t / 900); // 900 回目までに、だんだん gap を小さくする
+      if (g > 0 && out.length) {
+        const a0 = u01(seed + ':a:' + i + ':' + t) * Math.PI * 2, r0 = Math.sqrt(u01(seed + ':r:' + i + ':' + t)) * area.r;
+        const x0 = area.x + Math.cos(a0) * r0, z0 = area.z + Math.sin(a0) * r0;
+        if (out.some((f) => Math.hypot(f.x - x0, f.z - z0) < g)) continue;
+      }
       const a = u01(seed + ':a:' + i + ':' + t) * Math.PI * 2, r = Math.sqrt(u01(seed + ':r:' + i + ':' + t)) * area.r;
       const x = area.x + Math.cos(a) * r, z = area.z + Math.sin(a) * r, face = u01(seed + ':f:' + i + ':' + t) * Math.PI * 2;
       const h0 = heightAt ? heightAt(x, z) : 0;
