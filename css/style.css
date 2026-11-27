@@ -948,13 +948,15 @@ html.fs-on .townpage .scroll-more, html.fs-on .scroll-more { bottom: calc(10px +
 html.fs-on .townpage .vcard, html.fs-on .vcard { bottom: calc(46px + env(safe-area-inset-bottom)); }
 /* ---- 遊ぶの「持ち物」（工房：チェストへ送る・作る・交換所・宝箱・熟練度。js/play/bag.js） ---- */
 .playpage .ptabs { grid-template-columns: repeat(4, 1fr); }
+.playpage .ptab { white-space: nowrap; min-width: 0; }
+@media (max-width: 600px) { .playpage .ptabs { gap: 4px; } .playpage .ptab { gap: 3px; padding: 0 2px; font-size: 12px; } .playpage .ptab svg { width: 16px; height: 16px; flex: none; } } /* 「おてつだい」が 2 行に折れないように */
 .pstage[hidden], .pinfo[hidden], .pbag[hidden] { display: none; }
 .pbag { margin-top: 4px; }
 .pbag h2 { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; flex-wrap: wrap; }
 .pbag .bg-left { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--sub); }
 .bg-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap: 6px; margin: 0 0 8px; }
 .bg-slot { position: relative; aspect-ratio: 1; display: grid; place-items: center; border-radius: 10px; background: linear-gradient(#f6efe0, #eadfc8); box-shadow: inset 0 2px 0 rgba(255,255,255,.7), inset 0 -3px 0 rgba(0,0,0,.08); border: 2px solid #d9cbac; }
-.bg-slot.empty { background: #f3eee4; border-style: dashed; box-shadow: none; }
+.bg-slot.empty { margin: 0; padding: 0; background: #f3eee4; border-style: dashed; box-shadow: none; } /* 町の .empty（お知らせの札）の余白が入って下へずれないように */
 .bg-slot img, .bg-ic img, .bg-rc img, .rl-cell img, .bm-items img, .bg-tr img, .bg-mat img, .bg-oi img, .pc-legend img { image-rendering: pixelated; }
 .bg-slot b { position: absolute; right: 3px; bottom: 1px; font-size: 12px; color: #fff; text-shadow: 0 1px 0 #3a2a14, 1px 0 0 #3a2a14, -1px 0 0 #3a2a14, 0 -1px 0 #3a2a14; }
 .bg-dur { position: absolute; left: 5px; bottom: 4px; height: 3px; border-radius: 2px; background: #5bc45b; max-width: calc(100% - 10px); }
@@ -965,7 +967,7 @@ html.fs-on .townpage .vcard, html.fs-on .vcard { bottom: calc(46px + env(safe-ar
 .bg-msg { margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; background: #fff7df; border: 1px solid #ecd89a; font-size: 14px; }
 .bg-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin: 0 0 10px; }
 .bg-tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 48px; padding: 4px 2px; border: 2px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
-.bg-tab.on { background: #2f6f4f; border-color: #2f6f4f; color: #fff; box-shadow: 0 3px 0 #1e4a34; }
+.bg-tab.on { background: #2f6f4f; border-color: #1e4a34; color: #fff; box-shadow: inset 0 -3px 0 #1e4a34; } /* 影は内側に（ほかのタブより下へはみ出さない） */
 .bg-body > p.muted { font-size: 13px; margin: 0 0 8px; }
 .bg-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
 .bg-row { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
@@ -997,7 +999,12 @@ html.fs-on .townpage .vcard, html.fs-on .vcard { bottom: calc(46px + env(safe-ar
 .bg-mat small, .bg-tr small { color: var(--sub); }
 .bg-why { margin: 4px 0; font-size: 13px; color: #a2452e; }
 .bg-trade { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
-.bg-trs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.bg-trs { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; min-width: 0; }
+.bg-trs .bg-tr { min-width: 0; flex: 0 1 auto; }
+.bg-trs .bg-tr > span { min-width: 0; line-height: 1.25; }
+.bg-trs .bg-tr img { flex: none; }
+.bg-trade > .bg-go { min-height: 38px; padding: 0 12px; }
+.bg-trn { grid-column: 1 / -1; margin: 0; }
 .bg-tr { color: var(--ink); border-color: #e6dcc6; }
 .bg-tr.lack { color: #a2452e; border-color: #ead2c4; }
 .bg-tr.r-legend { border-color: #e8b020; background: #fff8de; }
@@ -1035,7 +1042,7 @@ html.fs-on .townpage .vcard, html.fs-on .vcard { bottom: calc(46px + env(safe-ar
 .bm-make { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .bm-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 .bm-btns .btn { min-width: 96px; min-height: 44px; font-weight: 700; }
-@media (max-width: 600px) { .bg-tab { font-size: 11px; } .bg-rk { grid-template-columns: 58px minmax(0, 1fr); } .bg-rc { width: 38px; height: 38px; } .bg-trade { grid-template-columns: 1fr; } .bg-tra { justify-items: start; grid-auto-flow: column; align-items: center; } }
+@media (max-width: 600px) { .bg-tab { font-size: 11px; } .bg-rk { grid-template-columns: 58px minmax(0, 1fr); } .bg-rc { width: 38px; height: 38px; } .bg-trade { gap: 5px; padding: 5px; } .bg-trs { gap: 2px; } .bg-trs .bg-tr { padding: 2px 5px 2px 2px; font-size: 11px; gap: 2px; word-break: keep-all; } .bg-trs .bg-tr img { width: 18px; height: 18px; } .bg-arrow { font-size: 11px; } .bg-trade > .bg-go { min-height: 36px; padding: 0 9px; font-size: 13px; } .bg-dots { display: none; } } /* 交換所は 390 幅でも 1 行（出す物 → もらう物 → ボタン） */
 @media (prefers-reduced-motion: reduce) { .r-legend.bg-slot { animation: none; } }
 /* 宝箱を開ける：画面の下に宝箱 → そこから帯が流れ出し、真ん中の線で止まる（段の色：白・緑・青・紫・黄） */
 .t-common { --tc: #f4f1ea; } .t-uncommon { --tc: #4cc35a; } .t-rare { --tc: #3f8fe6; } .t-epic { --tc: #a457e0; } .t-legend { --tc: #f5c518; }

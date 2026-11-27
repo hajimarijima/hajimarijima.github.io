@@ -40,7 +40,16 @@ function memStore(config, P, mode, L) {
     },
     async useChore() { if (day.chores >= P.chorePerDay) throw new Error('きょうの回数はおしまいです'); day.chores++; mine++; st.last = {}; if (day.chores === P.chorePerDay) { gains.push(['treasure_box', 1]); st.last.box = 1; } return { ...day }; },
     async choreTotal() { return demoChoreTotal(date, P.choreGoal) + mine; },
-    async claimTreasure(key) { st.last = {}; if (!day.treasure) { gains.push(['treasure_box', 1]); st.last.box = 1; const lg = rollLegend(config, 'treasure', Math.random); if (lg) { gains.push([lg, 1]); st.last.legend = lg; } } day.treasure = true; return { first: true, finder: key }; },
+    async claimTreasure(key) { // 掘った場で宝箱を開ける：中身（宝箱の段の抽選）を持ち物へ。見本だけ window.__boxForce で段を決められる
+      st.last = {};
+      if (!day.treasure) {
+        const lg = rollLegend(config, 'treasure', Math.random); if (lg) st.last.legend = lg;
+        const f = typeof window !== 'undefined' && window.__boxForce, ft = f && boxTiers(config).find((x) => x.id === f);
+        const g = ft ? { tier: ft.id, item: ft.items[0][0], n: ft.items[0][1] } : rollBox(config, Math.random);
+        gains.push([g.item, g.n]); if (lg) gains.push([lg, 1]); st.last.got = [g.item, g.n]; st.last.tier = g.tier;
+      }
+      day.treasure = true; return { first: true, finder: key };
+    },
     async catches() { return fish.slice(); },
     // 工房（見本はこの端末の中だけで決める。本番は受け口が決める）
     async shop() { return view(); },
@@ -70,7 +79,7 @@ function liveStore(config, P0, me) {
     },
     async useChore(kind) { const j = await api(config, '/play/chore', { kind }); day = { ...day, ...j.day }; total = j.choreTotal ?? total; st.last = { box: j.box || 0 }; return { ...day }; },
     async choreTotal() { return total; },
-    async claimTreasure() { const j = await api(config, '/play/treasure', {}); day = { ...day, ...j.day }; st.last = { box: j.box || 0, legend: j.legend || null }; return { first: !!j.first, finder: j.treasure && j.treasure.villager }; },
+    async claimTreasure() { const j = await api(config, '/play/treasure', {}); day = { ...day, ...j.day }; st.last = { got: j.got || null, tier: j.tier || null, legend: j.legend || null }; return { first: !!j.first, finder: j.treasure && j.treasure.villager }; },
     async catches() { return catches.slice(); },
     async shop() { return api(config, '/shop/state'); },
     async shopDo(op) { return shopCall('/shop/do', op); },

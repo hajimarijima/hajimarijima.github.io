@@ -13,6 +13,7 @@ import { makeStore } from './store.js';
 import { pickCatch, biteDelay, judgeHook, sizeWord, CHORES, jstHour, isNight, leftOf, beepInterval, beepPitch, detectWord, DETECT } from './rules.js';
 import { makeDetector, holdDetector, coilPos, makeBeeper } from './detector.js';
 import { makeBag } from './bag.js';
+import { TIER_LOOK } from '../workshop.js';
 
 nav('play.html');
 const $ = (id) => document.getElementById(id);
@@ -283,15 +284,45 @@ async function main() {
     say('宝箱だ！');
     let r = { first: true };
     try { r = await store.claimTreasure(v.key); day = await store.today(); } catch (e) { say(e.message); }
-    setTimeout(async () => {
-      T.openAt = clock.getElapsedTime();
+    // 掘った場で宝箱がパカッと開き、中身（受け口が決めた物）がポンと飛び出す。持ち物には中身が入る（宝箱のままでは入れない）
+    const got = store.last && store.last.got, look = TIER_LOOK[(store.last && store.last.tier) || 'common'] || TIER_LOOK.common;
+    if (got) showLoot(got[0], look.color);
+    setTimeout(() => {
+      T.openAt = clock.getElapsedTime(); if (got) loot.t0 = T.openAt + 0.3;
       H.mode = 'cheer'; H.cheerAt = clock.getElapsedTime();
+    }, 750);
+    setTimeout(() => {
       // 宝探しは競争ではない（だれでも毎日 1 回掘り出せる）。順位や「いちばん」は出さない
       onCardClose = () => { H.mode = 'idle'; T.busy = false; T.reveal = false; say(treasureMsg()); };
-      showCard(`<div class="pc-fish"><div class="pc-img chestimg">${icon('gift', { size: 44 })}</div><h3>見つけた！</h3>` +
-        `<p>${esc(atName(v))} さんが、きょうの宝を掘り出しました。${store.last.box ? '宝箱を 1 つもらいました（「持ち物」の「宝箱」で開けられます）。' : ''}</p>` + legendLine() +
+      const gn = got ? `${(items[got[0]] || {}).name || got[0]}${got[1] > 1 ? ` ×${got[1]}` : ''}` : '';
+      showCard(`<div class="pc-fish"><div class="pc-img${got ? '' : ' chestimg'}">${got ? `<img class="pixel" src="icons/${esc(got[0])}.png" alt="" width="64" height="64">` : icon('gift', { size: 44 })}</div>` +
+        `<h3>${got ? `${esc(gn)}が出てきた！` : '見つけた！'}</h3>` +
+        (got ? `<p class="pc-tags"><span class="tag" style="background:${look.color};color:#1a1830">${esc(look.name)}</span></p>` : '') +
+        `<p>${esc(atName(v))} さんが、きょうの宝箱を掘り出して開けました。${got ? '中の物は持ち物に入ります。' : ''}</p>` + legendLine() +
         `<p class="muted">${W.mode === 'live' ? '明日はまた別の所にうまります。' : '見本なので記録しません。明日はまた別の所にうまります。'}</p><button type="button" class="btn pc-ok">やったね</button></div>`);
-    }, 750);
+    }, got ? 2300 : 750);
+  }
+  // 宝箱から飛び出す中身：絵（板の絵）と、うしろの丸い光（段の色）。宝箱の口から上へポンと出て、少しはねて、ふわふわ浮く
+  const loot = { g: new THREE.Group(), t0: null };
+  { const glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+    loot.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, opacity: 0 }));
+    loot.item = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false, alphaTest: 0.1 }));
+    loot.glow.renderOrder = 10; loot.item.renderOrder = 11; loot.g.add(loot.glow, loot.item); loot.g.visible = false; S.scene.add(loot.g); }
+  function showLoot(key, color) {
+    const tex = new THREE.TextureLoader().load(`icons/${key}.png`); tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.colorSpace = THREE.SRGBColorSpace;
+    loot.item.material.map = tex; loot.item.material.needsUpdate = true; loot.glow.material.color.set(color);
+    loot.g.position.set(chest.x, 0, chest.z); loot.g.visible = false; loot.t0 = null;
+  }
+  function lootTick(t) {
+    if (loot.t0 == null || t < loot.t0) { loot.g.visible = false; return; }
+    const k = t - loot.t0; loot.g.visible = true;
+    // 0〜0.5 秒：口（高さ 0.6）から 1.9 まで飛び出す（行きすぎて少しもどる）。そのあとはふわふわ
+    const u = Math.min(1, k / 0.5), back = 1 + 2.2 * Math.pow(u - 1, 3) + 1.2 * Math.pow(u - 1, 2);
+    const y = 0.6 + 1.5 * back + (k > 0.5 ? Math.sin((k - 0.5) * 2.6) * 0.06 : 0);
+    const s = 0.3 + 0.75 * Math.min(1, k / 0.35), sq = k < 0.5 ? 1 : 1 + Math.sin(Math.min(1, (k - 0.5) / 0.3) * Math.PI) * 0.12 * (1 - Math.min(1, (k - 0.5) / 0.3));
+    loot.item.position.y = y; loot.item.scale.set(s * sq, s / sq, 1);
+    loot.glow.position.y = y; const gs = 1.5 + 0.3 * Math.sin(k * 3); loot.glow.scale.set(gs, gs, 1);
+    loot.glow.material.opacity = Math.min(0.85, k * 2.5) * (0.75 + 0.25 * Math.sin(k * 5));
   }
   // 物の中か（探知機の輪・柄が入らないように。物はどれも回していない箱：半分の幅と高さ）
   const OBJ_HALF = { tree: 0.5, rock: 0.5, bush: 0.63, field: 1.12 }, OBJ_TOP = { tree: 99, rock: 1.4, bush: 1.2, field: 0.22 };
@@ -331,7 +362,7 @@ async function main() {
     bob.visible = false; line.visible = false; ring.material.opacity = 0; alert.hidden = true;
     camera.position.set(S.camp.x + 0.8, 1 + 9.5 * zoomK(), S.camp.z - 1 + 10.5 * zoomK()); controls.target.set(S.camp.x, 1, S.camp.z - 1); controls.minDistance = 6; controls.maxDistance = 26;
     act.hidden = true; left.hidden = guest; left.textContent = leftText('chore'); bar.hidden = false; choreBar();
-    say(guest ? '木・岩・木の実のしげみ・畑をタップすると、村人がおてつだいに行きます（つながると遊べます）' : leftOf(day, P, 'chore') > 0 ? '木・岩・木の実のしげみ・畑をタップすると、おてつだいに行きます' : 'きょうのおてつだいはおしまい。ありがとう！');
+    say(guest ? '木・岩・しげみ・畑をタップ（つながると遊べます）' : leftOf(day, P, 'chore') > 0 ? '木・岩・しげみ・畑をタップしておてつだい' : 'きょうのおてつだいはおしまい。ありがとう！'); // 390 幅でも 1 行に収まる長さ
   }
   function choreBar() {
     const pct = Math.min(100, (total / P.choreGoal) * 100);
@@ -446,7 +477,7 @@ async function main() {
       info.innerHTML = `<h2>${icon('fish', { size: 20 })}<span>浜の釣り</span></h2><p class="muted">釣れる魚と大きさは、島の釣りと同じ決まりです（海の魚。夜は夜の魚も）。1 日 ${P.fishPerDay} 回まで（逃げても 1 回）。</p>` +
         (cs.length ? '<div class="pcatch">' + cs.map(([it, cm]) => `<span class="tag"><img class="pixel" src="icons/${esc(it)}.png" alt="" width="20" height="20">${esc((items[it] || {}).name || it)}${cm ? ` ${cm}cm` : ''}</span>`).join('') + '</div>' : `<p class="muted">${guest ? '' : 'きょうはまだ釣っていません。'}</p>`);
     } else if (tab === 'treasure') {
-      info.innerHTML = `<h2>${icon('gift', { size: 20 })}<span>宝探し</span></h2><p class="muted">毎日 1 つ、島のどこかの地面の中に宝箱がうまっています。村人は金属探知機を持っていて、宝に近づくほど「ピッ、ピッ」の間が短くなります。地面をタップして歩き、音が「ピピピピ…」と続けて鳴る所で「掘る」。掘り出すと宝箱が 1 つもらえて、まれに激レアの物も出てきます。宝はみんなが 1 日 1 回ずつ掘り出せます。</p><p class="muted">音が出ない時は、右上のランプの点めつと、携帯なら小さな震えでもわかります。</p>`;
+      info.innerHTML = `<h2>${icon('gift', { size: 20 })}<span>宝探し</span></h2><p class="muted">毎日 1 つ、島のどこかの地面の中に宝箱がうまっています。村人は金属探知機を持っていて、宝に近づくほど「ピッ、ピッ」の間が短くなります。地面をタップして歩き、音が「ピピピピ…」と続けて鳴る所で「掘る」。掘り出すとその場で宝箱が開いて、中の物が 1 つ持ち物に入ります（まれに激レアの物も）。宝はみんなが 1 日 1 回ずつ掘り出せます。</p><p class="muted">音が出ない時は、右上のランプの点めつと、携帯なら小さな震えでもわかります。</p>`;
     } else {
       info.innerHTML = `<h2>${icon('trees', { size: 20 })}<span>毎日のおてつだい</span></h2><p class="muted">木・石・木の実を集めたり、畑に水をやったり。1 日 ${P.chorePerDay} 回までできます。みんなで集めた合計が ${P.choreGoal} に届くと、島のみんなが助かります。</p>`;
     }
@@ -466,6 +497,7 @@ async function main() {
     if (H.mode === 'work' && H.work && H.work.o.kind === 'tree') { const k = Math.sin(t * 20) * 0.012 * Math.max(0, Math.sin((t - H.work.t0) * 10)); H.work.o.g.userData.leaves.rotation.z = k; }
     waterTick(t, dt);
     if (T.openAt != null) chest.g.userData.open = Math.min(1, (t - T.openAt) / 0.8);
+    lootTick(t); if (tab !== 'treasure') loot.g.visible = false;
     tickScene(S, t);
     for (let i = pops.length - 1; i >= 0; i--) { const p = pops[i], k = (t - p.t0) / 1.4; p.s.position.y += dt * 0.9; p.s.material.opacity = 1 - Math.max(0, k - 0.5) * 2; if (k >= 1) { S.scene.remove(p.s); pops.splice(i, 1); } }
     // おてつだいの間は、カメラが村人について行く（回した向き・遠さはそのまま）

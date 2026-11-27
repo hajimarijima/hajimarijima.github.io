@@ -490,15 +490,16 @@ export async function playApi(request, env, nowMs = Date.now()) {
   if (path === '/play/treasure') {
     let t = await readJ(kv, 'trs:' + date, null), first = false;
     if (!t) { t = { villager: v, at: new Date(nowMs).toISOString() }; await kv.put('trs:' + date, JSON.stringify(t), { expirationTtl: TRS_TTL }); first = true; }
-    let box = 0, legend = null;
-    if (!day.treasure) { // 掘った人は（いちばんでなくても）宝箱 1 つ。まれに激レアも（ここで決める）
-      day.treasure = true; box = 1; day.box = (day.box || 0) + 1;
+    let got = null, tier = null, legend = null;
+    if (!day.treasure) { // 掘った人は（いちばんでなくても）その場で宝箱を開ける。中身（宝箱の段の抽選）とまれな激レアはここで決め、持ち物には中身が入る
+      day.treasure = true;
       legend = rollLegend(cfg, 'treasure', wsRnd(env));
       if (legend) (day.legend = day.legend || []).push(legend);
+      const g = rollBox(cfg, wsRnd(env)); got = [g.item, g.n]; tier = g.tier;
       await kv.put(dk, JSON.stringify(day), { expirationTtl: DAY_TTL });
-      await wsGain(kv, date, v, [['treasure_box', 1], ...(legend ? [[legend, 1]] : [])], 'treasure', nowMs);
+      await wsGain(kv, date, v, [got, ...(legend ? [[legend, 1]] : [])], 'treasure', nowMs);
     }
-    return res({ first, treasure: t, day: { fish: day.fish, chores: day.chores, treasure: true }, box, legend });
+    return res({ first, treasure: t, day: { fish: day.fish, chores: day.chores, treasure: true }, box: 0, got, tier, legend });
   }
   return res({ error: 'not found' }, 404);
 }

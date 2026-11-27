@@ -67,15 +67,17 @@ export function makeBag({ root, store, config, L, guest, mode, onChange }) {
       const need = x.need ? ((L.badges && L.badges[x.need.badge]) ?? -1) < x.need.tier : false, t = tryOp({ t: 'trade', trade: x.id });
       const side = (o, give) => Object.entries(o).map(([k, n]) => { const have = give ? (k.startsWith('@') ? groupCount(config, inv, k) : counts()[k] || 0) : null; return `<span class="bg-tr${give && have < n ? ' lack' : ''}${rcls(k)}">${k === '@fish' ? img('fish_aji', 24) : k === '@legend' ? img('star_shard', 24) : img(k, 24)}<span>${esc(nm(k))} ×${n}${give ? `<small>（${have}）</small>` : ''}</span></span>`; }).join('');
       const B = x.need && BG.list && BG.list[x.need.badge];
+      // 1 行：出す物 → もらう物 → 交換するボタン（バッジが要る時の一言は下の行）
       return `<li class="bg-trade"><div class="bg-trs">${side(x.give, true)}<span class="bg-arrow">→</span>${side(x.get, false)}</div>` +
-        `<div class="bg-tra">${need && B ? `<small class="bg-why">「${esc(B.name)}」の${TN[x.need.tier]}バッジから</small>` : ''}<button type="button" class="btn sub bg-go" data-act="trade" data-id="${esc(x.id)}"${t.ok ? '' : ' disabled'}>交換…</button></div></li>`;
+        `<button type="button" class="btn sub bg-go" data-act="trade" data-id="${esc(x.id)}"${t.ok ? '' : ' disabled'}>交換<span class="bg-dots">…</span></button>` +
+        (need && B ? `<small class="bg-why bg-trn">「${esc(B.name)}」の${TN[x.need.tier]}バッジから</small>` : '') + '</li>';
     }).join('') + '</ul>';
   }
   // ---------- 宝箱 ----------
   function boxBody() {
     const n = counts().treasure_box || 0;
     const odds = boxTiers(config).map((t) => { const L2 = TIER_LOOK[t.id] || { name: t.id, color: '#999' }, sum = t.items.reduce((a, x) => a + (x[2] ?? 1), 0); return `<tr><th><i class="bg-dot" style="background:${L2.color}"></i>${esc(L2.name)}</th><td class="bg-pct">${pct(t.p)}</td><td><div class="bg-oi">${t.items.map(([k, m, w]) => `<span title="${esc(nm(k))}${m > 1 ? ' ×' + m : ''}・この段の中で ${pct((w ?? 1) / sum)}">${img(k, 20)}${m > 1 ? `<small>×${m}</small>` : ''}</span>`).join('')}</div></td></tr>`; }).join('');
-    return `<div class="bg-box"><span class="bg-ic big r-rare">${img('treasure_box', 48)}</span><div><b>宝箱 × ${n}</b><p class="muted">宝探しで掘ると 1 つ・おてつだいを 1 日ぜんぶすると 1 つ・交換所（魚 8 匹）でももらえます。開けると、何かが 1 つ出てきます。</p>` +
+    return `<div class="bg-box"><span class="bg-ic big r-rare">${img('treasure_box', 48)}</span><div><b>宝箱 × ${n}</b><p class="muted">おてつだいを 1 日ぜんぶすると 1 つ・交換所（魚 8 匹）でももらえます。開けると、何かが 1 つ出てきます。</p>` +
       `<button type="button" class="btn bg-go" data-act="open"${n > 0 && !busy ? '' : ' disabled'}>${icon('gift', { size: 18 })}<span>${n > 0 ? '宝箱を開ける' : '宝箱がありません'}</span></button></div></div>` +
       `<details class="bg-odds"><summary>出る物と確率を見る</summary><table>${odds}</table><p class="muted">中身は、開けた時に受け口（サーバー）が決めます。宝箱や鍵をお金で買うことはできません。</p></details>`;
   }

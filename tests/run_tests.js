@@ -3469,7 +3469,7 @@ at('自分の村人：DM のリンク（印）・/me・遊びの回数・宝箱�
     // 宝箱：最初の人だけいちばん乗り
     r = await call('/play/treasure', tb, {}); assert.ok(r.j.first); assert.strictEqual(r.j.treasure.villager, 'bob');
     r = await call('/play/treasure', t2, {}); assert.ok(!r.j.first); assert.strictEqual(r.j.treasure.villager, 'bob');
-    r = await call('/me', t2); assert.deepStrictEqual(r.j.day, { fish: 2, chores: 1, treasure: true, box: 1, legend: [] }, '掘った人は宝箱を 1 つもらう'); assert.strictEqual(r.j.choreTotal, 3); assert.strictEqual(r.j.settings.oreMode, 'storage');
+    r = await call('/me', t2); assert.deepStrictEqual(r.j.day, { fish: 2, chores: 1, treasure: true, box: 0, legend: [] }, '掘った人はその場で宝箱を開ける（宝箱の数には入れない）'); assert.strictEqual(r.j.choreTotal, 3); assert.strictEqual(r.j.settings.oreMode, 'storage');
     // pull：合言葉が要る。印では読めない
     assert.strictEqual((await call('/play/pull', t2)).status, 403);
     r = await call('/play/pull?days=2', QT);

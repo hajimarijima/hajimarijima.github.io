@@ -41,6 +41,7 @@ function stepWorkshop(S, { day, date, play = null, hist = () => {}, now = Date.n
         if (WS.isLegend(config, it)) { stats.legend++; hist('find', `${who}さんが激レアの${nm(it)}を見つけた！`, { who: [k], item: it, rarity: 'legend' }); diary(k, `激レアの${nm(it)}を見つけた！`); }
         if (it === 'treasure_box') diary(k, '宝箱をもらった。');
       }
+      if (op.src === 'treasure' && op.items.length && op.items[0][0] !== 'treasure_box') diary(k, `宝探しで宝箱を掘り出して開けたら、${nm(op.items[0][0])}が出てきた。`); // 掘った場で開ける（中身だけが届く）
       if (Object.keys(r.toStore || {}).length) diary(k, `持ち物がいっぱいだったので、${Object.keys(r.toStore).map(nm).join('・')}は島のチェストに入れた。`);
       continue;
     }

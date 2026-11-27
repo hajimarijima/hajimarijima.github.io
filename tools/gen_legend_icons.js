@@ -142,20 +142,39 @@ const ICONS = {
     '    YYY    ',
     '   kkkkk   ',
     '   kkkkk   '] },
-  treasure_box: { legend: false, g: [
-    ' LLLLLLLLLLLL ',
-    'LLLLLLLLLLLLLL',
-    'YYYYYYYYYYYYYY',
-    'DDDDDDYYDDDDDD',
-    'DDDDDYkkYDDDDD',
-    'DDDDDDYYDDDDDD',
-    'DDDDDDDDDDDDDD',
-    'YYYYYYYYYYYYYY',
-    'DDDDDDDDDDDDDD'] },
 };
+// 宝箱：少し上から見た形（ふたの上の面と前の面が見える）。色は 1 ドットずつ手で決める（raw）
+//   左上から光：ふたの上の面がいちばん明るく、前の面・右のはし・下の板ほど暗い。
+//   鉄の帯 2 本（左は明るく右は暗い）・金のふち（ふたの合わせ目が少し外へ出る）と錠前・板の継ぎ目・角の金具・下の影。
+const RAW = {
+  k: [46, 26, 16], w: [250, 222, 160], a: [214, 148, 82], b: [176, 108, 54], c: [130, 76, 36], s: [88, 48, 22],
+  i: [206, 214, 224], j: [140, 150, 166], m: [86, 92, 108], Y: [255, 234, 136], G: [238, 182, 44], g: [170, 110, 20], e: [26, 14, 10],
+};
+ICONS.treasure_box = { raw: [
+  '................',
+  '...kkkkkkkkkk...',
+  '..kawiwwaaaiak..',
+  '.kaaiaaaaaajbbk.',
+  '.kbbibbbbbbjcck.',
+  '.kccjccccccmcck.',
+  'kYYYYYYGGGGGGggk',
+  '.kYbibYYGgbjbgk.',
+  '.kabibGeeGbjbck.',
+  '.kabibgeggbjbck.',
+  '.kssissssssmssk.',
+  '.kabibbbbbbjbck.',
+  '.kGcjccccccmcgk.',
+  '.kkkkkkkkkkkkkk.',
+  '..~~~~~~~~~~~~..',
+  '................'] };
 
 const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
 function draw(def) {
+  if (def.raw) { // 手で決めた色をそのまま置く（~ は下の影：うすい黒）
+    const px = new Uint8Array(S * S * 4);
+    def.raw.forEach((r, y) => [...r].forEach((ch, x) => { const i = (y * S + x) * 4; if (ch === '~') { px[i + 3] = 70; return; } const c = RAW[ch]; if (!c) return; px[i] = c[0]; px[i + 1] = c[1]; px[i + 2] = c[2]; px[i + 3] = 255; }));
+    return px;
+  }
   const rows = def.g, h = rows.length, w = Math.max(...rows.map((r) => r.length));
   const ox = Math.floor((S - w) / 2), oy = Math.floor((S - h) / 2) + (def.legend ? 0 : 1);
   const at = (x, y) => { const r = rows[y - oy]; const c = r && r[x - ox]; return c && c !== ' ' ? c : null; };

@@ -116,7 +116,7 @@ module.exports = function workshopTests({ at, t, ROOT }) {
     W._resetSiteConfig(); W._resetSiteFiles();
     const store = new Map();
     const kv = { get: async (k) => (store.has(k) ? store.get(k) : null), put: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); }, list: async ({ prefix }) => ({ keys: [...store.keys()].filter((k) => k.startsWith(prefix)).map((name) => ({ name })), list_complete: true }) };
-    const life = { bob: { level: 1, badges: {}, slots: 9, inv: [{ item: 'log', n: 2 }, { item: 'fish_aji', n: 6 }, null, null, null, null, null, null, null] } };
+    const life = { bob: { level: 1, badges: {}, slots: 9, inv: [{ item: 'log', n: 2 }, { item: 'fish_aji', n: 6 }, { item: 'treasure_box', n: 1 }, null, null, null, null, null, null] } };
     let wsJson = { applied: {}, seen: [] };
     const realFetch = globalThis.fetch;
     globalThis.fetch = async (url) => {
@@ -147,10 +147,11 @@ module.exports = function workshopTests({ at, t, ROOT }) {
       rv = [0, 0];
       r = await call('/play/fish', tk, { item: fk, cm: sz.min, legend: 'old_crown' });
       assert.ok(cfg().workshop.legend.fish.some(([k]) => k === r.j.legend), '画面が送った物ではなく、受け口が決めた物');
-      // 宝を掘ると宝箱（2 回目はなし）
-      rv = [0.99];
-      r = await call('/play/treasure', tk, {}); assert.strictEqual(r.j.box, 1); assert.strictEqual(r.j.legend, null);
-      r = await call('/play/treasure', tk, {}); assert.strictEqual(r.j.box, 0);
+      // 宝を掘ると、その場で宝箱が開いて中身が入る（宝箱のままでは入れない。2 回目はなし）
+      rv = [0.99, 0.9, 0.1];
+      r = await call('/play/treasure', tk, {}); assert.strictEqual(r.j.box, 0); assert.strictEqual(r.j.legend, null);
+      assert.strictEqual(r.j.tier, 'rare'); assert.ok(W.boxOk(cfg(), r.j.got), '中身は宝箱の段から');
+      r = await call('/play/treasure', tk, {}); assert.strictEqual(r.j.got, null);
       // 宝箱を開ける：帯の stop が中身と同じ
       rv = [0.9, 0.1];
       r = await call('/box/open', tk, {});
@@ -164,12 +165,13 @@ module.exports = function workshopTests({ at, t, ROOT }) {
       const res = await W.default.fetch(new Request('https://w.example/play/pull?days=1', { headers: { Authorization: 'Bearer ' + 'q'.repeat(24) } }), env, {});
       const pj = await res.json(), d = Object.keys(pj.shop)[0];
       assert.deepStrictEqual(pj.shop[d].bob.map((o) => o.t), ['send', 'craft', 'gain', 'gain', 'open'], 'もらった物も同じ列に時刻の順で');
+      assert.strictEqual(pj.shop[d].bob[3].src, 'treasure'); assert.ok(!pj.shop[d].bob[3].items.some(([k]) => k === 'treasure_box'), '宝探しは中身だけ');
       assert.strictEqual(pj.shop[d].bob[2].src, 'fish'); assert.strictEqual(pj.shop[d].bob[2].items.length, 2, '魚と激レア');
-      assert.strictEqual(pj.days[d].bob.box, 1); assert.strictEqual(pj.days[d].bob.legend.length, 1);
+      assert.strictEqual(pj.days[d].bob.box || 0, 0,'宝探しは宝箱を数えない（その場で開ける）'); assert.strictEqual(pj.days[d].bob.legend.length, 1);
       const PL = require(path.join(ROOT, 'tools', 'play.js'));
       const c = PL.clean(pj);
       assert.deepStrictEqual(c.shop[d].bob.map((o) => o.t), ['send', 'craft', 'gain', 'gain', 'open']);
-      assert.strictEqual((await call('/shop/state', tk)).j.left, 17, 'もらった物は 1 日の回数に数えない'); assert.strictEqual(c.days[d].bob.box, 1);
+      assert.strictEqual((await call('/shop/state', tk)).j.left, 17, 'もらった物は 1 日の回数に数えない'); assert.strictEqual(c.days[d].bob.box, 0);
       // 毎日の更新が入れたら（workshop.json の seen・applied）、受け口は二重に数えない
       wsJson = { seen: pj.shop[d].bob.map((o) => o.id) };
       W._resetSiteFiles();
@@ -220,7 +222,8 @@ module.exports = function workshopTests({ at, t, ROOT }) {
     assert.ok(/data-tab="bag"/.test(html) && /id="bag"/.test(html), '持ち物のタブ');
     assert.ok(/confirmBox\('島のチェストへ送る'/.test(bag), '送る前に確かめる画面');
     assert.ok(/store\.openBox\(\)/.test(bag) && /j\.stop/.test(bag) && /j\.offset/.test(bag), '止まる所は受け口の答え');
-    assert.ok(!/rollBox|Math\.random/.test(bag), '画面で中身を決めない');
+    assert.ok(!/rollBox|Math\.random/.test(bag) && !/rollBox|rollLegend/.test(main), '画面で中身を決めない');
+    assert.ok(/store\.last\.got/.test(main) && /showLoot/.test(main) && !/「宝箱」で開けられます/.test(main), '宝探しは掘った場で開けて中身を見せる（帯は回さない）');
     assert.ok(/出る物と確率を見る/.test(bag) && /あと <b>/.test(bag), '確率と、次の段まであと何回');
     assert.ok(!/(課金|購入|円で|￥|\$\d+円|ドルで)/.test(bag + main), '本物のお金で買う仕組みはない');
     assert.ok(!/いちばん乗り|いちばんに|最初に見つけ/.test(main), '宝探しは競争の言い方をしない');
