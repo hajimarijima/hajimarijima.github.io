@@ -3880,6 +3880,7 @@ t('引っ越しの保管と復元：30 日以内なら元の家・関係ごと�
 require('./home_tests.js')({ t, at, ROOT });
 // ---------- 誰かの家に遊びに行く（tests/visit_tests.js） ----------
 require('./visit_tests.js')({ t, at, ROOT });
+require('./treasure_tests.js')({ t, at, ROOT }); // 遊ぶの宝探し（金属探知機）
 
 (async () => {
   for (const [name, fn] of asyncTests) { await fn(); ok++; console.log('OK  ' + name); }

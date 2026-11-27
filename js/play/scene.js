@@ -5,7 +5,7 @@
 //   岩・木の実のしげみ・光る宝箱。歩ける所は shoreDist と物の丸い当たり（walkable）で決め、A* で道を探す。
 import * as THREE from 'three';
 import { shoreDist, shorePoint } from '../island.js';
-import { makeRng, treasureIndex } from './rules.js';
+import { makeRng, treasureSpot } from './rules.js';
 
 export const ISLE = { id: 'play', x: 0, z: 0, r: 15, wob: [[0.07, 3, 0.4], [0.04, 5, 1.7], [0.025, 9, 0.3]] };
 export const WATER_Y = -0.25;
@@ -233,14 +233,15 @@ export function buildScene() {
   for (let i = 0; i < 26; i++) { const x = (rr.next() - 0.5) * 22, z = (rr.next() - 0.5) * 18 - 2; if (groundKind(x, z) === 'grass' && !objs.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + 0.6) && !nearKeep(x, z, 0.9)) scene.add(makeFlower(x, z, i)); }
 
   // ---------- 歩ける所と道さがし ----------
-  const blocked = (x, z, ignore) => objs.some((o) => o !== ignore && !o.passable && Math.hypot(o.x - x, o.z - z) < o.r + CLEAR);
-  const walkable = (x, z, ignore) => shoreDist(ISLE, x, z) > 0.7 && !blocked(x, z, ignore);
-  const lineOk = (a, b, ignore) => { const n = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.2); for (let i = 1; i <= n; i++) { const k = i / n; if (!walkable(a.x + (b.x - a.x) * k, a.z + (b.z - a.z) * k, ignore)) return false; } return true; };
+  //   extra：物からさらにあける間（宝探しで探知機を前に出して歩く時。ふだんは 0）
+  const blocked = (x, z, ignore, extra = 0) => objs.some((o) => o !== ignore && !o.passable && Math.hypot(o.x - x, o.z - z) < o.r + CLEAR + extra);
+  const walkable = (x, z, ignore, extra = 0) => shoreDist(ISLE, x, z) > 0.7 && !blocked(x, z, ignore, extra);
+  const lineOk = (a, b, ignore, extra = 0) => { const n = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.2); for (let i = 1; i <= n; i++) { const k = i / n; if (!walkable(a.x + (b.x - a.x) * k, a.z + (b.z - a.z) * k, ignore, extra)) return false; } return true; };
   const S = 0.5, N = 72, O = -18;
   const cell = (x, z) => [Math.round((x - O) / S), Math.round((z - O) / S)];
   const posOf = (i, k) => ({ x: O + i * S, z: O + k * S });
-  function findPath(from, to, ignore) {
-    if (lineOk(from, to, ignore)) return [to];
+  function findPath(from, to, ignore, extra = 0) {
+    if (lineOk(from, to, ignore, extra)) return [to];
     const [si, sk] = cell(from.x, from.z), [ti, tk] = cell(to.x, to.z);
     const key = (i, k) => i * N + k, open = new Map(), came = new Map(), gs = new Map();
     const h = (i, k) => Math.hypot(i - ti, k - tk);
@@ -258,15 +259,15 @@ export function buildScene() {
         const out = []; let cur = from;
         for (let i = 0; i < pts.length; i++) {
           let j = pts.length - 1;
-          while (j > i && !lineOk(cur, pts[j], ignore)) j--;
+          while (j > i && !lineOk(cur, pts[j], ignore, extra)) j--;
           out.push(pts[j]); cur = pts[j]; i = j;
         }
         return out;
       }
       for (const [di, dk] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
         const ni = bi + di, nk = bk + dk; if (ni < 0 || nk < 0 || ni >= N || nk >= N) continue;
-        const p = posOf(ni, nk); if (!walkable(p.x, p.z, ignore)) continue;
-        if (di && dk) { const a = posOf(bi + di, bk), b = posOf(bi, bk + dk); if (!walkable(a.x, a.z, ignore) || !walkable(b.x, b.z, ignore)) continue; }
+        const p = posOf(ni, nk); if (!walkable(p.x, p.z, ignore, extra)) continue;
+        if (di && dk) { const a = posOf(bi + di, bk), b = posOf(bi, bk + dk); if (!walkable(a.x, a.z, ignore, extra) || !walkable(b.x, b.z, ignore, extra)) continue; }
         const g2 = gs.get(best) + Math.hypot(di, dk);
         const nkey = key(ni, nk);
         if (g2 < (gs.get(nkey) ?? Infinity)) { gs.set(nkey, g2); came.set(nkey, best); open.set(nkey, g2 + h(ni, nk)); }
@@ -284,15 +285,19 @@ export function buildScene() {
     }
     return null;
   }
-  // きょうの宝箱
+  // きょうの宝箱：島のどこか（日付で決まる所）の地面の中にうまっている。掘り出すまでは見えず、当たりもない（上を歩ける）
+  //   広場（はじめに立つ所）から離れた、まわりに物がない所（宝のまわりに立って掘れる・出てきた宝箱が物に重ならない）
+  const treasureOk = (x, z) => groundKind(x, z) !== 'sea' && shoreDist(ISLE, x, z) >= 1.9 && Math.hypot(x - camp.x, z - camp.z) >= 6 && Math.hypot(x - fishSpot.x, z - fishSpot.z) >= 2.5 && !objs.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + 1.8);
   function placeChest(date) {
-    const s = chestSpots[treasureIndex(date, chestSpots.length)];
+    const s = treasureSpot(date, treasureOk) || { x: -0.4, z: -11.6 };
     const g = makeChest(); g.position.set(s.x, 0, s.z);
-    g.rotation.y = Math.atan2(camp.x - s.x, camp.z - s.z); // 前（留め金）を広場へ向ける
+    g.rotation.y = Math.atan2(camp.x - s.x, camp.z - s.z);
+    g.visible = false;
     const o = add(g, 'chest');
+    o.passable = true; // うまっている間は上を歩ける
     return o;
   }
-  return { scene, sun, ground, objs, fishSpot, camp, chestSpots, walkable, findPath, standNear, placeChest, lineOk };
+  return { scene, sun, ground, objs, fishSpot, camp, chestSpots, walkable, findPath, standNear, placeChest, lineOk, treasureOk };
 }
 
 // 毎コマの小さな動き（泡・宝箱の光）

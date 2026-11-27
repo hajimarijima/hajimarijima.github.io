@@ -10,7 +10,8 @@ import { whoami, atName, faceEl, withDemo } from '../mine.js';
 import { buildScene, tickScene, fadeLeaves, WATER_Y, setWet } from './scene.js';
 import { makeHero, reachOf, place, walkTo, tickHero, faceTo, rodTip } from './hero.js';
 import { makeStore } from './store.js';
-import { pickCatch, biteDelay, judgeHook, sizeWord, CHORES, jstHour, isNight, leftOf } from './rules.js';
+import { pickCatch, biteDelay, judgeHook, sizeWord, CHORES, jstHour, isNight, leftOf, beepInterval, beepPitch, detectWord, DETECT } from './rules.js';
+import { makeDetector, holdDetector, coilPos, makeBeeper } from './detector.js';
 
 nav('play.html');
 const $ = (id) => document.getElementById(id);
@@ -70,11 +71,8 @@ async function main() {
   const alert = document.createElement('div'); alert.className = 'pbite'; alert.textContent = '！'; alert.hidden = true; stage.append(alert);
   const tag = document.createElement('div'); tag.className = 'nametag ptag'; tag.textContent = v.display; stage.append(tag);
 
-  // 宝箱（きょうの場所）
+  // 宝箱（きょうの場所。地面の中にうまっていて、掘り出すまで見えない）
   const chest = S.placeChest(store.date);
-  const hit = new THREE.Mesh(new THREE.SphereGeometry(1.1, 12, 8), new THREE.MeshBasicMaterial({ visible: false }));
-  hit.position.y = 0.6; chest.g.add(hit);
-  if (day.treasure) chest.g.userData.open = 1;
 
   // ---------- 画面の部品 ----------
   const act = $('act'), msg = $('pmsg'), left = $('left'), card = $('pcard'), bar = $('cbar'), info = $('pinfo');
@@ -184,48 +182,139 @@ async function main() {
   }
 
   // ---------- 宝探し ----------
-  const T = { found: !!day.treasure };
+  //   宝は島のどこかの地面の中（日付で決まる所。見た目の目印はない）。地面をタップすると村人がそこへ歩く。
+  //   村人は金属探知機を持って歩き、宝に近いほど「ピッ」の間が短く・高くなる（rules.js の beepInterval・beepPitch）。
+  //   宝のすぐ上（DETECT.dig の中）で「掘る」が出る。掘ると宝箱が出てきて、記録は今までと同じ（store.claimTreasure）
+  const T = { found: !!day.treasure, busy: false, near: false, nextBeep: 0, d: 99 };
+  const det = makeDetector(); det.visible = false; S.scene.add(det);
+  const beeper = makeBeeper();
+  const DIG_R = reachOf(H, 'dig', 'shovel:iron'); // シャベルを振り下ろした時に、いちばん前へ出る所
+  // タップした所の印（地面の上の小さな輪。少しずつ消える）
+  const mark = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.28, 20), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
+  mark.rotation.x = -Math.PI / 2; mark.position.y = 0.02; S.scene.add(mark);
+  // 掘った穴と、わきの土の山
+  const holeG = new THREE.Group(); holeG.visible = false; S.scene.add(holeG);
+  { const dm = new THREE.MeshLambertMaterial({ color: 0x3b2614 }), sm = new THREE.MeshLambertMaterial({ color: 0x7a4e2c });
+    const hole = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.02, 1.2), dm); hole.position.y = 0.011; hole.receiveShadow = true; holeG.add(hole);
+    const pile = new THREE.Group(); holeG.add(pile); holeG.userData.pile = pile;
+    for (const [w, h, x, z] of [[0.34, 0.2, 0, 0], [0.26, 0.14, 0.22, 0.12], [0.22, 0.12, -0.18, 0.14]]) { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), sm); b.position.set(x, h / 2, z); b.castShadow = true; b.receiveShadow = true; pile.add(b); } }
+  // 画面の右上：探知機の画面（ランプと、あいまいな言葉）と、音のボタン
+  const dpan = document.createElement('div'); dpan.className = 'pdet'; dpan.hidden = true;
+  dpan.innerHTML = '<span class="pd-meter"><i class="pd-lamp"></i><b class="pd-w"></b></span><button type="button" class="pd-snd"></button>';
+  stage.append(dpan);
+  const lampEl = dpan.querySelector('.pd-lamp'), wordEl = dpan.querySelector('.pd-w'), sndBtn = dpan.querySelector('.pd-snd');
+  let soundPref = null; try { soundPref = localStorage.getItem('play.detSound'); } catch (e) { /* なくてもよい */ }
+  function sndUi() {
+    sndBtn.classList.toggle('hot', !beeper.on && !beeper.ready);
+    sndBtn.innerHTML = beeper.on ? '<span class="pd-ic on"></span><span>音を消す</span>' : `<span class="pd-ic"></span><span>${beeper.ready ? '音を出す' : '音が出ます'}</span>`;
+    sndBtn.setAttribute('aria-pressed', beeper.on ? 'true' : 'false');
+  }
+  sndBtn.addEventListener('click', () => {
+    if (beeper.on) beeper.stop(); else beeper.start();
+    try { localStorage.setItem('play.detSound', beeper.on ? 'on' : 'off'); } catch (e) { /* なくてもよい */ }
+    sndUi(); if (tab === 'treasure' && !T.found && !T.busy) say(beeper.on ? '地面をタップして歩こう。宝に近いほど「ピッ」が速くなります' : '音を消しました（ランプの点めつでもさがせます）');
+  });
+  function treasureMsg() {
+    if (T.found) return 'きょうの宝はもう掘り出しました。また明日、別の所にうまります';
+    if (!beeper.on && !beeper.ready && soundPref === 'on') return '地面をタップして歩こう（タップすると探知機の音が鳴ります）';
+    if (!beeper.on && !beeper.ready && soundPref !== 'off') return '右上の「音が出ます」を押してから、地面をタップして歩こう';
+    return '地面をタップして歩こう。宝に近いほど「ピッ」が速くなります';
+  }
   function toTreasure() {
     H.mode = 'idle'; H.ch.userData.showFish = null; setTool(H.ch, null);
     place(H, S.camp.x, S.camp.z, Math.PI);
     bob.visible = false; line.visible = false; ring.material.opacity = 0; alert.hidden = true;
-    camera.position.set(2 * zoomK(), 15 * zoomK(), 21 * zoomK()); controls.target.set(0, 1, -1); controls.minDistance = 8; controls.maxDistance = 34;
-    left.hidden = true; bar.hidden = true; act.hidden = true;
-    say(T.found ? 'きょうの宝箱はもう見つけました。また明日、別の所に出ます' : guest ? '島のどこかで宝箱が光っています（つながると、見つけた人として記録されます）' : '島のどこかで宝箱が光っています。ドラッグで島を回して、見つけたらタップ！');
+    camera.position.set(S.camp.x + 1.2, 1 + 6.2 * zoomK(), S.camp.z - 1 + 7.4 * zoomK()); controls.target.set(S.camp.x, 1, S.camp.z - 1); controls.minDistance = 4; controls.maxDistance = 28; // 探知機が見えるくらい近くから（回す・遠ざけるのは自由）
+    left.hidden = true; bar.hidden = true; act.hidden = true; act.classList.remove('hot');
+    det.visible = !T.found; dpan.hidden = false; T.nextBeep = 0; T.near = false;
+    sndUi(); say(treasureMsg());
   }
-  async function foundChest() {
-    if (T.found || T.busy) return;
-    if (guest) { say('つながると、宝箱を開けられます（DM で「住みたい」と送ると専用のリンクが届きます）'); return; }
-    T.busy = true;
-    const st = S.standNear(chest, chest.r + 0.9, H.ch.position);
-    // カメラを宝箱へ寄せる（宝箱と、歩いてくる村人が入るように、広場の側から）
-    //   宝箱と、その前に立つ村人を横から見る（2 人が重ならない）。横の 2 つの向きのうち海に近い方（木の葉の中にカメラが入らない）
-    if (st) {
-      const dx = chest.x - st.x, dz = chest.z - st.z, dl = Math.hypot(dx, dz) || 1;
-      let px = -dz / dl, pz = dx / dl;
-      const mx = (chest.x + st.x) / 2, mz = (chest.z + st.z) / 2;
-      if (px * mx + pz * mz < 0) { px = -px; pz = -pz; }
-      controls.target.set(mx, 0.9, mz);
-      camera.position.set(mx + px * 6 * zoomK() - (dx / dl) * 1.5, 3.8 * zoomK(), mz + pz * 6 * zoomK() - (dz / dl) * 1.5);
-    }
-    const path = st && S.findPath({ x: H.ch.position.x, z: H.ch.position.z }, st, chest);
+  const WALK_EX = 0.4;
+  function walkHere(x, z) {
+    // 海・物の上なら、近くの歩ける所へ。探知機を前に出して歩くので、物からはふだんより WALK_EX あける（腕・柄が物に入らない）
+    let to = null;
+    if (S.walkable(x, z, undefined, WALK_EX)) to = { x, z };
+    else for (let r = 0.3; r <= 2.4 && !to; r += 0.3) for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r; if (S.walkable(px, pz, undefined, WALK_EX)) { to = { x: px, z: pz }; break; } }
+    if (!to) { say('そこへは行けないみたい'); return; }
+    const from = { x: H.ch.position.x, z: H.ch.position.z };
+    const path = S.findPath(from, to, undefined, WALK_EX) || S.findPath(from, to);
+    if (!path) { say('そこへは行けないみたい'); return; }
+    mark.position.set(to.x, 0.02, to.z); mark.material.opacity = 0.85; mark.userData.t0 = clock.getElapsedTime();
+    H.turnTo = null; walkTo(H, path, () => {});
+    if (!T.found) say('');
+  }
+  async function dig() {
+    if (T.found || T.busy || !T.near) return;
+    if (guest) { say('つながると、宝を掘り出せます（DM で「住みたい」と送ると専用のリンクが届きます）'); return; }
+    T.busy = true; act.hidden = true; act.classList.remove('hot'); H.path = []; say('');
+    // 宝の所に向かって、シャベルが届く所に立つ（出てくる宝箱にも重ならない）
+    const st = S.standNear(chest, Math.max(DIG_R.front, chest.r + 0.55), H.ch.position);
+    const go = st && S.findPath({ x: H.ch.position.x, z: H.ch.position.z }, st, chest);
+    const start = () => faceTo(H, st ? st.yaw : H.yaw, () => {
+      det.visible = false; setTool(H.ch, 'shovel:iron');
+      H.mode = 'work'; H.work = { pose: 'dig', o: { kind: 'ground' }, t0: clock.getElapsedTime() }; say('掘っています…');
+      // 土の山は宝の横（あとで宝箱を横から見るカメラの側。島のまん中から外向き）に積む
+      const dx = chest.x - H.ch.position.x, dz = chest.z - H.ch.position.z, dl = Math.hypot(dx, dz) || 1;
+      let px = -dz / dl, pz = dx / dl; if (px * chest.x + pz * chest.z < 0) { px = -px; pz = -pz; }
+      holeG.position.set(chest.x, 0, chest.z); holeG.rotation.y = 0;
+      holeG.userData.pile.position.set(px * 0.95, 0, pz * 0.95); holeG.userData.pile.scale.setScalar(0.01); holeG.visible = true; T.digAt = clock.getElapsedTime();
+      setTimeout(found, 2300);
+    });
+    if (go) walkTo(H, go, start); else start();
+  }
+  async function found() {
+    H.mode = 'idle'; H.work = null; setTool(H.ch, null);
+    T.found = true; T.riseAt = clock.getElapsedTime(); T.near = false; T.reveal = true; // reveal の間はカメラが村人について行かない
+    chest.g.rotation.y = Math.atan2(H.ch.position.x - chest.x, H.ch.position.z - chest.z); // 前（留め金）を村人へ
+    chest.g.position.y = -0.9; chest.g.visible = true; chest.passable = false;
+    // 宝箱と村人を横から見る（下に出るカードに隠れないよう、2 人が画面の上の方に入る向き）。横の 2 つの向きのうち島のまん中から外向きの方
+    { const dx = chest.x - H.ch.position.x, dz = chest.z - H.ch.position.z, dl = Math.hypot(dx, dz) || 1;
+      let px = -dz / dl, pz = dx / dl; const mx = (chest.x + H.ch.position.x) / 2, mz = (chest.z + H.ch.position.z) / 2;
+      if (px * chest.x + pz * chest.z < 0) { px = -px; pz = -pz; }
+      const K = zoomK();
+      controls.target.set(mx, -0.1 * K, mz); camera.position.set(mx + px * 6.8 * K - (dx / dl) * 1.2, 4.0 * K, mz + pz * 6.8 * K - (dz / dl) * 1.2); }
     say('宝箱だ！');
-    const open = async () => {
-      faceTo(H, st ? st.yaw : H.yaw, async () => {
-        T.found = true; T.openAt = clock.getElapsedTime();
-        let r = { first: true };
-        try { r = await store.claimTreasure(v.key); day = await store.today(); } catch (e) { say(e.message); }
-        H.mode = 'cheer'; H.cheerAt = clock.getElapsedTime();
-        const vs = await load('villagers').catch(() => []);
-        const fv = r.finder && vs.find((x) => x.key === r.finder);
-        onCardClose = () => { H.mode = 'idle'; T.busy = false; };
-        showCard(`<div class="pc-fish"><div class="pc-img chestimg">${icon('gift', { size: 44 })}</div><h3>${r.first ? 'いちばん乗り！' : '宝箱を見つけた！'}</h3>` +
-          `<p>${r.first ? `${esc(atName(v))} さんが、きょうの宝箱を最初に見つけました。` : `きょうのいちばん乗りは ${esc(fv ? atName(fv) : 'ほかの人')} さんでした。`}</p>` +
-          `<p class="muted">${r.first ? (W.mode === 'live' ? '年表に名前と宝さがしのバッジがのります（次の毎日の更新で）。' : '見本なので記録しません。本番では年表に名前とバッジがのります。') : '明日はまた別の所に出ます。'}</p><button type="button" class="btn pc-ok">やったね</button></div>`);
-        say('');
-      });
-    };
-    if (path) walkTo(H, path, open); else open();
+    let r = { first: true };
+    try { r = await store.claimTreasure(v.key); day = await store.today(); } catch (e) { say(e.message); }
+    setTimeout(async () => {
+      T.openAt = clock.getElapsedTime();
+      H.mode = 'cheer'; H.cheerAt = clock.getElapsedTime();
+      const vs = await load('villagers').catch(() => []);
+      const fv = r.finder && vs.find((x) => x.key === r.finder);
+      onCardClose = () => { H.mode = 'idle'; T.busy = false; T.reveal = false; say(treasureMsg()); };
+      showCard(`<div class="pc-fish"><div class="pc-img chestimg">${icon('gift', { size: 44 })}</div><h3>${r.first ? 'いちばん乗り！' : '宝箱を掘り出した！'}</h3>` +
+        `<p>${r.first ? `${esc(atName(v))} さんが、きょうの宝箱を最初に見つけました。` : `きょうのいちばん乗りは ${esc(fv ? atName(fv) : 'ほかの人')} さんでした。`}</p>` +
+        `<p class="muted">${r.first ? (W.mode === 'live' ? '年表に名前と宝さがしのバッジがのります（次の毎日の更新で）。' : '見本なので記録しません。本番では年表に名前とバッジがのります。') : '明日はまた別の所にうまります。'}</p><button type="button" class="btn pc-ok">やったね</button></div>`);
+    }, 750);
+  }
+  // 物の中か（探知機の輪・柄が入らないように。物はどれも回していない箱：半分の幅と高さ）
+  const OBJ_HALF = { tree: 0.5, rock: 0.5, bush: 0.63, field: 1.12 }, OBJ_TOP = { tree: 99, rock: 1.4, bush: 1.2, field: 0.22 };
+  const solidAt = (x, y, z, pad) => S.objs.some((o) => !o.passable && OBJ_HALF[o.kind] && y < OBJ_TOP[o.kind] && Math.abs(o.x - x) < OBJ_HALF[o.kind] + pad && Math.abs(o.z - z) < OBJ_HALF[o.kind] + pad);
+  // 毎コマ：探知機を構えて、宝までの距離で「ピッ」とランプ
+  function treasureTick(t, dt) {
+    const walking = H.path.length > 0;
+    if (det.visible) holdDetector(det, H, t, walking, dt, solidAt);
+    if (mark.material.opacity > 0) mark.material.opacity = Math.max(0, 0.85 - (t - mark.userData.t0) * 0.6);
+    if (T.digAt != null && T.riseAt == null) holeG.userData.pile.scale.setScalar(Math.min(1, 0.15 + (t - T.digAt) / 2.0));
+    if (T.riseAt != null) chest.g.position.y = -0.9 + 0.9 * Math.min(1, (t - T.riseAt) / 0.7);
+    if (T.found) { wordEl.textContent = '反応なし'; lampEl.style.opacity = 0.25; det.userData.flash = 0; act.hidden = true; return; }
+    const c = coilPos(det), dc = Math.hypot(c.x - chest.x, c.z - chest.z), dh = Math.hypot(H.ch.position.x - chest.x, H.ch.position.z - chest.z);
+    const d = det.visible ? Math.min(dc, dh) : dh; T.d = d;
+    const now = performance.now();
+    if (!T.busy && now >= T.nextBeep) {
+      T.nextBeep = Math.max(now - 40, T.nextBeep) + beepInterval(d); T.flashAt = t; // 前の予定から数える（コマの間でずれがたまらない）
+      beeper.beep(beepPitch(d), DETECT.beepMs);
+    }
+    const f = T.flashAt != null ? Math.max(0, 1 - (t - T.flashAt) / 0.09) : 0;
+    det.userData.flash = f;
+    lampEl.style.opacity = 0.25 + 0.75 * f; lampEl.dataset.lv = d <= DETECT.dig ? '3' : d <= 4 ? '2' : d <= 8 ? '1' : '0';
+    wordEl.textContent = detectWord(d);
+    const near = d <= DETECT.dig && !walking && !T.busy;
+    if (near !== T.near) {
+      T.near = near; act.hidden = !near; act.disabled = false;
+      if (near) { act.innerHTML = `${icon('shovel', { size: 22 })}<span>掘る</span>`; act.classList.add('hot'); say('この下に何かある！「掘る」を押そう'); }
+      else act.classList.remove('hot');
+    }
   }
 
   // ---------- おてつだい ----------
@@ -307,22 +396,33 @@ async function main() {
     const r = renderer.domElement.getBoundingClientRect();
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
-    const targets = S.objs.filter((o) => (tab === 'chore' ? o.kind !== 'chest' && !o.id.startsWith('brock') : tab === 'treasure' ? o.kind === 'chest' : false)).map((o) => o.g);
     if (tab === 'fish') { if (F.state === 'wait' || F.state === 'bite') hook(); return; }
+    if (tab === 'treasure') {
+      // 地面（y=0）のタップした所へ歩く。前に「音を出す」にしていた人は、最初のタップで音を出す（ブラウザの決まりで、操作のあとから鳴らせる）
+      if (soundPref === 'on' && !beeper.ready) { beeper.start(); sndUi(); }
+      if (T.busy || !card.hidden) return;
+      const p = ray.ray.intersectPlane(groundPlane, new THREE.Vector3());
+      if (p) walkHere(p.x, p.z);
+      return;
+    }
+    const targets = S.objs.filter((o) => o.kind !== 'chest' && !o.id.startsWith('brock')).map((o) => o.g);
     const hits = ray.intersectObjects(targets, true);
-    if (!hits.length) { if (tab === 'treasure' && !T.found) say('そこには ないみたい。島を回してさがそう'); return; }
+    if (!hits.length) return;
     let g = hits[0].object; while (g && !g.userData.obj) g = g.parent;
     if (!g) return;
-    if (tab === 'treasure') foundChest(); else doChore(g.userData.obj);
+    doChore(g.userData.obj);
   });
-  act.addEventListener('click', () => { if (F.state === 'ready') cast(); else hook(); });
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  act.addEventListener('click', () => { if (tab === 'treasure') dig(); else if (F.state === 'ready') cast(); else hook(); });
 
   // ---------- タブ ----------
   const tabs = [...document.querySelectorAll('.ptab')];
   function setTab(k) {
     if (C.busy || T.busy || (tab === 'fish' && F.state !== 'ready' && F.state !== 'card')) { if (k !== tab) say('いまの遊びが終わってから切りかえてね'); return; }
     tab = k; card.hidden = true; onCardClose = null; H.path = []; H.turnTo = null;
-    chest.g.visible = k === 'treasure'; // 宝箱（光の柱）は宝探しの時だけ
+    chest.g.visible = k === 'treasure' && T.riseAt != null; // 宝箱は、宝探しで掘り出したあとだけ見える
+    holeG.visible = k === 'treasure' && T.digAt != null;
+    det.visible = false; dpan.hidden = true; mark.material.opacity = 0; T.near = false;
     tabs.forEach((b) => { const on = b.dataset.tab === k; b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
     if (k === 'fish') toFishing(); else if (k === 'treasure') toTreasure(); else toChores();
     renderInfo();
@@ -336,7 +436,7 @@ async function main() {
       info.innerHTML = `<h2>${icon('fish', { size: 20 })}<span>浜の釣り</span></h2><p class="muted">釣れる魚と大きさは、島の釣りと同じ決まりです（海の魚。夜は夜の魚も）。1 日 ${P.fishPerDay} 回まで（逃げても 1 回）。</p>` +
         (cs.length ? '<div class="pcatch">' + cs.map(([it, cm]) => `<span class="tag"><img class="pixel" src="icons/${esc(it)}.png" alt="" width="20" height="20">${esc((items[it] || {}).name || it)}${cm ? ` ${cm}cm` : ''}</span>`).join('') + '</div>' : `<p class="muted">${guest ? '' : 'きょうはまだ釣っていません。'}</p>`);
     } else if (tab === 'treasure') {
-      info.innerHTML = `<h2>${icon('gift', { size: 20 })}<span>宝探し</span></h2><p class="muted">毎日 1 つ、島のどこかに光る宝箱が出ます。いちばんに見つけた人は、年表に名前と宝さがしのバッジがのります。森の奥・岩のかげ・浜のはしもさがしてみて。</p>`;
+      info.innerHTML = `<h2>${icon('gift', { size: 20 })}<span>宝探し</span></h2><p class="muted">毎日 1 つ、島のどこかの地面の中に宝箱がうまっています。村人は金属探知機を持っていて、宝に近づくほど「ピッ、ピッ」の間が短くなります。地面をタップして歩き、音が「ピピピピ…」と続けて鳴る所で「掘る」。いちばんに掘り出した人は、年表に名前と宝さがしのバッジがのります。</p><p class="muted">音が出ない時は、右上のランプの点めつと、携帯なら小さな震えでもわかります。</p>`;
     } else {
       info.innerHTML = `<h2>${icon('trees', { size: 20 })}<span>毎日のおてつだい</span></h2><p class="muted">木・石・木の実を集めたり、畑に水をやったり。1 日 ${P.chorePerDay} 回までできます。みんなで集めた合計が ${P.choreGoal} に届くと、島のみんなが助かります。</p>`;
     }
@@ -348,17 +448,18 @@ async function main() {
   const clock = new THREE.Clock();
   const _v = new THREE.Vector3(), _f = new THREE.Vector3();
   let last = 0;
-  renderer.setAnimationLoop(() => {
+  function frame() {
     const t = clock.getElapsedTime(), dt = Math.min(0.05, t - last); last = t;
     if (tab === 'fish') fishTick(t, dt);
     tickHero(H, dt, t);
+    if (tab === 'treasure') treasureTick(t, dt);
     if (H.mode === 'work' && H.work && H.work.o.kind === 'tree') { const k = Math.sin(t * 20) * 0.012 * Math.max(0, Math.sin((t - H.work.t0) * 10)); H.work.o.g.userData.leaves.rotation.z = k; }
     waterTick(t, dt);
     if (T.openAt != null) chest.g.userData.open = Math.min(1, (t - T.openAt) / 0.8);
     tickScene(S, t);
     for (let i = pops.length - 1; i >= 0; i--) { const p = pops[i], k = (t - p.t0) / 1.4; p.s.position.y += dt * 0.9; p.s.material.opacity = 1 - Math.max(0, k - 0.5) * 2; if (k >= 1) { S.scene.remove(p.s); pops.splice(i, 1); } }
     // おてつだいの間は、カメラが村人について行く（回した向き・遠さはそのまま）
-    if (tab === 'chore') { _f.set(H.ch.position.x, 1, H.ch.position.z - 1).sub(controls.target).multiplyScalar(Math.min(1, dt * 3)); controls.target.add(_f); camera.position.add(_f); }
+    if (tab === 'chore' || (tab === 'treasure' && !T.reveal)) { _f.set(H.ch.position.x, 1, H.ch.position.z - 1).sub(controls.target).multiplyScalar(Math.min(1, dt * 3)); controls.target.add(_f); camera.position.add(_f); }
     controls.update();
     fadeLeaves(S, camera, H.ch.position, dt);
     renderer.render(S.scene, camera);
@@ -368,8 +469,9 @@ async function main() {
     tag.style.transform = `translate(${(_v.x * 0.5 + 0.5) * r.clientWidth}px, ${(-_v.y * 0.5 + 0.5) * r.clientHeight}px) translate(-50%, -100%)`;
     tag.hidden = _v.z > 1 || H.mode === 'show';
     if (!alert.hidden) { _v.copy(bob.position).setY(bob.position.y + 0.8).project(camera); alert.style.transform = `translate(${(_v.x * 0.5 + 0.5) * r.clientWidth}px, ${(-_v.y * 0.5 + 0.5) * r.clientHeight}px) translate(-50%, -100%)`; }
-  });
-  Object.assign(window.PLAY, { F, T, C, S, H, foundChest, doChore, setTab, cast, hook, chest }); // 確かめ用
+  }
+  renderer.setAnimationLoop(frame);
+  Object.assign(window.PLAY, { frame, F, T, C, S, H, dig, walkHere, doChore, setTab, cast, hook, chest, det, beeper }); // 確かめ用
   const q = new URLSearchParams(location.search).get('tab');
   setTab(['fish', 'treasure', 'chore'].includes(q) ? q : 'fish');
   if (guest) tabs.forEach((b) => { if (b.dataset.tab !== 'fish') b.title = 'つながると遊べます'; });

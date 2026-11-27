@@ -851,6 +851,21 @@ html.pm-notags .nametag { visibility: hidden; }
 .pact:disabled { background: #cfc6b2; box-shadow: 0 4px 0 #aea48e; cursor: default; font-size: 15px; }
 .pact.hot { background: #e2442f; box-shadow: 0 4px 0 #a92e1c; animation: pactpulse .7s ease-in-out infinite; }
 @keyframes pactpulse { 50% { transform: translateX(-50%) scale(1.06); } }
+/* 宝探しの金属探知機の画面（右上）：ランプの点めつと、あいまいな言葉・音のボタン */
+.pdet { position: absolute; right: 10px; top: 10px; z-index: 4; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: calc(100% - 20px); }
+.pdet[hidden] { display: none; }
+.pd-meter { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border-radius: 12px; background: linear-gradient(#2f4f86, #223a66); color: #e9f6e2; box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 2px 0 #16284a, 0 3px 8px rgba(0,0,0,.18); font-size: 13px; pointer-events: none; }
+.pd-meter b { min-width: 5.5em; padding: 2px 8px; border-radius: 6px; background: #9fd88a; color: #1d3a1a; font-weight: 800; text-align: center; box-shadow: inset 0 2px 0 rgba(0,0,0,.18); white-space: nowrap; }
+.pd-lamp { width: 16px; height: 16px; border-radius: 50%; background: #ff4a32; box-shadow: 0 0 10px 3px rgba(255,90,50,.8), inset 0 -3px 0 rgba(0,0,0,.25); opacity: .25; flex: none; }
+.pd-lamp[data-lv="0"] { background: #ffb03a; box-shadow: 0 0 8px 2px rgba(255,176,58,.7), inset 0 -3px 0 rgba(0,0,0,.25); }
+.pd-lamp[data-lv="1"] { background: #ff8a2a; box-shadow: 0 0 9px 3px rgba(255,138,42,.75), inset 0 -3px 0 rgba(0,0,0,.25); }
+.pd-snd { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 14px 0 10px; border: 0; border-radius: 999px; background: rgba(255,253,247,.95); color: var(--ink, #2b2620); font: inherit; font-size: 13px; font-weight: 700; box-shadow: 0 2px 0 rgba(0,0,0,.15); cursor: pointer; white-space: nowrap; }
+.pd-snd.hot { background: var(--accent); color: #fff; box-shadow: 0 3px 0 #c96a12; animation: pdsnd 1s ease-in-out infinite; }
+@keyframes pdsnd { 50% { transform: scale(1.06); } }
+.pd-ic { position: relative; width: 14px; height: 12px; flex: none; }
+.pd-ic::before { content: ''; position: absolute; left: 0; top: 3px; width: 5px; height: 6px; background: currentColor; border-radius: 1px; }
+.pd-ic::after { content: ''; position: absolute; left: 3px; top: 0; border-style: solid; border-width: 6px 7px 6px 0; border-color: transparent currentColor transparent transparent; }
+.pd-ic:not(.on) { opacity: .75; }
 .pbite { position: absolute; left: 0; top: 0; z-index: 3; font-size: 30px; font-weight: 900; color: #e2442f; text-shadow: 0 2px 0 #fff, 0 0 6px #fff; pointer-events: none; }
 .pbite[hidden] { display: none; }
 .ptag { position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none; }

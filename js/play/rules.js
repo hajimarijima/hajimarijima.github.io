@@ -96,6 +96,22 @@ export const demoChoreTotal = (date, goal = PLAY_DEFAULTS.choreGoal) => Math.rou
 // きょうの宝の場所（spots 個の候補のうち、日付で 1 つ）
 export const treasureIndex = (date, n) => (n > 0 ? hashStr('treasure:' + date) % n : 0);
 
+// きょうの宝のうまっている所（日付で決まる。だれが開いても同じ所）。ok(x, z) が通る所を、島の中（-R〜R）から乱数で探す
+export function treasureSpot(date, ok, R = 14, tries = 600) {
+  const rng = makeRng('treasure-spot:' + date);
+  for (let i = 0; i < tries; i++) { const x = Math.round(((rng.next() * 2 - 1) * R) * 10) / 10, z = Math.round(((rng.next() * 2 - 1) * R) * 10) / 10; if (ok(x, z)) return { x, z }; }
+  return null;
+}
+// 金属探知機：いちばん近い宝までの距離（マス）で「ピッ」の間隔（ms）と高さ（Hz）が変わる。
+//   near 以下はほぼ続けて鳴る（minMs）。far より遠いとゆっくり（maxMs）。間は距離にそって まっすぐ変わる。
+//   dig：宝のすぐ上（この距離の中）で「掘る」が出る
+export const DETECT = { near: 1, far: 16, minMs: 70, maxMs: 1400, lowHz: 1250, highHz: 2300, beepMs: 45, dig: 1.6 };
+const k01 = (d, D) => Math.max(0, Math.min(1, (d - D.near) / (D.far - D.near)));
+export const beepInterval = (d, D = DETECT) => Math.round(D.minMs + (D.maxMs - D.minMs) * k01(d, D));
+export const beepPitch = (d, D = DETECT) => Math.round(D.highHz - (D.highHz - D.lowHz) * k01(d, D));
+// 探知機の画面の言葉（数字で距離を出さない。あいまいに）
+export const detectWord = (d, D = DETECT) => (d <= D.dig ? 'この下だ！' : d <= 4 ? 'すごく近い' : d <= 8 ? '近い' : d <= 12 ? '反応あり' : 'かすか');
+
 // きょうの記録の空の形（Firestore の players/{村人}/days/{日付} と同じ項目）
 export const emptyDay = () => ({ fish: 0, chores: 0, treasure: false });
 export const leftOf = (day, P, kind) => Math.max(0, (kind === 'fish' ? P.fishPerDay : P.chorePerDay) - ((day && day[kind === 'fish' ? 'fish' : 'chores']) || 0));
