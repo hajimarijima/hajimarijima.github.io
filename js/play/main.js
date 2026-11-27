@@ -317,7 +317,7 @@ async function main() {
       onCardClose = () => { pch.hidden = true; PC.inAt = null; card.classList.remove('ptop'); H.mode = 'idle'; T.busy = false; T.reveal = false; if (tab === 'treasure') dpan.hidden = false; say(treasureMsg()); };
       const gn = got ? `${(items[got[0]] || {}).name || got[0]}${got[1] > 1 ? ` ×${got[1]}` : ''}` : '';
       showCard(`<div class="pc-fish"><div class="pc-img${got ? '' : ' chestimg'}">${got ? `<img class="pixel" src="icons/${esc(got[0])}.png" alt="" width="64" height="64">` : icon('gift', { size: 44 })}</div>` +
-        `<h3>${got ? `${esc(gn)}が出てきた！` : '見つけた！'}</h3>` +
+        `<h3>${got ? `${esc(gn)}<br>が出てきた！` : '見つけた！'}</h3>` +
         (got ? `<p class="pc-tags"><span class="tag" style="background:${look.color};color:#1a1830">${esc(look.name)}</span></p>` : '') +
         `<p>${got ? '持ち物に入ります。' : ''}${W.mode === 'live' ? '明日はまた別の所にうまります。' : '（見本なので記録しません）'}</p>` + legendLine() +
         `<button type="button" class="btn pc-ok">やったね</button></div>`);
