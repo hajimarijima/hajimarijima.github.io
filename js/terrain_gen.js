@@ -115,21 +115,47 @@ export function makeTerrain({ seed = 'town', zone = { x0: -112, x1: 112, z0: -11
 
 // 島の形の地形：島の中は平らな草地、岸から BEACH までは砂浜、外は海（岸から 8 より先は深い）
 const BEACH = 3.8;
+// まだ行けない海の島（look）の見た目だけの木と岩の多さ [木, 岩]（3 ブロックに 1 つの格子の目ごと）
+const ISLE_OBJ = { forest: [0.55, 0.02], long: [0.3, 0.04], small: [0.35, 0.04], rocky: [0.12, 0.22], beach: [0.18, 0.03] };
 //   wild の島（遠くの大陸）だけは、内側へ行くほど丘と山（高い所は石と雪）になり、見た目だけの森がある
 function makeIslandTerrain({ islands, seaZ, zone }) {
   const cache = new Map();
   const nH = makeNoise(0x51a7), nM = makeNoise(0x77e1), nF = makeNoise(0x3c3c);
   const fbm = (n, x, y, o = 3) => { let s = 0, a = 1, f = 1, t = 0; for (let i = 0; i < o; i++) { s += n(x * f, y * f) * a; t += a; a *= 0.5; f *= 2.03; } return s / t; };
   const cellHash = (i, j, k) => { let h = Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(k + 1, 2147483647) + 0x2545; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  // 島ごとの外わく（遠い島は shoreDist を計算しない）と、となりの島の向き（rocky の岩の柱を橋の通り道に立てない）
+  const reach = islands.map((isl) => isl.r * (1 + (isl.wob || []).reduce((s, w) => s + Math.abs(w[0]), 0)) + 12);
+  const toward = islands.map((a) => islands.filter((b) => b !== a && !b.wild && Math.hypot(b.x - a.x, b.z - a.z) < a.r + b.r + 60).map((b) => Math.atan2(b.z - a.z, b.x - a.x)));
+  const angGap = (p, q) => Math.abs(((p - q + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
   function cell(i, j) {
     const key = i * 100003 + j;
     const hit = cache.get(key); if (hit) return hit;
     const x = (i + 0.5) * BLOCK, z = (j + 0.5) * BLOCK;
-    let sd = -Infinity, best = null;
-    for (const isl of islands) { const d = shoreDist(isl, x, z); if (d > sd) { sd = d; best = isl; } }
+    let sd = -Infinity, best = null, bi = -1;
+    for (let k = 0; k < islands.length; k++) {
+      const isl = islands[k];
+      if (Math.abs(x - isl.x) > reach[k] || Math.abs(z - isl.z) > reach[k]) continue;
+      const d = shoreDist(isl, x, z); if (d > sd) { sd = d; best = isl; bi = k; }
+    }
+    if (!best) sd = -99;
     let c;
-    if (sd < 0) c = { h: sd < -8 ? -2 : -1, kind: 'water', w: 0 };
-    else if (best && best.wild && sd >= BEACH) {
+    const look = best && best.look, closed = look && !best.open;
+    if (sd < 0) {
+      c = { h: sd < -8 ? -2 : -1, kind: 'water', w: 0 };
+      // 岩の多い島（rocky）：まわりの浅い海に岩の柱（陸ではないので歩かない）。となりの島の向き（橋が通る所）にはない
+      if (look === 'rocky' && sd > -7 && sd < -0.8) {
+        const ang = Math.atan2(z - best.z, x - best.x);
+        if (!toward[bi].some((t) => angGap(t, ang) < 0.45) && nH(x / 7, z / 7) > 0.32) {
+          const r = cellHash(i, j, 8);
+          if (r < 0.55) c = { h: 1 + Math.floor(r * 5.5), kind: 'stone', w: 0, stack: 1 };
+        }
+      }
+    } else if (look) {
+      // 海の島：岸から beach までは砂浜（beach の島は広い）。rocky の島は砂浜と草地に岩肌がまじる。陸の上はどこも高さ 0（村人が歩く）
+      const beach = look === 'beach' ? 7.5 : look === 'small' ? 2.6 : BEACH;
+      const rough = look === 'rocky' && nM(x / 9, z / 9) > 0.18;
+      c = { h: 0, kind: rough ? 'stone' : sd < beach ? 'sand' : 'grass', w: 0, isle: closed ? look : '' };
+    } else if (best && best.wild && sd >= BEACH) {
       const ridge = Math.pow(1 - Math.abs(nM(x / 140, z / 140)), 3);
       const raw = smooth(BEACH, 70, sd) * (2 + Math.max(0, fbm(nH, x / 90, z / 90) + 0.25) * 9 + ridge * 16 * smooth(30, 120, sd));
       const h = Math.round(raw);
@@ -147,8 +173,15 @@ function makeIslandTerrain({ islands, seaZ, zone }) {
       const i = i0 + gi + Math.floor(cellHash(i0 + gi, j0 + gj, 1) * 3), j = j0 + gj + Math.floor(cellHash(i0 + gi, j0 + gj, 2) * 3);
       if (i >= i0 + CHUNK || j >= j0 + CHUNK) continue;
       const c = cell(i, j);
-      if (!c.wild || c.kind === 'snow') continue;
       const x = (i + 0.5) * BLOCK, z = (j + 0.5) * BLOCK, r = cellHash(i, j, 3);
+      // まだ行けない海の島：見た目だけの木と岩を少しだけ（開くと sim.js が本物の木と岩を置き、これは出なくなる）
+      if (c.isle) {
+        const [pt, pr] = ISLE_OBJ[c.isle] || [0.1, 0.03];
+        if (c.kind === 'grass' && r < pt) trees.push({ id: 'w' + i + '_' + j, x, z, y: 0, state: 'tree', kind: Math.floor(cellHash(i, j, 4) * 3), size: 0.8 + cellHash(i, j, 5) * 0.4 });
+        else if (c.kind !== 'water' && r > 1 - pr) rocks.push({ id: 'wr' + i + '_' + j, x, z, y: 0, hp: 10, max: 10, kind: Math.floor(cellHash(i, j, 6) * 3), blocks: 'ssssssssss' });
+        continue;
+      }
+      if (!c.wild || c.kind === 'snow') continue;
       const forest = Math.max(0, Math.min(1, (fbm(nF, x / 120, z / 120, 2) + 0.15) * 1.8));
       if (c.kind === 'grass' && r < 0.1 + forest * 0.6) trees.push({ id: 'w' + i + '_' + j, x, z, y: c.h * BLOCK, state: 'tree', kind: Math.floor(cellHash(i, j, 4) * 3), size: 0.85 + cellHash(i, j, 5) * 0.35 });
       else if (r > (c.kind === 'stone' ? 0.85 : 0.97)) rocks.push({ id: 'wr' + i + '_' + j, x, z, y: c.h * BLOCK, hp: 10, max: 10, kind: Math.floor(cellHash(i, j, 6) * 3), blocks: 'ssssssssss' });

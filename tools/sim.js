@@ -553,11 +553,11 @@ function stepDay(S) {
     const EXB = (config.expansion && config.expansion.bridges) || {};
     const opened = ISL ? world.islands.filter((i) => i.id !== IS.MAIN && i.open && i.open < day) : [];
     for (const c of ctxs) {
-      if (c.off || (c.job !== 'wood' && c.job !== 'stone')) continue;
-      for (const isl of opened) {
-        const share = (EXB[isl.id] && EXB[isl.id].workShare) ?? 0.35;
-        if ((hashStr('isl:' + isl.id + ':' + c.v.key + ':' + day) % 100) < share * 100) { c.base = { x: isl.x, z: isl.z }; break; }
-      }
+      if (c.off || (c.job !== 'wood' && c.job !== 'stone') || !opened.length) continue;
+      // 島がいくつも開いた時は、人ごと・日ごとに 1 つの島を選んでから、その島の workShare で行くか決める（島が増えても、はじまり島で働く人が残る）
+      const isl = opened.length === 1 ? opened[0] : opened[hashStr('isle:' + c.v.key + ':' + day) % opened.length];
+      const share = (EXB[isl.id] && EXB[isl.id].workShare) ?? 0.35;
+      if ((hashStr('isl:' + isl.id + ':' + c.v.key + ':' + day) % 100) < share * 100) c.base = { x: isl.x, z: isl.z };
     }
   }
   // ---- 持ち物とチェスト ----
@@ -1416,7 +1416,7 @@ function stepDay(S) {
   for (const r of world.rocks) {
     if (r.hp > 0 || !r.back || day < r.back) continue;
     let x = r.x, z = r.z;
-    if (!R.chance(RS2.sameSpot) || busy(x, z)) {
+    if (!R.chance(RS2.sameSpot) || busy(x, z) || (ISL && nearBridge(x, z))) { // 橋のたもとで掘った岩は、同じ所には戻らない
       let ok = false;
       for (let k = 0; k < 40 && !ok; k++) {
         if (ISL) { // 行ける島の上で、野原（world.meadow）と橋のたもとの外
@@ -1632,8 +1632,14 @@ function stepDay(S) {
       const nm = isl.name || 'となりの島';
       if (!ex) {
         if (state.followers < def.followers || day < (def.minDay || 1) || !active.length) continue;
+        // 海の島への橋（from のある橋）：元の島が開いていて、ほかの橋を作っていない時だけ始める（材料を取り合わない）
+        const fromIsl = world.islands.find((i) => i.id === (br.from || IS.MAIN));
+        if (br.from && (!IS.isOpen(fromIsl) || Object.values(state.expansion).some((e) => !e.built))) continue;
         state.expansion[br.id] = { started: day, paid: { wood: 0, stone: 0 }, cost: { ...def.cost } };
-        hist('event', `フォロワーが${def.followers}人をこえた。北の海の向こうに見える「${nm}」へ、橋をかけることになった。チェストの木材と石を少しずつ使って作る。`, { expansion: br.id, stage: 'start' });
+        const m0 = world.islands[0], ddx = isl.x - m0.x, ddz = isl.z - m0.z;
+        const dirJa = Math.abs(ddz) > Math.abs(ddx) * 2 ? (ddz < 0 ? '北' : '南') : Math.abs(ddx) > Math.abs(ddz) * 2 ? (ddx < 0 ? '西' : '東') : (ddz < 0 ? '北' : '南') + (ddx < 0 ? '西' : '東');
+        const via = br.from && fromIsl && fromIsl.id !== IS.MAIN ? `${fromIsl.name || 'となりの島'}から、` : '';
+        hist('event', `フォロワーが${def.followers}人をこえた。${via}${dirJa}の海の向こうに見える「${nm}」へ、橋をかけることになった。チェストの木材と石を少しずつ使って作る。`, { expansion: br.id, stage: 'start' });
         for (const v of active) addLine(v.key, `${nm}へ橋をかけることになった。`);
         continue;
       }
@@ -1653,6 +1659,16 @@ function stepDay(S) {
       ex.prog = +Math.min(1, ['wood', 'stone'].reduce((s, r) => s + ex.paid[r], 0) / Math.max(1, ['wood', 'stone'].reduce((s, r) => s + (ex.cost[r] || 0), 0))).toFixed(3);
       if (['wood', 'stone'].every((r) => ex.paid[r] >= (ex.cost[r] || 0))) {
         br.built = day; isl.open = day; ex.built = day; ex.prog = 1;
+        // 海の島（look のある島）：はじめて開いた日に、本物の木・岩・区画を置く。橋の両たもとの木と岩はどける（渡れるように）
+        if (isl.look && !world.trees.some((t) => IS.shoreDist(isl, t.x, t.z) > 0)) {
+          const got2 = require('./island_layout').populateIsland(world, isl, { seed: state.seed, ores: config.ores, gather: GA });
+          for (const t of got2.trees) IX.trees.set(t, t.x, t.z);
+          for (const r of got2.rocks) IX.rocks.set(r, r.x, r.z);
+        }
+        for (const end of [br.a, br.b]) {
+          for (const t of IX.trees.near(end.x, end.z, 3.6, (t) => !t.gone)) { t.gone = 1; t.state = 'removed'; t.removedDay = day; }
+          for (const r of IX.rocks.near(end.x, end.z, 3.6, (r) => !r.gone && r.hp > 0)) { r.hp = 0; r.back = day + config.respawn.rockDays[0]; }
+        }
         hist('event', `${nm}への橋ができあがった！ 明日からは${nm}でも木を切ったり岩を掘ったりでき、家も建てられる。`, { expansion: br.id, stage: 'built' });
         first('bridge_' + br.id, `はじめて海に橋がかかった。町が${nm}まで広がった。`, { expansion: br.id });
         for (const v of active) addLine(v.key, `${nm}への橋ができた。明日、わたってみたい。`);

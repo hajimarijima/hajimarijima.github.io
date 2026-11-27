@@ -1484,6 +1484,54 @@ t('橋：フォロワーが節目をこえると橋を作り始め、できる�
   const where = history.filter((h) => h.type === 'vote_open' && h.day > built);
   assert.ok(!where.length || where.some((h) => /北の島/.test(h.text)), '北の島の区画が候補に出る');
 });
+t('海の島々：重ならず、橋は陸から陸へ（とちゅうで別の島を通らない）・開く条件は順に大きくなる', () => {
+  const { w0, cfg } = islandRun();
+  const sea = w0.islands.filter((i) => i.look);
+  assert.ok(sea.length >= 8, '海の島が 8 つ以上 ' + sea.length);
+  assert.ok(sea.every((i) => i.name && !ISX.isOpen(i)), 'どれも名前があり、はじめは行けない');
+  for (const a of w0.islands) for (const b of w0.islands) {
+    if (a === b) continue;
+    for (let k = 0; k < 72; k++) { const p = ISX.shorePoint(a, (k / 72) * Math.PI * 2); assert.ok(ISX.shoreDist(b, p.x, p.z) < -10, `${a.id} と ${b.id} が近すぎる`); }
+  }
+  const EXB = cfg.expansion.bridges;
+  let prev = EXB.north.followers;
+  for (const br of w0.bridges) {
+    const from = w0.islands.find((i) => i.id === (br.from || 'main')), to = w0.islands.find((i) => i.id === br.to);
+    assert.ok(EXB[br.id], '開く条件 ' + br.id);
+    assert.ok(ISX.shoreDist(from, br.a.x, br.a.z) > 1 && ISX.shoreDist(to, br.b.x, br.b.z) > 1, '橋の両はしは陸 ' + br.id);
+    for (let u = 0.05; u < 0.95; u += 0.05) {
+      const x = br.a.x + (br.b.x - br.a.x) * u, z = br.a.z + (br.b.z - br.a.z) * u;
+      for (const o of w0.islands) if (o !== from && o !== to) assert.ok(ISX.shoreDist(o, x, z) < -3, `${br.id} の橋が ${o.id} を通る`);
+    }
+    if (br.from) { assert.ok(EXB[br.id].followers > prev, '開く順に followers が大きい ' + br.id); prev = EXB[br.id].followers; }
+  }
+});
+t('海の島々：北の島のあと、1 つずつ橋を作って開き、開いた日に木と岩が置かれる', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-isles-'));
+  fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+  const env = { ...process.env, TOWN_DATA: dir };
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+  node('tools/init.js', '--demo', '--start', '2026-11-01');
+  const inbox = path.join(dir, 'inbox.json');
+  let world, state;
+  for (let d = 1; d <= 16; d++) {
+    fs.writeFileSync(inbox, JSON.stringify({ followers: 5000 }));
+    node('tools/sim.js', '--inbox', inbox);
+    state = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
+    world = STORE.readWorld(dir);
+    assert.ok(Object.values(state.expansion || {}).filter((e) => !e.built).length <= 1, '同時に作る橋は 1 つ（' + d + ' 日目）');
+    for (const isl of world.islands.filter((i) => i.look && i.open === state.day)) assert.ok(world.trees.some((t) => t.state === 'tree' && ISX.shoreDist(isl, t.x, t.z) > 0), '開いた日に木が置かれる ' + isl.id);
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+  const opened = world.islands.filter((i) => i.look && i.open);
+  assert.ok(ISX.isOpen(world.islands.find((i) => i.id === 'north')) && opened.length >= 1, '北の島のあと海の島も開く ' + opened.map((i) => i.id));
+  for (const isl of opened) {
+    const br = world.bridges.find((b) => b.to === isl.id);
+    assert.ok(br.built === isl.open, '橋ができた日に開く ' + isl.id);
+    assert.ok(ISX.isOpen(world.islands.find((i) => i.id === (br.from || 'main'))), '元の島が先に開いている ' + isl.id);
+    for (const o of [...world.trees, ...world.rocks]) if (ISX.shoreDist(isl, o.x, o.z) > -1) assert.ok(ISX.shoreDist(isl, o.x, o.z) > 2, '木と岩は岸の内側 ' + isl.id);
+  }
+});
 t('前の広い平地の world.json（島なし）も、今までどおり読める・陸と海の決まりも前と同じ', () => {
   const w = { size: 220, seaZ: 34, trees: [], rocks: [] };
   assert.ok(ISX.onLand(w, 50, 20) && !ISX.onLand(w, 0, 40), '南の seaZ より先は海');

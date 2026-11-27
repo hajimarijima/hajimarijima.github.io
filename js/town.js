@@ -53,10 +53,21 @@ function routeAround(a, b, obs) {
   if (!ROUTE.world || !ROUTE.bridges.length) return routeAround0(a, b, obs);
   const ia = islandOfPt(a), ib = islandOfPt(b);
   if (ia === ib) return routeAround0(a, b, obs);
-  const br = ROUTE.bridges.find((x) => (x.to === ia && ib === MAIN) || (x.to === ib && ia === MAIN));
-  if (!br) return routeAround0(a, b, obs);
-  const [p, q] = ia === MAIN ? [br.a, br.b] : [br.b, br.a];
-  return [...routeAround0(a, p, obs), { x: q.x, z: q.z }, ...routeAround0(q, b, obs)];
+  // できた橋をたどって島から島へ（海の島は、となりの島からの橋 from でつながる）
+  const prev = new Map([[ia, null]]), queue = [ia];
+  while (queue.length && !prev.has(ib)) {
+    const cur = queue.shift();
+    for (const x of ROUTE.bridges) {
+      const f = x.from || MAIN, nx = f === cur ? x.to : x.to === cur ? f : null;
+      if (nx && !prev.has(nx)) { prev.set(nx, { br: x, at: cur }); queue.push(nx); }
+    }
+  }
+  if (!prev.has(ib)) return routeAround0(a, b, obs);
+  const hops = [];
+  for (let k = ib; prev.get(k); k = prev.get(k).at) hops.unshift(prev.get(k));
+  const out = []; let s = a;
+  for (const { br, at } of hops) { const [p, q] = (br.from || MAIN) === at ? [br.a, br.b] : [br.b, br.a]; out.push(...routeAround0(s, p, obs), { x: q.x, z: q.z }); s = q; }
+  return [...out, ...routeAround0(s, b, obs)];
 }
 
 // ---------- 煙・湯気 ----------
@@ -2547,35 +2558,8 @@ async function main() {
     x.onclick = closeCard;
     card.append(x);
   }
-  focusVillagerFromUrl(QS.get('v'), { people, camera, controls, cam, openCard }); // ?v=<村人>：その人の家へ寄る（DM の返事のリンク。カードを作り終えてから）
-}
-
-// ?v=<村人の key>（DM で入居した時の返事のリンク）：その村人の家（家がなければテント・寝る所）へカメラをなめらかに寄せて、村人カードを開く。
-// 開いた時の空からの寄りはやめる。触ったらすぐやめる。知らない key なら何もしない（ふつうの開き方）。寄せたら true
-function focusVillagerFromUrl(key, { people, camera, controls, cam, openCard }) {
-  if (!key) return false;
-  const p = people.find((x) => x.v.key === key);
-  if (!p) return false;
-  const at = p.homeB ? { x: p.homeB.x, z: p.homeB.z } : p.home;
-  if (!at) return false;
-  cam.intro = -1;
-  const t0 = controls.target.clone(), c0 = camera.position.clone();
-  const t1 = new THREE.Vector3(at.x, 0, at.z), c1 = t1.clone().add(new THREE.Vector3(0, 15, 18));
-  const start = performance.now(), len = 1800;
-  let stop = false;
-  controls.addEventListener('start', () => { stop = true; });
-  const ease = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
-  const step = (now) => {
-    if (stop) return;
-    const k = ease(Math.min(1, (now - start) / len));
-    controls.target.lerpVectors(t0, t1, k);
-    camera.position.lerpVectors(c0, c1, k);
-    cam.last = 0; // camStep のなめらかなズームに、この動きを戻されないように
-    if (k < 1) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
-  openCard(p.v);
-  return true;
+  // ?v=<村人>（DM の返事のリンク）：その人本人（今いる所。歩いていればついて行く）へ寄って、村人カード（プロフィール）を開く
+  { const p = QS.get('v') && people.find((q) => q.v.key === QS.get('v')); if (p) { flyTo(() => ({ x: p.ch.position.x, z: p.ch.position.z }), 30); openCard(p.v); } }
 }
 
 // 拠点の場所の投票中の帯（地図の上）。票はコメントを数えた数（15 分ごとの受付で数え直す）

@@ -2160,9 +2160,20 @@
     "margin": 7
   },
   "expansion": {
-    "note": "島を広げる決まり（小さな島の町だけ。前の広い平地の町では動かない）。北の海の向こうに「北の島」があり、はじめは行けない。フォロワーが followers 人をこえた日から、チェストの木材と石を毎日 perDay まで使って橋を作る（keep の分はチェストに残す）。cost の分がそろうと橋ができあがり、次の日から村人が北の島で木を切り・岩を掘り・家を建てられる。workShare：橋ができたあと、木こりと石掘りのうち北の島へ働きに行く人の割合。crew：毎日橋を作る人数。数を変えれば早くも遅くもできる",
+    "note": "島を広げる決まり（小さな島の町だけ。前の広い平地の町では動かない）。北の海の向こうに「北の島」があり、はじめは行けない。フォロワーが followers 人をこえた日から、チェストの木材と石を毎日 perDay まで使って橋を作る（keep の分はチェストに残す）。cost の分がそろうと橋ができあがり、次の日から村人が北の島で木を切り・岩を掘り・家を建てられる。workShare：橋ができたあと、木こりと石掘りのうち北の島へ働きに行く人の割合。crew：毎日橋を作る人数。数を変えれば早くも遅くもできる。north のほかの橋は海の島々（tools/island_layout.js の SEA_ISLES）へ：world.json の橋の from の島が開いていて、ほかの橋を作っていない時だけ、followers・minDay がそろえば 1 つずつ作り始める。できた日に、その島に木・岩・家の区画が置かれる",
     "bridges": {
-      "north": { "followers": 50, "minDay": 2, "cost": { "wood": 60, "stone": 24 }, "perDay": { "wood": 20, "stone": 8 }, "keep": { "wood": 10, "stone": 5 }, "workShare": 0.35, "crew": 3 }
+      "north": { "followers": 50, "minDay": 2, "cost": { "wood": 60, "stone": 24 }, "perDay": { "wood": 20, "stone": 8 }, "keep": { "wood": 10, "stone": 5 }, "workShare": 0.35, "crew": 3 },
+      "kotori": { "followers": 80, "minDay": 4, "cost": { "wood": 60, "stone": 24 }, "perDay": { "wood": 20, "stone": 8 }, "keep": { "wood": 10, "stone": 5 }, "workShare": 0.3, "crew": 3 },
+      "iwa": { "followers": 120, "minDay": 6, "cost": { "wood": 60, "stone": 24 }, "perDay": { "wood": 20, "stone": 8 }, "keep": { "wood": 10, "stone": 5 }, "workShare": 0.3, "crew": 3 },
+      "kujira": { "followers": 170, "minDay": 8, "cost": { "wood": 75, "stone": 30 }, "perDay": { "wood": 20, "stone": 8 }, "keep": { "wood": 10, "stone": 5 }, "workShare": 0.3, "crew": 3 },
+      "kame": { "followers": 230, "minDay": 10, "cost": { "wood": 55, "stone": 22 }, "perDay": { "wood": 20, "stone": 8 }, "keep": { "wood": 10, "stone": 5 }, "workShare": 0.3, "crew": 3 },
+      "minami": { "followers": 300, "minDay": 12, "cost": { "wood": 55, "stone": 22 }, "perDay": { "wood": 20, "stone": 8 }, "keep": { "wood": 10, "stone": 5 }, "workShare": 0.3, "crew": 3 },
+      "kojima": { "followers": 380, "minDay": 14, "cost": { "wood": 65, "stone": 26 }, "perDay": { "wood": 20, "stone": 8 }, "keep": { "wood": 10, "stone": 5 }, "workShare": 0.3, "crew": 3 },
+      "mori": { "followers": 470, "minDay": 16, "cost": { "wood": 70, "stone": 28 }, "perDay": { "wood": 20, "stone": 8 }, "keep": { "wood": 10, "stone": 5 }, "workShare": 0.3, "crew": 3 },
+      "umineko": { "followers": 570, "minDay": 18, "cost": { "wood": 55, "stone": 22 }, "perDay": { "wood": 20, "stone": 8 }, "keep": { "wood": 10, "stone": 5 }, "workShare": 0.3, "crew": 3 },
+      "takara": { "followers": 680, "minDay": 20, "cost": { "wood": 70, "stone": 28 }, "perDay": { "wood": 20, "stone": 8 }, "keep": { "wood": 10, "stone": 5 }, "workShare": 0.3, "crew": 3 },
+      "hoshi": { "followers": 800, "minDay": 22, "cost": { "wood": 75, "stone": 30 }, "perDay": { "wood": 20, "stone": 8 }, "keep": { "wood": 10, "stone": 5 }, "workShare": 0.3, "crew": 3 },
+      "yuuhi": { "followers": 950, "minDay": 24, "cost": { "wood": 75, "stone": 30 }, "perDay": { "wood": 20, "stone": 8 }, "keep": { "wood": 10, "stone": 5 }, "workShare": 0.3, "crew": 3 }
     }
   },
   "terrain": {
