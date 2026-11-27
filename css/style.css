@@ -745,6 +745,27 @@ html.pm-notags .nametag { visibility: hidden; }
 .pm-acts .pm-share[hidden] { display: none; }
 .pm-acts .pm-again { background: rgba(255,255,255,.14); color: #fff; border: 1.5px solid rgba(255,255,255,.5); }
 .pm-res-note { margin: 0; font-size: 12.5px; color: rgba(255,255,255,.8); text-align: center; }
+/* ポーズ（横に流す）・動画・「はい、チーズ！」・録画中・ハッシュタグの案内 */
+.pm-row.pm-poses { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; padding: 2px 2px; margin: 0 -12px; padding-inline: 12px; max-width: calc(100% + 24px); }
+.pm-row.pm-poses::-webkit-scrollbar { display: none; }
+.pm-row.pm-poses button { flex: none; }
+@media (min-width: 720px) { .pm-row.pm-poses { justify-content: center; } }
+.pm-row[hidden], .pm-msg[hidden], .pm-cheese[hidden], .pm-rec[hidden], .pm-tagbox[hidden], .pm-vid[hidden], .pm-img[hidden] { display: none; }
+.pm-msg { pointer-events: auto; margin: 0; max-width: 460px; padding: 7px 12px; border-radius: 10px; background: rgba(20,22,30,.78); color: #fff; font-size: 12.5px; font-weight: 700; line-height: 1.5; text-align: center; }
+.pm-shutter.vid span { background: #e5483b; border-radius: 50%; }
+.photomode.pm-recording .pm-shutter span { transform: scale(.55); border-radius: 6px; }
+.photomode.pm-recording .pm-row, .photomode.pm-busy .pm-row { opacity: .35; pointer-events: none; }
+.pm-cheese { position: absolute; left: 50%; top: 18%; transform: translate(-50%, -50%); padding: 12px 24px; border-radius: 999px; background: rgba(255,255,255,.96); color: var(--ink); font-size: 24px; font-weight: 900; white-space: nowrap; box-shadow: 0 6px 22px rgba(0,0,0,.3); pointer-events: none; }
+.pm-cheese.on { animation: pm-cheese .35s cubic-bezier(.3,1.6,.5,1); }
+@keyframes pm-cheese { from { transform: translate(-50%, -50%) scale(.5); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+.pm-rec { position: absolute; right: 12px; top: calc(12px + env(safe-area-inset-top)); display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; background: rgba(20,22,30,.7); color: #fff; font-size: 13px; font-weight: 800; pointer-events: none; }
+.pm-rec-dot { width: 10px; height: 10px; border-radius: 50%; background: #ff4a3d; animation: pm-blink 1s steps(2) infinite; }
+@keyframes pm-blink { 50% { opacity: .2; } }
+.pm-vid { display: block; max-width: min(100%, 420px); max-height: calc(100svh - 260px); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.5); background: #222; }
+.pm-tagbox { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 10px; max-width: 420px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.1); }
+.pm-tagnote { margin: 0; font-size: 13px; font-weight: 700; color: #fff; text-align: center; }
+.pm-copy { display: inline-flex; align-items: center; gap: 5px; height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: #fff; color: var(--ink); font: inherit; font-size: 13.5px; font-weight: 800; cursor: pointer; }
+.pm-copy:focus-visible { outline: 3px solid #6fb3ff; outline-offset: 2px; }
 
 /* ---------- 自分の村人（me.html・js/mine.js）と遊ぶ（play.html） ---------- */
 .mineface { display: block; flex: none; border-radius: 4px; box-shadow: 0 0 0 1.5px rgba(255,255,255,.7); }

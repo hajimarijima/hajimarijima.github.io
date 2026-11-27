@@ -925,6 +925,8 @@ async function main() {
   // 空いていなければ、いちばん近い空いたマス（1 ブロック）のまん中へずらす
   // 写真モード（js/photomode.js）：選んだ人に、少し開けた所へ立ってもらう時の「立てる所か」（物・寝ている人・海・池・段の上でない）
   window.TOWN.spotFree = (x, z) => isFree(x, z, BODY_S) && terrainGen.cell(Math.floor(x / BLOCK), Math.floor(z / BLOCK)).kind !== 'water' && terrainGen.heightAt(x, z) === 0 && !(world.pond && Math.hypot(x - world.pond.x, z - world.pond.z) < world.pond.r + 2);
+  // 写真モードの「肩を組む」で呼ぶ相手：仲のよさ（social.json の pairs）。家族・恋は高め
+  window.TOWN.pairScore = (a, b) => { const r = ((D.social || {}).pairs || {})[[a, b].sort().join('|')]; return r ? (r.s || 0) + ((r.family || 0) > 0 ? 50 : 0) + (r.crush ? 60 : 0) : 0; };
   function freePt(pt, rad = BODY_S, self) {
     if (!pt || isFree(pt.x, pt.z, rad, self)) return pt;
     const i0 = Math.floor(pt.x / TILE), j0 = Math.floor(pt.z / TILE), c = [];
@@ -1917,7 +1919,8 @@ async function main() {
     if (p.photo && p.mode !== 'sleep') { // 写真モード（js/photomode.js）で選んだ人：その場で止まり、カメラの方を向いて手をふる（寝ている人は寝たまま）
       p.ch.visible = true; p.ch.userData.lieY = 0; setCarry(p.ch, null);
       turnTo(p.ch, p.photo.yaw, dt); p.ch.position.set(p.pos.x, 0, p.pos.z);
-      if (p.lod === 'full') animate(p.ch, 'wave', time, 0.5);
+      const ph = p.photo; if (ph.pose && ph.t0 == null) ph.t0 = time; // ポーズ（js/photomode.js の「はい、チーズ」）：選んだ時から数える
+      if (p.lod === 'full') animate(p.ch, ph.pose || 'wave', time, ph.pose ? time - ph.t0 : 0.5);
       return;
     }
     let pose = 'idle';
@@ -2436,9 +2439,11 @@ async function main() {
     if (mobs.length) { const R0 = stage.getBoundingClientRect(); ft.end(camera, R0.width, R0.height, R0.left, R0.top); }
     const undoShake = mobs.length ? ft.shake(camera, time) : null; // クリティカルの直後だけ少し画面をゆらす
     updateTents(sky.n, dt);
+    if (window.TOWN.beforeRender) window.TOWN.beforeRender(time); // 写真モードの動画（js/photomode.js）：カメラを回り込ませる
     renderer.render(scene, camera);
     if (undoShake) undoShake();
     labels.render(scene, camera);
+    if (window.TOWN.afterRender) window.TOWN.afterRender(time); // 写真モードの動画：描いた直後に枠の部分を写し取る
     autoRes();
     // 吹き出しと建物の札が画面の端で切れないように、内側へ寄せる
     const W = stage.clientWidth, sx = stage.getBoundingClientRect().left;

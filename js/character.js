@@ -311,7 +311,7 @@ export function makeCharacter(url, { scale = 1, oneHand = null, slim = false, ch
   root.userData.oneHand = oneHand ?? root.userData.seed < 0.4;
   root.userData.balance = root.userData.seed < 0.2 ? 'out' : 'down';
   root.userData.base = bp; root.userData.chibi = !!chibi;
-  root.userData.parts = { tails, torso, body, head, rarm, larm, rleg, lleg, hand, front, tool: null, toolKind: null, carry: null, carryKind: null };
+  root.userData.parts = { tails, torso, body, head, rarm, larm, rleg, lleg, hand, front, tool: null, toolKind: null, carry: null, carryKind: null, armX: armX * PX };
   return root;
 }
 
@@ -504,7 +504,7 @@ export function animate(ch, pose, t, phase = null) {
   const B0 = ch.userData.base || { head: 24 * PX, torso: 18 * PX, arm: 24 * PX };
   P.head.position.y = B0.head; P.torso.position.y = B0.torso;
   P.rarm.position.y = B0.arm; P.larm.position.y = B0.arm;
-  P.head.position.z = 0; P.torso.position.z = 0; P.rarm.position.z = 0; P.larm.position.z = 0; P.torso.rotation.set(0, 0, 0); // お辞儀で前へ出した・倒した分をもどす
+  P.head.position.z = 0; P.torso.position.z = 0; P.rarm.position.z = 0; P.larm.position.z = 0; if (P.armX) { P.rarm.position.x = -P.armX; P.larm.position.x = P.armX; } // 腕組みで横へずらした分も P.torso.rotation.set(0, 0, 0); // お辞儀で前へ出した・倒した分をもどす
   for (const k of ['rarm', 'larm', 'rleg', 'lleg']) P[k].rotation.set(0, 0, 0);
   if (P.chips) P.chips.visible = false;
   if (P.vsign) for (const v of P.vsign) v.visible = false;
@@ -747,6 +747,8 @@ function photoPose(ch, P, pose, e, t) {
   const C = ch.userData.chibi, k = easeIO(Math.min(1, Math.max(0, e / 0.7)));
   const mirror = pose.endsWith('R'), base = mirror ? pose.slice(0, -1) : pose;
   P.head.rotation.y = 0;
+  // 2 頭身は肩の角が大きな頭のすぐ下にあるので、腕を回すと角が頭の下へ入る。写真のポーズの間は肩の軸を 1.6px 下げる
+  if (C) { P.rarm.position.y -= 1.6 * PX * k; P.larm.position.y -= 1.6 * PX * k; }
   // ピース：片手を頭の横の斜め上へ（頭から離して外へ開く）。指を 2 本立てる
   const peace = (arm, side) => { liftArm(P, arm, side, k, -2.55, C ? 1.05 : 0.5, 2.5); if (k > 0.6) vSign(P, arm); };
   if (base === 'pm_peace') {
@@ -768,9 +770,10 @@ function photoPose(ch, P, pose, e, t) {
   } else if (base === 'pm_cross') {
     // 腕組み：両腕を前へ上げて内へ寄せ、体の前で重ねる。右腕は少し上・左腕は少し前（重なって見える）。肩ごと前・外へずらして胴に入らないように
     const zin = C ? 0.62 : 0.6;
-    P.rarm.position.z += (C ? 2.4 : 2.2) * PX * k; P.rarm.position.x -= (C ? 0.6 : 0.5) * PX * k;
-    P.larm.position.z += (C ? 3.4 : 3.2) * PX * k; P.larm.position.x += (C ? 0.6 : 0.5) * PX * k;
-    P.rarm.rotation.set(-1.35 * k, 0, zin * k); P.larm.rotation.set(-1.12 * k, 0, -zin * k);
+    //   重なる所で上下に腕の太さ（4px）より離れるよう、右腕は肩を 0.8px・左腕は 3.3px 下げて、左腕は角度も下向きに
+    P.rarm.position.z += (C ? 2.4 : 2.8) * PX * k; P.rarm.position.x -= (C ? 0.6 : 0.5) * PX * k; P.rarm.position.y -= 0.8 * PX * P.rarm.scale.y * k;
+    P.larm.position.z += (C ? 3.7 : 3.5) * PX * k; P.larm.position.x += (C ? 0.6 : 0.5) * PX * k; P.larm.position.y -= 3.3 * PX * P.larm.scale.y * k;
+    P.rarm.rotation.set(-1.5 * k, 0, zin * k); P.larm.rotation.set(-1.1 * k, 0, -zin * k);
     P.head.rotation.x = -0.04 * k; P.head.rotation.z = 0.05 * k;
   } else if (base === 'pm_sit') {
     // 地面に座る：脚を前へ出して、手はひざの横。背すじはのばして前を向く
@@ -780,9 +783,9 @@ function photoPose(ch, P, pose, e, t) {
     P.rarm.rotation.set(-0.55 * k, 0, -0.1 * k); P.larm.rotation.set(-0.55 * k, 0, 0.1 * k);
     P.head.rotation.z = 0.07 * k;
   } else if (base === 'pm_hug') {
-    // 2 人で肩を組む（呼んだ相手は横・少し前に立つ）：内側の腕を横へのばして相手の肩のうしろにまわし、外の手でピース
+    // 2 人で肩を組む（呼んだ相手は横・少しうしろに立つ）：内側の腕を肩の高さで横へのばして相手の肩の前にまわし、外の手でピース
     const inner = mirror ? P.rarm : P.larm, side = mirror ? 1 : -1;
-    inner.rotation.set(0, 0, -side * 1.45 * k);
+    inner.rotation.set(0, 0, -side * (C ? 1.42 : 1.52) * k);
     peace(mirror ? P.larm : P.rarm, -side);
     P.head.rotation.z = 0.1 * k * -side;
   } else if (base === 'pm_pal') {

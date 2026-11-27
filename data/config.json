@@ -5,6 +5,8 @@
   "episodes": [],
   "episodesNote": "町の画面の「年表」に出す、動画の話ごとのまとまり（古い順）。1 話は { \"no\": 1, \"date\": \"11/26\", \"title\": \"題\", \"icon\": \"🌱\", \"pop\": 20, \"url\": \"動画の URL（なくてよい）\", \"lines\": [\"🏠 20人が島に住んだ\", \"🗳 投票で拠点が決まった\", \"👑 はじまりの村人 @ユーザー名\"] }。lines は先頭の絵文字が印になり、@ユーザー名 は水色の丸いチップ（押すとその人の所へ）になる。pop は「● 住民 〇人」。空 [] のあいだは、歴史（history.json）を日ごとにまとめて自動で作る",
   "account": "@comment_de_sodatsu",
+  "photo": { "tags": ["はじまり島", "はじまり島フォト"], "featureTag": "はじまり島フォト", "url": "https://hajimarijima.github.io/" },
+  "photoNote": "写真モード（js/photomode.js）で共有する時の文に入れるハッシュタグ（# は付けない）と島の URL。featureTag は保存したあとの「#〇〇 で投稿すると、島で紹介されるかも」に出すタグ。url が空なら今のページの URL",
   "profileUrl": "https://www.instagram.com/comment_de_sodatsu/",
   "profileUrlNote": "投票の投稿の URL（votePostUrl）が空の時、投票のボタンはここ（インスタのプロフィール）へ飛ぶ",
   "liveStatsUrl": "",

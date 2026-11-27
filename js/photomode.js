@@ -10,7 +10,9 @@ import { TREE_LEN, TREE_LEAF_Y } from './blocks.js';
 
 const TIMES = [['now', '今', null], ['morning', '朝', 7], ['day', '昼', 12.5], ['evening', '夕方', 18.2], ['night', '夜', 21.5]];
 const FRAMES = { story: { w: 1080, h: 1920, name: '9:16' }, square: { w: 1080, h: 1080, name: '1:1' } };
-const S = { on: false, time: 'now', tags: true, frame: 'story', who: null, url: '', blob: null };
+const POSES = [['wave', '手をふる'], ['pm_peace', 'ピース'], ['pm_banzai', 'ばんざい'], ['pm_jump', 'ジャンプ'], ['pm_bow', 'おじぎ'], ['pm_cross', '腕組み'], ['pm_sit', 'すわる'], ['pm_hug', '肩を組む']];
+const MODES = [['photo', '写真'], ['video', '動画']], SECS = [['5', '5秒'], ['10', '10秒']];
+const S = { on: false, time: 'now', tags: true, frame: 'story', who: null, url: '', blob: null, pose: 'wave', mode: 'photo', secs: 5, orbit: true, busy: false, rec: null, pal: null, palSide: 1, view: null };
 let el = null, frameEl = null;
 
 const T = () => window.TOWN;
@@ -28,26 +30,40 @@ function build() {
     `<div class="pm-top"><button type="button" class="pm-back">${icon('arrow-left', { size: 20 })}<span>もどる</span></button><span class="pm-who" aria-live="polite"></span></div>` +
     '<div class="pm-bottom">' +
     `<div class="pm-row" role="group" aria-label="時間帯">${chips('time', TIMES, S.time)}</div>` +
+    `<div class="pm-row pm-poses" role="group" aria-label="ポーズ">${chips('pose', POSES, S.pose)}</div>` +
     `<div class="pm-row"><button type="button" class="pm-tags" aria-pressed="true">${icon('tag', { size: 16 })}<span>名札</span></button>` +
-    `<span class="pm-sep" aria-hidden="true"></span><span class="pm-seg" role="group" aria-label="枠">${chips('frame', Object.entries(FRAMES).map(([k, f]) => [k, f.name]), S.frame)}</span></div>` +
+    `<span class="pm-sep" aria-hidden="true"></span><span class="pm-seg" role="group" aria-label="枠">${chips('frame', Object.entries(FRAMES).map(([k, f]) => [k, f.name]), S.frame)}</span>` +
+    `<span class="pm-sep" aria-hidden="true"></span><span class="pm-seg" role="group" aria-label="写真か動画">${chips('mode', MODES, S.mode)}</span></div>` +
+    `<div class="pm-row pm-vrow" hidden><span class="pm-seg" role="group" aria-label="動画の長さ">${chips('secs', SECS, String(S.secs))}</span>` +
+    `<button type="button" class="pm-orbit" aria-pressed="true">${icon('rotate-cw', { size: 16 })}<span>回り込み</span></button></div>` +
+    '<p class="pm-msg" role="status" hidden></p>' +
     `<button type="button" class="pm-shutter" aria-label="シャッター（写真を撮る）"><span></span></button>` +
     '</div>' +
     '<div class="pm-flash" aria-hidden="true"></div>' +
+    '<div class="pm-cheese" role="status" hidden>はい、チーズ！</div>' +
+    '<div class="pm-rec" role="status" hidden><span class="pm-rec-dot" aria-hidden="true"></span><span class="pm-rec-t"></span></div>' +
     '<div class="pm-result" hidden tabindex="-1"><div class="pm-res-in">' +
-    '<p class="pm-res-t">撮れました</p><img class="pm-img" alt="撮った写真">' +
+    '<p class="pm-res-t">撮れました</p><img class="pm-img" alt="撮った写真"><video class="pm-vid" playsinline muted loop autoplay controls hidden aria-label="撮った動画"></video>' +
     `<div class="pm-acts"><a class="pm-save" download>${icon('download', { size: 18 })}<span>保存</span></a>` +
     `<button type="button" class="pm-share" hidden>${icon('share-2', { size: 18 })}<span>共有</span></button>` +
     `<button type="button" class="pm-again">${icon('camera', { size: 18 })}<span>もう一枚</span></button></div>` +
-    '<p class="pm-res-note muted"></p></div></div>';
+    '<p class="pm-res-note muted"></p>' +
+    `<div class="pm-tagbox" hidden><p class="pm-tagnote"></p><button type="button" class="pm-copy">${icon('copy', { size: 16 })}<span>文をコピー</span></button></div></div></div>`;
   document.body.append(el);
   frameEl = el.querySelector('.pm-frame');
   el.querySelector('.pm-back').addEventListener('click', close);
   el.addEventListener('click', (e) => {
     const t = e.target.closest('[data-time]'); if (t) setTime(t.dataset.time);
     const f = e.target.closest('[data-frame]'); if (f) setFrame(f.dataset.frame);
+    const po = e.target.closest('[data-pose]'); if (po) setPose(po.dataset.pose);
+    const mo = e.target.closest('[data-mode]'); if (mo) setMode(mo.dataset.mode);
+    const se = e.target.closest('[data-secs]'); if (se) { S.secs = +se.dataset.secs; el.querySelectorAll('[data-secs]').forEach((b) => b.setAttribute('aria-pressed', String(b === se))); }
   });
   el.querySelector('.pm-tags').addEventListener('click', () => setTags(!S.tags));
-  el.querySelector('.pm-shutter').addEventListener('click', () => { shoot(); });
+  el.querySelector('.pm-shutter').addEventListener('click', () => { shutter(); });
+  el.querySelector('.pm-orbit').addEventListener('click', (e) => { S.orbit = !S.orbit; e.currentTarget.setAttribute('aria-pressed', String(S.orbit)); });
+  el.querySelector('.pm-save').addEventListener('click', () => setTimeout(showTagbox, 300)); // 保存したあとに、ハッシュタグの案内
+  el.querySelector('.pm-copy').addEventListener('click', copyText);
   el.querySelector('.pm-again').addEventListener('click', closeResult);
   el.querySelector('.pm-share').addEventListener('click', share);
   el.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); if (!el.querySelector('.pm-result').hidden) closeResult(); else close(); } });
@@ -86,9 +102,10 @@ function setFrame(k) {
 
 // 選んだ人をカメラの方へ向かせる（回したら向き直す）
 function faceCamera() {
-  const p = S.who; if (!p || !p.photo) return;
+  const p = S.who; if (!p || !p.photo || S.rec) return; // 動画で回り込む間は向きを変えない（回り込んで横顔も写す）
   const c = T().camera.position;
   p.photo.yaw = Math.atan2(c.x - p.pos.x, c.z - p.pos.z);
+  if (S.pal) placePal(); // 向きが変わったら、肩を組む相手も立ち直す
 }
 // 木や家にかくれない向きをさがす：今の向きから左右に 30 度ずつ、だめなら少し上から。カメラからその人の頭までの線に物が無い所
 const visibleChain = (o) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
@@ -96,7 +113,7 @@ const visibleChain = (o) => { for (; o; o = o.parent) if (!o.visible) return fal
 function personInFront(p, cam) {
   const ax = cam.x, az = cam.z, bx = p.pos.x, bz = p.pos.z, L2 = (bx - ax) ** 2 + (bz - az) ** 2 || 1;
   return (T().people || []).some((q) => {
-    if (q === p || !q.ch || !q.ch.visible) return false;
+    if (q === p || q === S.pal || !q.ch || !q.ch.visible) return false;
     const u = ((q.pos.x - ax) * (bx - ax) + (q.pos.z - az) * (bz - az)) / L2;
     if (u < 0 || u > 0.97) return false; // その人のすぐ前に立つ人も（顔にかぶる）
     return Math.hypot(q.pos.x - (ax + u * (bx - ax)), q.pos.z - (az + u * (bz - az))) < 3;
@@ -108,7 +125,7 @@ function nearMeshes(p, R = 60) {
   const out = [], c = new THREE.Vector3(p.pos.x, 0, p.pos.z), sp = new THREE.Sphere();
   T().scene.traverse((o) => {
     if (!(o.isMesh || o.isInstancedMesh) || !visibleChain(o)) return;
-    for (let x = o; x; x = x.parent) if (x === p.ch) return;
+    for (let x = o; x; x = x.parent) if (x === p.ch || (S.pal && x === S.pal.ch)) return;
     const m = o.material; if (m && (m.depthWrite === false || (m.transparent && m.opacity < 0.5))) return;
     if (!o.geometry) return; if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
     if (o.isInstancedMesh) { if (!o.boundingSphere) o.computeBoundingSphere(); sp.copy(o.boundingSphere).applyMatrix4(o.matrixWorld); } else sp.copy(o.geometry.boundingSphere).applyMatrix4(o.matrixWorld);
@@ -206,7 +223,12 @@ function frameShift(v) {
   const r = frameEl.getBoundingClientRect(), H = innerHeight || 1, ndc = (H / 2 - (r.top + r.height / 2)) / (H / 2);
   return ndc * Math.tan((T().camera.fov * Math.PI) / 360) * v.dist / Math.max(0.3, Math.sin(v.pol));
 }
-const aim = (p, v) => { const ty = aimY(p) - frameShift(v), off = ty * Math.tan(v.pol); T().lookAt(p.pos.x - Math.sin(v.az) * off, p.pos.z - Math.cos(v.az) * off, v.dist + ty / Math.cos(v.pol), v.az, v.pol, 0); };
+// 肩を組む相手がいる時は、2 人のまん中をねらう
+const aim = (p, v) => {
+  S.view = v;
+  const q = S.pal && S.pal.photo ? S.pal : null, fx = q ? (p.pos.x + q.pos.x) / 2 : p.pos.x, fz = q ? (p.pos.z + q.pos.z) / 2 : p.pos.z;
+  const ty = aimY(p) - frameShift(v), off = ty * Math.tan(v.pol); T().lookAt(fx - Math.sin(v.az) * off, fz - Math.cos(v.az) * off, v.dist + ty / Math.cos(v.pol), v.az, v.pol, 0);
+};
 // 寄った先の木は少しおくれて出てくる（近くの木はあとから作られる）ので、出そろってからもう一度確かめて、かくれていたら向きを変える。自分で動かしたらやめる
 function recheck(p) {
   clearTimeout(S.recheckT);
@@ -245,6 +267,7 @@ function clearFront() {
   const F = { l: fr.left / W * 2 - 1, r: fr.right / W * 2 - 1, t: fr.top / H * 2 - 1, b: fr.bottom / H * 2 - 1 };
   for (const q of t.people || []) {
     if (q === p || !q.ch) continue;
+    if (q === S.pal) { hideLayer(q, false); continue; } // 肩を組む相手は写す
     let hide = false;
     const dq = cam.position.distanceTo(q.ch.position);
     if (q.ch.visible && dq < d0 - 1.5) {
@@ -313,7 +336,7 @@ function propList(p) {
     if (!ok || merged) continue;
     box.setFromObject(o); if (box.isEmpty()) continue; box.getSize(sz); box.getCenter(ctr);
     const tree = !!(o.userData.tree || o.userData.rock); // 今日だれかが切る木・掘る岩（1 つずつ作られている）も、まとめた木・岩と同じに消す
-    if (!tree && (Math.max(sz.x, sz.z) > 2.6 || sz.y < 0.6 || box.min.y > 1)) continue; // 0.6 より低い草・花・小石は残す（動物は頭に重なれば消す）
+    if (!tree && ((Math.max(sz.x, sz.z) > 2.6 && (sz.y > 1.3 || Math.max(sz.x, sz.z) > 7)) || sz.y < 0.6 || box.min.y > 1)) continue; // 0.6 より低い草・花・小石は残す（動物は頭に重なれば消す）。横に長くても低い丸太・ベンチ・柵は、手前に来たら消す
     out.set(o, { o, ox: ctr.x - o.position.x, oz: ctr.z - o.position.z, y0: box.min.y, d: { r: Math.max(sz.x, sz.z) / 2, h: sz.y, tr: tree ? 0.6 : Math.max(sz.x, sz.z) / 2, clear: tree, leaf: o.userData.tree ? sz.y * 0.42 : 0 } });
   }
   return out;
@@ -399,17 +422,19 @@ function keepSpot() {
   if (Math.hypot(p.pos.x - S.spot.x, p.pos.z - S.spot.z) < 0.01) return;
   p.photo.home = { x: p.pos.x, z: p.pos.z };
   pickSpot(p);
+  if (S.pal) placePal();
   if (!S.moved) { aim(p, bestView(p)); faceCamera(); }
 }
 function choose(key) {
   const p = (T().people || []).find((q) => q.v.key === key);
-  if (S.who && S.who !== p) release(S.who);
+  if (S.who && S.who !== p) { dismissPal(); release(S.who); }
   S.who = p || null;
   const who = el.querySelector('.pm-who');
   if (!p) { who.textContent = ''; return; }
   if (S.props) for (const r of S.props.values()) setPropHidden(r, false);
   if (!p.photo) { p.photo = { yaw: 0, home: { x: p.pos.x, z: p.pos.z } }; pickSpot(p); }
   S.props = propList(p);
+  faceCamera(); applyPose();
   aim(p, bestView(p));
   faceCamera();
   S.moved = false; recheck(p);
@@ -452,7 +477,9 @@ function close() {
   for (const m of T().markers || []) m.visible = true;
   raiseTags(false);
   T().setHour(null);
+  stopRec(); dismissPal();
   if (S.who) { release(S.who); S.who = null; }
+  showMsg('');
   el.querySelector('.pm-who').textContent = '';
   T().controls.removeEventListener('change', faceCamera);
   T().controls.removeEventListener('start', onMoveStart);
@@ -462,6 +489,181 @@ function close() {
   const card = document.getElementById('card'); if (card) card.hidden = true; // 写真モードの間に町を押して開いたカードは出さない
   dispatchEvent(new Event('resize'));
   scrollTo(0, S.prevScroll || 0);
+}
+
+// ---------- ポーズ（「はい、チーズ」）----------
+// 選んだ人の p.photo.pose に入れると、町（town.js）が character.js の写真ポーズで動かす。t0 を空にすると、その時から数え直す（1 秒で決まる）
+const showMsg = (text) => { const m = el && el.querySelector('.pm-msg'); if (!m) return; m.textContent = text; m.hidden = !text; };
+function setPose(k) {
+  S.pose = k;
+  el.querySelectorAll('[data-pose]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.pose === k)));
+  applyPose();
+  if (S.on && S.who && S.who.photo && !S.moved) { aim(S.who, bestView(S.who)); faceCamera(); } // 2 人になったら 2 人が入るように
+}
+function applyPose() {
+  const p = S.who; if (!p || !p.photo) return;
+  showMsg('');
+  if (S.pose === 'pm_hug') summonPal(p); else dismissPal();
+  const R = S.palSide === -1 ? 'R' : '';
+  p.photo.pose = S.pose === 'wave' ? null : S.pose === 'pm_hug' ? (S.pal ? 'pm_hug' + R : 'pm_peace') : S.pose;
+  p.photo.t0 = null;
+  if (S.pal) { S.pal.photo.pose = 'pm_pal' + R; S.pal.photo.t0 = null; }
+}
+// 肩を組む相手：近くにいる起きている人から、仲のよい人（social.json）を優先して呼ぶ。選んだ人の横・少しうしろに立つ
+//   横の間とうしろへ下がる量（px）：選んだ人の腕を横へのばして、相手の肩の前にまわす（前から見て、手が相手の向こうの肩にのる）。
+//   相手の頭の前の面が腕のうしろの面より 0.5px 以上うしろになる所（2 頭身は頭が大きいので広め）。相手の内側の腕は選んだ人の肩のうしろにかくれる
+//   2 人の背たけ（scale）がちがう時も、相手の頭の半分の奥行き＋選んだ人の腕の太さの半分＋0.6px だけ下がる
+function palOffset(p, q) {
+  const sp = (p.ch.scale.x || 1) / 16, sq = (q.ch.scale.x || 1) / 16, cp = p.ch.userData.chibi, cq = q.ch.userData.chibi;
+  const back = (cq ? 6.8 : 4) * sq + (cp ? 2.4 : 2) * sp + 0.6 * sp;
+  return { side: (cp || cq ? 14.5 : 12) * Math.max(sp, sq), front: -back };
+}
+function palSpot(p, q, side) {
+  const o = palOffset(p, q), yaw = p.photo ? p.photo.yaw : p.ch.rotation.y; // 向き直る途中でも、向き終わった時の向きで決める。 左（キャラの +x）＝ (cos, -sin)・前＝ (sin, cos)
+  return { x: p.pos.x + side * o.side * Math.cos(yaw) + o.front * Math.sin(yaw), z: p.pos.z - side * o.side * Math.sin(yaw) + o.front * Math.cos(yaw) };
+}
+function summonPal(p) {
+  if (S.pal && S.pal.photo) return;
+  const t = T(), score = t.pairScore || (() => 0);
+  let best = null;
+  for (const q of t.people || []) {
+    if (q === p || !q.ch || q.photo || q.mode === 'sleep' || q.mode === 'gohome' || !q.ch.visible) continue;
+    const d = Math.hypot(q.pos.x - p.pos.x, q.pos.z - p.pos.z); if (d > 90) continue;
+    const sc = score(p.v.key, q.v.key) - d * 0.3;
+    if (!best || sc > best.sc) best = { q, sc };
+  }
+  if (!best) { showMsg('近くに呼べる人がいないので、ピースで撮ります'); return; }
+  const q = best.q, free = t.spotFree || (() => true);
+  p.ch.rotation.y = p.photo.yaw; // 向き直る途中でも、決まった向きで横を決める
+  const side = [1, -1].find((s) => { const a = palSpot(p, q, s); return free(a.x, a.z); });
+  if (!side) { showMsg('となりに立てる場所がないので、ピースで撮ります'); return; }
+  q.photo = { yaw: p.photo.yaw, home: { x: q.pos.x, z: q.pos.z }, pal: true };
+  S.pal = q; S.palSide = side;
+  placePal();
+}
+function placePal() {
+  const p = S.who, q = S.pal; if (!p || !q || !q.photo) return;
+  const a = palSpot(p, q, S.palSide);
+  q.pos.x = a.x; q.pos.z = a.z; q.ch.position.set(a.x, 0, a.z);
+  q.photo.yaw = p.photo.yaw; q.ch.rotation.y = p.ch.rotation.y = p.photo.yaw; // 2 人で同じ向き（回る途中のずれで腕が頭に入らないよう、すぐ向かせる）
+}
+function dismissPal() { if (S.pal) { release(S.pal); S.pal = null; } }
+
+// ---------- シャッター：「はい、チーズ！」→ 1 秒後にポーズが決まった所を撮る（動画はそこから撮り始める）----------
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+async function shutter() {
+  if (S.rec) { S.rec.stop(); return; } // 撮っている間に押すと、そこで止める
+  if (S.busy || !S.on) return;
+  if (S.mode === 'video' && !canRecord()) { showMsg(NO_VIDEO); return; }
+  S.busy = true; el.classList.add('pm-busy');
+  try {
+    if (S.who && S.who.photo) { S.who.photo.t0 = null; if (S.pal && S.pal.photo) S.pal.photo.t0 = null; }
+    const ch = el.querySelector('.pm-cheese'), fr = frameEl.getBoundingClientRect();
+    ch.style.top = Math.round(fr.top + fr.height * 0.12) + 'px'; // 枠の上のほう（顔にかぶらないように）
+    ch.hidden = false; ch.classList.remove('on'); void ch.offsetWidth; ch.classList.add('on');
+    await wait(1000);
+    ch.hidden = true;
+    if (S.on) await (S.mode === 'video' ? record() : shoot());
+  } finally { S.busy = false; el.classList.remove('pm-busy'); }
+}
+
+// ---------- 短い動画：枠の部分だけを canvas に写して、captureStream と MediaRecorder で撮る ----------
+const NO_VIDEO = 'この端末のブラウザでは動画を撮れません。iPhone は iOS 14.3 以降の Safari で撮れます。写真はこのまま撮れます。';
+const canRecord = () => typeof MediaRecorder === 'function' && typeof HTMLCanvasElement !== 'undefined' && typeof HTMLCanvasElement.prototype.captureStream === 'function';
+function pickMime() { // mp4 が使えれば mp4（iPhone・新しい Chrome）、だめなら webm
+  for (const m of ['video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) {
+    try { if (MediaRecorder.isTypeSupported(m)) return m; } catch (e) { /* 次へ */ }
+  }
+  return '';
+}
+function setMode(k) {
+  S.mode = k;
+  el.querySelectorAll('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === k)));
+  el.querySelector('.pm-vrow').hidden = k !== 'video';
+  el.querySelector('.pm-shutter').classList.toggle('vid', k === 'video');
+  el.querySelector('.pm-shutter').setAttribute('aria-label', k === 'video' ? '動画を撮る' : 'シャッター（写真を撮る）');
+  showMsg(k === 'video' && !canRecord() ? NO_VIDEO : '');
+  layout();
+}
+const easeIO = (k) => k * k * (3 - 2 * k);
+async function record() {
+  const t = T(), r = t.renderer, F = S.frame === 'story' ? { w: 720, h: 1280 } : { w: 720, h: 720 };
+  const cv = document.createElement('canvas'); cv.width = F.w; cv.height = F.h;
+  const g = cv.getContext('2d');
+  // 枠が 720px より小さい画面（パソコン）では、撮る間だけ細かく描く（自動で粗くする仕組みも止める）
+  const pr0 = r.getPixelRatio(), resOff = t.res ? t.res.off : true, fr0 = frameEl.getBoundingClientRect();
+  if (t.res) t.res.off = true;
+  const need = Math.min(3, Math.max(pr0, F.w / Math.max(1, fr0.width)));
+  if (need > pr0 + 0.01) r.setPixelRatio(need);
+  const mime = pickMime();
+  let rec;
+  try { rec = new MediaRecorder(cv.captureStream(30), { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: 8e6 }); }
+  catch (e) { if (t.res) t.res.off = resOff; r.setPixelRatio(pr0); showMsg(NO_VIDEO); return null; }
+  const chunks = [];
+  rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  const v0 = S.view, dur = S.secs * 1000, sweep = S.secs > 5 ? 1.2 : 0.7, p = S.who;
+  // 回る向き：うしろに写る人が少ない方へ（人だかりへ回り込むと、遠くの人と札で背景がごちゃごちゃする）
+  const crowd = (a) => (t.people || []).filter((q) => {
+    if (!p || q === p || q === S.pal || !q.ch || !q.ch.visible) return false;
+    const dx = q.pos.x - p.pos.x, dz = q.pos.z - p.pos.z, d = Math.hypot(dx, dz);
+    return d > 1 && d < 60 && -(dx * Math.sin(a) + dz * Math.cos(a)) / d > Math.cos(0.6);
+  }).length;
+  const dir = v0 && p ? [1, -1].map((sg) => ({ sg, n: crowd(v0.az + sg * sweep * 0.5) + crowd(v0.az + sg * sweep) })).sort((a, b) => a.n - b.n)[0].sg : 1;
+  const recEl = el.querySelector('.pm-rec'), recT = el.querySelector('.pm-rec-t');
+  let start = 0;
+  const done = new Promise((res) => { rec.onstop = res; });
+  S.rec = { stop: () => { if (rec.state !== 'inactive') rec.stop(); } };
+  t.beforeRender = () => { // カメラをゆっくり回り込ませる（その人を見たまま、横へ）。前を横切る物は毎コマ消す
+    if (!start) return;
+    const u = Math.min(1, (performance.now() - start) / dur);
+    if (S.orbit && p && p.photo && v0) aim(p, { ...v0, az: v0.az + dir * sweep * easeIO(u) });
+    if (S.pal) placePal();
+    clearFront();
+  };
+  t.afterRender = () => { // 描いた直後に、枠の部分を写し取って、名札と入れ文字をのせる
+    const sr = t.stage.getBoundingClientRect(), fr = frameEl.getBoundingClientRect(), pr = r.getPixelRatio();
+    g.drawImage(r.domElement, (fr.left - sr.left) * pr, (fr.top - sr.top) * pr, fr.width * pr, fr.height * pr, 0, 0, F.w, F.h);
+    if (S.tags) drawTags(g, fr, F.w / fr.width, true); // 動画は選んだ人（と肩を組む相手）の札だけ。回る間に遠くの人の札が出たり消えたりしないように
+    drawMark(g, F.w, F.h);
+    if (!start) { start = performance.now(); rec.start(250); }
+    const left = Math.max(0, Math.ceil((dur - (performance.now() - start)) / 1000));
+    recT.textContent = `録画中 ${left}`;
+    if (performance.now() - start >= dur + 250) S.rec.stop(); // 最後のひと区切りが短く切れて 5 秒より短くならないよう、少しだけ長く
+  };
+  recEl.hidden = false; el.classList.add('pm-recording');
+  await done;
+  t.beforeRender = null; t.afterRender = null; S.rec = null;
+  recEl.hidden = true; el.classList.remove('pm-recording');
+  r.setPixelRatio(pr0); if (t.res) t.res.off = resOff;
+  if (v0 && p === S.who && S.on) { aim(p, v0); faceCamera(); } // 回り込む前の構図へ
+  const type = (mime || 'video/webm').split(';')[0], blob = new Blob(chunks, { type });
+  if (!blob.size) { showMsg('動画を作れませんでした。もう一度ためしてください'); return null; }
+  showResult(blob, type === 'video/mp4' ? 'mp4' : 'webm');
+  return blob;
+}
+
+// ---------- 共有の文：ハッシュタグ（config の photo.tags）と島の URL ----------
+function shareText() {
+  const cfg = T().config || {}, ph = cfg.photo || {};
+  const tags = (ph.tags && ph.tags.length ? ph.tags : ['はじまり島', 'はじまり島フォト']).map((x) => '#' + String(x).replace(/^#/, '')).join(' ');
+  const url = ph.url || location.origin + location.pathname;
+  return `${tags}\n${url}`;
+}
+function showTagbox() {
+  const box = el.querySelector('.pm-tagbox'); if (!box) return;
+  const ph = (T().config || {}).photo || {}, tag = String(ph.featureTag || (ph.tags || [])[1] || 'はじまり島フォト').replace(/^#/, '');
+  box.querySelector('.pm-tagnote').textContent = `#${tag} で投稿すると、島で紹介されるかも`;
+  box.hidden = false;
+}
+async function copyText() {
+  const b = el.querySelector('.pm-copy'), text = shareText();
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.append(ta); ta.select(); try { ok = document.execCommand('copy'); } catch (e2) { ok = false; } ta.remove();
+  }
+  b.querySelector('span').textContent = ok ? 'コピーしました' : 'コピーできませんでした';
+  setTimeout(() => { b.querySelector('span').textContent = '文をコピー'; }, 1800);
 }
 
 // 名札：画面に出ている札（CSS2D）を、写真の上に同じ見た目で描く
@@ -475,7 +677,7 @@ function headHidden(q) {
     const m = h.object.material; return !h.object.isSprite && !(m && (m.depthWrite === false || (m.transparent && m.opacity < 0.5)));
   });
 }
-function drawTags(g, fr, k) {
+function drawTags(g, fr, k, mainOnly = false) {
   const root = T().labels && T().labels.domElement; if (!root) return;
   const owner = new Map((T().people || []).filter((q) => q.label && q.ch).map((q) => [q.label, q]));
   for (const tag of root.querySelectorAll('.nametag')) {
@@ -483,7 +685,8 @@ function drawTags(g, fr, k) {
     if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0 || +(tag.parentElement && getComputedStyle(tag.parentElement).opacity) === 0) continue;
     const r = tag.getBoundingClientRect();
     if (!r.width || r.left < fr.left - 1 || r.right > fr.right + 1 || r.top < fr.top - 1 || r.bottom > fr.bottom + 1) continue; // 枠からはみ出す札は、切れて写るので出さない
-    const q = owner.get(tag); if (q && q !== S.who && headHidden(q)) continue;
+    const q = owner.get(tag); if (mainOnly && (!q || (q !== S.who && q !== S.pal))) continue;
+    if (q && q !== S.who && headHidden(q)) continue;
     const x = (r.left - fr.left) * k, y = (r.top - fr.top) * k, w = r.width * k, h = r.height * k;
     g.globalAlpha = +cs.opacity || 1;
     g.fillStyle = cs.backgroundColor;
@@ -520,6 +723,7 @@ function drawMark(g, W, H) {
 function render(F) {
   clearFront(); // 撮る直前の並びで、前を横切る人を外す
   faceCamera(); if (S.who && S.who.photo) S.who.ch.rotation.y = S.who.photo.yaw; // 向き直る途中でも、写真ではこちらを向いた姿にする
+  if (S.pal) placePal(); // 肩を組む相手も同じ向き・となりに
   const t = T(), r = t.renderer, cam = t.camera;
   const sr = t.stage.getBoundingClientRect(), fr = frameEl.getBoundingClientRect();
   const pr = r.getPixelRatio();
@@ -543,30 +747,45 @@ async function shoot() {
   const fl = el.querySelector('.pm-flash'); fl.classList.remove('on'); void fl.offsetWidth; fl.classList.add('on');
   const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.92));
   if (!blob) return null;
+  showResult(blob, 'jpg');
+  return blob;
+}
+function stopRec() { if (S.rec) S.rec.stop(); }
+// 撮れた写真・動画を見せて、保存と共有を用意する（ext：jpg・mp4・webm）
+function showResult(blob, ext) {
+  const vid = ext !== 'jpg', type = blob.type || (vid ? 'video/' + ext : 'image/jpeg');
   S.blob = blob;
   if (S.url) URL.revokeObjectURL(S.url);
   S.url = URL.createObjectURL(blob);
   const d = new Date(), z = (n) => String(n).padStart(2, '0');
-  const fname = `hajimari-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}.jpg`;
-  S.file = typeof File === 'function' ? new File([blob], fname, { type: 'image/jpeg' }) : null;
-  const res = el.querySelector('.pm-result');
-  res.querySelector('.pm-img').src = S.url;
-  res.querySelector('.pm-img').classList.toggle('sq', S.frame === 'square');
+  const fname = `hajimari-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}.${ext}`;
+  S.file = typeof File === 'function' ? new File([blob], fname, { type }) : null;
+  const res = el.querySelector('.pm-result'), img = res.querySelector('.pm-img'), v = res.querySelector('.pm-vid');
+  img.hidden = vid; v.hidden = !vid;
+  if (vid) { img.removeAttribute('src'); v.src = S.url; v.classList.toggle('sq', S.frame === 'square'); v.play().catch(() => {}); }
+  else { v.pause(); v.removeAttribute('src'); v.load(); img.src = S.url; img.classList.toggle('sq', S.frame === 'square'); }
+  res.querySelector('.pm-res-t').textContent = vid ? `動画が撮れました（${S.secs}秒）` : '撮れました';
   const save = res.querySelector('.pm-save'); save.href = S.url; save.download = fname;
-  const canShare = !!(S.file && navigator.canShare && navigator.share && navigator.canShare({ files: [S.file] }));
+  let canShare = false;
+  try { canShare = !!(S.file && navigator.canShare && navigator.share && navigator.canShare({ files: [S.file] })); } catch (e) { canShare = false; }
   res.querySelector('.pm-share').hidden = !canShare;
-  res.querySelector('.pm-res-note').textContent = canShare ? '「共有」からインスタのストーリーに送れます。' : '「保存」で画像を保存して、インスタのストーリーで選んでください。';
+  res.querySelector('.pm-res-note').textContent = canShare
+    ? `「共有」からインスタのストーリーなどに送れます。`
+    : `「保存」で${vid ? '動画' : '画像'}を保存して、インスタのストーリーなどで選んでください。`;
+  res.querySelector('.pm-tagbox').hidden = true;
   res.hidden = false;
   res.focus({ preventScroll: true });
-  return blob;
 }
 async function share() {
   if (!S.file) return;
-  try { await navigator.share({ files: [S.file], title: (T().config || {}).title || 'はじまり島' }); } catch (e) { /* やめた時は何もしない */ }
+  const title = (T().config || {}).title || 'はじまり島';
+  try { await navigator.share({ files: [S.file], text: shareText(), title }); showTagbox(); }
+  catch (e) { if (e && e.name !== 'AbortError') { try { await navigator.share({ files: [S.file], title }); showTagbox(); } catch (e2) { /* やめた時は何もしない */ } } }
 }
 function closeResult() {
   if (!el) return;
   el.querySelector('.pm-result').hidden = true;
+  const v = el.querySelector('.pm-vid'); if (v) v.pause();
   if (S.on) el.focus({ preventScroll: true });
 }
 
@@ -589,7 +808,7 @@ function setup() {
   const b = document.getElementById('photobtn');
   if (b) b.addEventListener('click', () => open());
   watchCard();
-  window.TOWN_PHOTO = { open, close, shoot, state: S, choose: (k) => choose(k), dbg: { bestView, viewBlocked, openness, nearMeshes, viewDist } }; // 確かめ用
+  window.TOWN_PHOTO = { open, close, shoot, shutter, setPose, setMode, state: S, choose: (k) => choose(k), dbg: { bestView, viewBlocked, openness, nearMeshes, viewDist } }; // 確かめ用
   if (new URLSearchParams(location.search).get('photo') === '1') open();
 }
 if (typeof document !== 'undefined') {
