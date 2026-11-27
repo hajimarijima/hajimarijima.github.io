@@ -446,5 +446,24 @@
   "hidden": false,
   "display": "kou6.15",
   "joinedAt": "12:19"
+ },
+ {
+  "key": "f513f79825",
+  "igId": "5f9ec00958d0bda9",
+  "name": "rino._.15",
+  "userHash": "5c3f8e98c155c295",
+  "skin": 108,
+  "joined": "2026-11-27",
+  "joinedDay": 0,
+  "source": "comment",
+  "startTool": "hoe",
+  "birthday": "04-28",
+  "profile": {
+   "food": "にんじん"
+  },
+  "skinBody": "female",
+  "hidden": false,
+  "display": "rino._.15",
+  "joinedAt": "14:02"
  }
 ]
