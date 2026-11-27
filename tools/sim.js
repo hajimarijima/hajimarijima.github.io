@@ -95,6 +95,12 @@ function stepDay(S) {
   const R = makeRng(state.seed + ':day:' + day);
   const hist = (type, text, extra) => history.push({ day, date, type, text, ...(extra || {}) });
   const B = (t) => config.buildings[t];
+  // 魚ごとの釣った数（L.fishedBy）を数え始める前に釣った分：持っている魚から入れる（釣った数 fished と同じだけ持っている時だけ。食べた・売ったあとは分からないので 0 から）
+  for (const L of Object.values(life)) {
+    if (!L || L.fishedBy || !L.fished) continue;
+    const by = Object.fromEntries(Object.entries(L.items || {}).filter(([k, n]) => k.startsWith('fish_') && n > 0));
+    L.fishedBy = Object.values(by).reduce((s, n) => s + n, 0) === L.fished ? by : {};
+  }
   // 前の形のデータ（フォロワーの節目で投票・建てる順番の列）から、毎回投票で決める形へ
   if (!Array.isArray(state.votes)) state.votes = [];
   if (!state.pool) state.pool = config.firstChoices.concat(config.choicePool);

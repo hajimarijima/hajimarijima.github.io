@@ -403,8 +403,11 @@ function renderBadges(L, config, after, v) {
   after.after(p);
   if (box.children.length) p.after(box);
   // 熟練度ごとの進み具合（見張り番・木こり・石掘り…）。いまの数と、次の段までのバー。魚ごとは たたんでおく
+  // 魚ごとの数（fishedBy）がまだ無い人：毎日の更新で入るまでは、持っている魚の数で見せる（釣った数と同じだけ持っている時。tools/sim.js と同じ決まり）
+  const fishSum = Object.entries(L.items || {}).filter(([k]) => k.startsWith('fish_')).reduce((s, [, n]) => s + (n || 0), 0);
+  const L2 = !L.fishedBy && L.fished && fishSum === L.fished ? { ...L, fishedBy: L.items } : L;
   const row = (id, B) => {
-    const n = badgeCount(L, B.stat), unit = B.unit || ' 個', t = got[id] ?? -1, last = t >= B.tiers.length - 1;
+    const n = badgeCount(L2, B.stat), unit = B.unit || ' 個', t = got[id] ?? -1, last = t >= B.tiers.length - 1;
     const lo = t < 0 ? 0 : B.tiers[t], hi = last ? B.tiers[B.tiers.length - 1] : B.tiers[t + 1];
     const r = last ? 1 : Math.max(0, Math.min(1, (n - lo) / Math.max(1, hi - lo)));
     const goal = last ? `${BG.tierNames[t]}（いちばん上）` : `次の${BG.tierNames[t + 1]}まで あと ${hi - n}${unit}`;
