@@ -219,15 +219,19 @@ function makeTool(kind0) {
     g.add(box(0.13, 0.13, 0.26, toolMats.ironDark, 0, 0.47, 0.02));
     g.add(box(0.135, 0.135, 0.04, toolMats.ironTip, 0, 0.47, 0.16));
   } else if (kind === 'can') {
-    // じょうろ：手で持つ取っ手の下に、ブリキの胴と、前へのびる細い口（先 userData.spout から水が出る）
+    // じょうろ：持つ所（原点）は上の取っ手。その下にブリキの胴が立ち、胴の前の上から細い口が前下へのびる（先 userData.spout から水が出る）
+    //   形は「立てた向き」で作る（+y が上・+z が口の向き）。手に持たせる向きは holdCan で毎コマ合わせる（腕の角度によらず胴が立つ）
     const tin = toolMats.ironDark || head, tinL = toolMats.ironTip || light;
-    g.add(box(0.06, 0.06, 0.2, tin, 0, 0.02, 0.1)); // 取っ手
-    g.add(box(0.26, 0.24, 0.3, tin, 0, -0.14, 0.12)); // 胴
-    g.add(box(0.27, 0.04, 0.31, tinL, 0, -0.03, 0.12)); // 上のふち（明るい）
-    g.add(box(0.27, 0.03, 0.31, tinL, 0, -0.25, 0.12)); // 下のふち
-    g.add(box(0.06, 0.06, 0.26, tin, 0, -0.1, 0.38)); // 口
-    g.add(box(0.1, 0.1, 0.05, tinL, 0, -0.1, 0.52)); // はす口
-    const sp = new THREE.Object3D(); sp.position.set(0, -0.1, 0.56); g.add(sp); g.userData.spout = sp;
+    const can = new THREE.Group(); g.add(can); g.userData.can = can;
+    can.add(box(0.05, 0.05, 0.24, tin, 0, 0, 0)); // 取っ手（横棒）
+    for (const z of [-0.1, 0.1]) can.add(box(0.05, 0.08, 0.05, tin, 0, -0.05, z)); // 取っ手の足
+    can.add(box(0.26, 0.24, 0.3, tin, 0, -0.21, 0)); // 胴
+    can.add(box(0.27, 0.03, 0.31, tinL, 0, -0.095, 0)); // 上のふち（明るい）
+    can.add(box(0.27, 0.03, 0.31, tinL, 0, -0.33, 0)); // 下のふち
+    const A = 0.3, dy = -Math.sin(A), dz = Math.cos(A), L = 0.32, s0 = { y: -0.15, z: 0.15 }; // 口：胴の前の上から前へ。先だけ少し下がる（約 17 度）
+    const spout = box(0.055, 0.055, L, tin, 0, s0.y + dy * L / 2, s0.z + dz * L / 2); spout.rotation.x = A; can.add(spout);
+    const rose = box(0.1, 0.1, 0.045, tinL, 0, s0.y + dy * (L + 0.02), s0.z + dz * (L + 0.02)); rose.rotation.x = A; can.add(rose); // はす口
+    const sp = new THREE.Object3D(); sp.position.set(0, s0.y + dy * (L + 0.06), s0.z + dz * (L + 0.06)); can.add(sp); g.userData.spout = sp;
   } else if (kind === 'basket') {
     g.add(box(0.28, 0.18, 0.22, toolMats.basket, 0, -0.05, 0.12));
     g.add(box(0.08, 0.06, 0.08, toolMats.berry, 0.05, 0.06, 0.1));
@@ -316,7 +320,18 @@ export function setTool(ch, kind) {
   if (P.toolKind === kind) return;
   if (P.tool) P.hand.remove(P.tool);
   P.tool = kind ? makeTool(kind) : null; P.toolKind = kind;
-  if (P.tool) { P.tool.rotation.x = Math.PI / 2; P.hand.add(P.tool); }
+  if (P.tool) { P.tool.rotation.x = kind === 'can' ? 0 : Math.PI / 2; P.hand.add(P.tool); } // じょうろは腕を下ろした時に胴が立つ向き（水をまく間は holdCan）
+}
+// じょうろを自然に持たせる：取っ手が上・胴はほぼ水平・口は yaw（世界の向き。+z が 0。ふつうは村人の正面）の方へ、先だけ少し下がる。
+//   手の向き（腕の角度）を打ち消して、世界で見た向きを決める。animate と腕の調整のあと、毎コマ呼ぶ
+const _hq = new THREE.Quaternion(), _wq = new THREE.Quaternion(), _qy = new THREE.Quaternion(), _qx = new THREE.Quaternion();
+const _UY = new THREE.Vector3(0, 1, 0), _UX = new THREE.Vector3(1, 0, 0);
+export function holdCan(ch, yaw, tilt = 0.06) {
+  const P = ch.userData.parts, t = P && P.tool;
+  if (!t || P.toolKind !== 'can') return;
+  P.hand.getWorldQuaternion(_hq);
+  _wq.multiplyQuaternions(_qy.setFromAxisAngle(_UY, yaw), _qx.setFromAxisAngle(_UX, tilt)); // tilt：前へ少しかたむける
+  t.quaternion.copy(_hq.invert().multiply(_wq));
 }
 // 好きな色を服の差し色に（スカーフと帯）
 export function setAccent(ch, color) {
@@ -492,6 +507,7 @@ export function animate(ch, pose, t, phase = null) {
   P.head.position.z = 0; P.torso.position.z = 0; P.rarm.position.z = 0; P.larm.position.z = 0; P.torso.rotation.set(0, 0, 0); // お辞儀で前へ出した・倒した分をもどす
   for (const k of ['rarm', 'larm', 'rleg', 'lleg']) P[k].rotation.set(0, 0, 0);
   if (P.chips) P.chips.visible = false;
+  if (P.vsign) for (const v of P.vsign) v.visible = false;
   if (P.tool) P.tool.rotation.x = Math.PI / 2;
   if (P.hand) { P.hand.rotation.set(0, 0, 0); P.hand.position.x = 0; }
   if (P.fish && pose !== 'showfish') { P.fish.visible = false; if (P.tool) P.tool.visible = true; }
@@ -611,6 +627,8 @@ export function animate(ch, pose, t, phase = null) {
       P.head.rotation.y = Math.sin(t * 0.7 + seed) * 0.1;
     } else if (pose === 'bow' || pose === 'nod' || pose === 'wave') {
       greetPose(ch, P, pose, phase ?? 0, t); // あいさつ（phase：0..1 の 1 回分）
+    } else if (pose.startsWith('pm_')) {
+      photoPose(ch, P, pose, phase ?? 1, t); // 写真モードのポーズ（phase：ポーズを始めてからの秒）
     } else if (u < 0.22) {
       // 首を回して周りを見る
       const k = u / 0.22;
@@ -627,7 +645,7 @@ export function animate(ch, pose, t, phase = null) {
     }
   }
   // 2 頭身は頭が重く大きいので、体の前かがみと首の傾きを小さくする（大きく傾けると頭が地面に付いて見える）
-  if (ch.userData.chibi && pose !== 'lie' && pose !== 'sit') {
+  if (ch.userData.chibi && pose !== 'lie' && pose !== 'sit' && pose !== 'pm_sit' && pose !== 'pm_jump') {
     P.body.rotation.x *= 0.35; P.head.rotation.x *= 0.5; P.body.position.y *= 0.5;
     // 道具を持って立つ・歩く時は、腕を前に出して体の前で持つ（大きな頭のかげや体の後ろに隠れないように）
     if (P.tool && (pose === 'idle' || pose === 'walk' || pose === 'talk') && P.toolKind !== 'basket') {
@@ -689,6 +707,89 @@ function greetPose(ch, P, pose, u, t) {
   // 腕は胴にそわせる（気をつけの形のまま体といっしょに倒す）。真下へたらすと横から胴がかくれて、折れて見える
   P.rarm.rotation.x -= th * 0.12; P.larm.rotation.x -= th * 0.12;
   P.rarm.rotation.z = -0.06; P.larm.rotation.z = 0.06;
+}
+// ---------- 写真モードのポーズ（js/photomode.js の「はい、チーズ」）----------
+// e：ポーズを始めてからの秒。0.7 秒かけてポーズに入り、1 秒で決まる（その時に撮る）。
+// 腕は肩の角を軸に回る 4×12×4px の箱（2 頭身は太く短い）。頭（8px、2 頭身は 13.6px）や胴へめり込まないよう、上げる腕は外へ開き、
+// 前へ出す腕は肩ごと少し前・外へずらす（数値はポーズごとに 2 種類の体型で、腕の箱が頭・胴の箱に入らないことを確かめた値）
+// 指（ピース）：手の先に 2 本の小さな箱。色は腕の下の面（手のひら）の色をスキンから取る
+function skinOfHand(arm) {
+  const m = arm.children[0] && arm.children[0].material, img = m && m.map && m.map.image;
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 1;
+    const g = c.getContext('2d'), w = img.width || 64, h = img.height || 64;
+    g.drawImage(img, Math.floor(w * 49 / 64), Math.floor(h * 17 / 64), 1, 1, 0, 0, 1, 1); // 右腕の下の面（手の先）
+    const [r, gg, b, a] = g.getImageData(0, 0, 1, 1).data;
+    if (a > 100) return (r << 16) | (gg << 8) | b;
+  } catch (e) { /* 読めない時は肌色 */ }
+  return 0xe7b98e;
+}
+function vSign(P, arm) {
+  if (!P.vsign) P.vsign = [];
+  let v = arm.userData.vsign;
+  if (!v) {
+    v = new THREE.Group(); v.position.y = -12 * PX;
+    const mat = new THREE.MeshLambertMaterial({ color: skinOfHand(P.rarm) });
+    for (const s of [-1, 1]) {
+      const f = new THREE.Mesh(new THREE.BoxGeometry(1.1 * PX, 3.6 * PX, 1.1 * PX), mat);
+      f.position.set(s * 0.95 * PX, -1.6 * PX, 0.3 * PX); f.rotation.z = s * 0.22; f.castShadow = true; v.add(f);
+    }
+    arm.add(v); arm.userData.vsign = v; P.vsign.push(v);
+  }
+  v.visible = true;
+}
+// 腕を上げる：side 1＝右腕（-x）・-1＝左腕。up：前へ回す量（-2.95 でほぼ真上）、out：外へ開く量。肩の軸を下げて、根元が胴の横につながって見えるようにする
+function liftArm(P, arm, side, k, up, out, drop) {
+  arm.position.y -= drop * PX * arm.scale.y * k;
+  arm.rotation.set(up * k, 0, -side * out * k);
+}
+function photoPose(ch, P, pose, e, t) {
+  const C = ch.userData.chibi, k = easeIO(Math.min(1, Math.max(0, e / 0.7)));
+  const mirror = pose.endsWith('R'), base = mirror ? pose.slice(0, -1) : pose;
+  P.head.rotation.y = 0;
+  // ピース：片手を頭の横の斜め上へ（頭から離して外へ開く）。指を 2 本立てる
+  const peace = (arm, side) => { liftArm(P, arm, side, k, -2.55, C ? 1.05 : 0.5, 2.5); if (k > 0.6) vSign(P, arm); };
+  if (base === 'pm_peace') {
+    peace(P.rarm, 1); P.larm.rotation.set(0, 0, 0.07 * k);
+    P.head.rotation.z = -0.1 * k;
+  } else if (base === 'pm_banzai' || base === 'pm_jump') {
+    let air = 0;
+    if (base === 'pm_jump' && e > 0.7) { // 1.3 秒ごとに跳ぶ。e＝1 秒でいちばん高い所
+      let d = (((e - 1) % 1.3) + 1.3) % 1.3; if (d > 0.65) d -= 1.3;
+      air = Math.abs(d) < 0.32 ? 1 - (d / 0.32) ** 2 : 0;
+      P.body.position.y = 0.6 * air;
+      P.rleg.rotation.x = -0.3 * air; P.lleg.rotation.x = 0.22 * air;
+    }
+    const a = base === 'pm_jump' ? k * (0.55 + 0.45 * air) : k;
+    liftArm(P, P.rarm, 1, a, -2.9, C ? 1.0 : 0.34, 3.5); liftArm(P, P.larm, -1, a, -2.9, C ? 1.0 : 0.34, 3.5);
+    P.head.rotation.x = -0.12 * k;
+  } else if (base === 'pm_bow') {
+    greetPose(ch, P, 'bow', 0.32 * k, t);
+  } else if (base === 'pm_cross') {
+    // 腕組み：両腕を前へ上げて内へ寄せ、体の前で重ねる。右腕は少し上・左腕は少し前（重なって見える）。肩ごと前・外へずらして胴に入らないように
+    const zin = C ? 0.62 : 0.6;
+    P.rarm.position.z += (C ? 2.4 : 2.2) * PX * k; P.rarm.position.x -= (C ? 0.6 : 0.5) * PX * k;
+    P.larm.position.z += (C ? 3.4 : 3.2) * PX * k; P.larm.position.x += (C ? 0.6 : 0.5) * PX * k;
+    P.rarm.rotation.set(-1.35 * k, 0, zin * k); P.larm.rotation.set(-1.12 * k, 0, -zin * k);
+    P.head.rotation.x = -0.04 * k; P.head.rotation.z = 0.05 * k;
+  } else if (base === 'pm_sit') {
+    // 地面に座る：脚を前へ出して、手はひざの横。背すじはのばして前を向く
+    const hipY = P.rleg.position.y;
+    P.body.position.y = (-hipY + 1.5 * PX) * k;
+    P.rleg.rotation.set(-1.45 * k, 0, -0.08 * k); P.lleg.rotation.set(-1.45 * k, 0, 0.08 * k);
+    P.rarm.rotation.set(-0.55 * k, 0, -0.1 * k); P.larm.rotation.set(-0.55 * k, 0, 0.1 * k);
+    P.head.rotation.z = 0.07 * k;
+  } else if (base === 'pm_hug') {
+    // 2 人で肩を組む（呼んだ相手は横・少し前に立つ）：内側の腕を横へのばして相手の肩のうしろにまわし、外の手でピース
+    const inner = mirror ? P.rarm : P.larm, side = mirror ? 1 : -1;
+    inner.rotation.set(0, 0, -side * 1.45 * k);
+    peace(mirror ? P.larm : P.rarm, -side);
+    P.head.rotation.z = 0.1 * k * -side;
+  } else if (base === 'pm_pal') {
+    // 肩を組まれる側：外の手でピース、内側の手は下ろしたまま
+    peace(mirror ? P.rarm : P.larm, mirror ? 1 : -1);
+    P.head.rotation.z = 0.1 * k * (mirror ? -1 : 1);
+  }
 }
 // ---------- 釣った魚を持ち上げて見せる（pose 'showfish'。ch.userData.showFish = { cm, key }） ----------
 // 魚の模型は長さ 1 の箱の組み合わせ（頭が +x）。大きさは cm で決める（村人の背 2（=32px）を約 170cm として、1cm ≒ 0.19px）。

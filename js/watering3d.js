@@ -2,12 +2,13 @@
 //   じょうろを持って畑の列のわきを行ったり来たりし、口から水のしずくが落ちる。水をかけた畑の土は濃い色になる。
 //   町の本体（town.js）は updatePerson の始めに window.TOWN.waterStep を呼ぶ。true を返すと、その人は町の本体では動かさない。
 import * as THREE from 'three';
-import { animate } from './character.js';
+import { animate, holdCan } from './character.js';
 import { decodeHours } from './hours.js';
 
 const T = () => window.TOWN || {};
 const SPEED = 1.1; // 水をまきながら、ゆっくり歩く
 const SIDE = 0.95; // 畑のふち（作物の外）から通り道までの間
+const _hp = new THREE.Vector3();
 
 // ---------- 畑の土を濃い色に ----------
 const DARK = new Map([[0x7a5636, 0x5e3f24], [0x5f412a, 0x4a3019], [0x8c6644, 0x6e4a2c]]);
@@ -132,37 +133,45 @@ function waterStep(p, dt, time) {
     if (p.lod === 'full') animate(p.ch, 'walk', time, null);
     return true;
   }
-  // ふちにそって行ったり来たり。進む向きを向いてから歩く（横歩き・後ろ歩きはしない）
-  const to = w.leg === 1 ? w.sd.b : w.sd.a;
-  const dx = to.x - p.pos.x, dz = to.z - p.pos.z, d = Math.hypot(dx, dz);
-  const want = Math.atan2(dx, dz);
-  const left = W.turnTo(p.ch, want, dt);
-  if (d < 0.06) { w.leg = -w.leg; pose = 'idle'; }
-  else if (Math.abs(left || 0) < 0.15) { const st = Math.min(d, SPEED * dt); p.pos.x += dx / d * st; p.pos.z += dz / d * st; }
-  else pose = 'idle';
+  // ふちにそって 3 か所で止まり、畑の方を向いて正面へ水をまく → 次の所へ（進む向きを向いてから歩く。横歩き・後ろ歩きはしない）
+  const mx = (w.sd.a.x + w.sd.b.x) / 2, mz = (w.sd.a.z + w.sd.b.z) / 2, tw = w.sd.toward;
+  const faceYaw = Math.atan2(tw.x - mx, tw.z - mz); // 畑の方（ふちに直角）
+  if (w.si === undefined) { w.si = 0; w.dirS = 1; w.phase = 'face'; w.t = 0; }
+  const stop = (i) => ({ x: w.sd.a.x + (w.sd.b.x - w.sd.a.x) * i / 2, z: w.sd.a.z + (w.sd.b.z - w.sd.a.z) * i / 2 });
+  let pour = false;
+  if (w.phase === 'walk') {
+    const to = stop(w.si), dx = to.x - p.pos.x, dz = to.z - p.pos.z, d = Math.hypot(dx, dz);
+    if (d < 0.05) { w.phase = 'face'; pose = 'idle'; }
+    else { const left = W.turnTo(p.ch, Math.atan2(dx, dz), dt); if (left < 0.15) { const st = Math.min(d, SPEED * dt); p.pos.x += dx / d * st; p.pos.z += dz / d * st; } else pose = 'idle'; }
+  } else if (w.phase === 'face') {
+    pose = 'idle';
+    if (W.turnTo(p.ch, faceYaw, dt) < 0.04) { w.phase = 'pour'; w.t = 0; }
+  } else { // pour：正面の畑へ水をまく
+    pose = 'idle'; pour = true; W.turnTo(p.ch, faceYaw, dt);
+    w.t += dt;
+    if (w.t > 3.2) { if (w.si + w.dirS > 2 || w.si + w.dirS < 0) w.dirS = -w.dirS; w.si += w.dirS; w.phase = 'walk'; }
+  }
+  w.pour = pour;
   p.ch.position.set(p.pos.x, 0, p.pos.z);
   if (p.lod === 'full') {
     animate(p.ch, pose, time, null);
-    // 右手のじょうろを畑の方へ出して、口を下へかたむける
     const P = p.ch.userData.parts;
     if (P) {
-      const toward = w.sd.toward, yaw = p.ch.rotation.y;
-      const side = Math.sin(Math.atan2(toward.x - p.pos.x, toward.z - p.pos.z) - yaw) >= 0 ? -1 : 1; // 畑が右手側なら右へ出す
-      P.rarm.rotation.set(-0.95, 0, side > 0 ? 0.55 : -0.25); // キャラの右手は -x。畑が右手側なら外へ開き、左手側なら体の前へ
-      if (P.tool) P.tool.rotation.set(Math.PI / 2 + 0.55, 0, 0); // 口を下へ
+      // じょうろは右手で前へ出して持つ。口は村人の正面（顔と同じ向き）、胴はほぼ水平で口の先だけ少し下がる
+      if (pour) { P.rarm.rotation.set(-1.15 + Math.sin(time * 1.6) * 0.04, 0, 0); holdCan(p.ch, p.ch.rotation.y); }
+      else holdCan(p.ch, p.ch.rotation.y, 0); // 歩く間は下げて持つ（胴は水平のまま、口は前）
     }
   }
-  // しずく：じょうろの口から
+  // しずく：じょうろの口から、正面の畑へ（水をまいている間だけ）
   const P = p.ch.userData.parts, sp = P && P.tool && P.tool.userData.spout;
-  if (sp && p.lod === 'full') {
+  if (sp && p.lod === 'full' && pour) {
     ensureDrops();
     w.dropT = (w.dropT || 0) + dt;
-    const tw = w.sd.toward, mx = (w.sd.a.x + w.sd.b.x) / 2, mz = (w.sd.a.z + w.sd.b.z) / 2, dl = Math.hypot(tw.x - mx, tw.z - mz) || 1;
-    const dir = { x: (tw.x - mx) / dl, z: (tw.z - mz) / dl }; // 通り道から畑の中へ（ふちに直角）
+    const dir = { x: Math.sin(p.ch.rotation.y), z: Math.cos(p.ch.rotation.y) };
     while (w.dropT > 0.04) { w.dropT -= 0.04; const at = new THREE.Vector3(); sp.getWorldPosition(at); spawnDrop(at, Math.floor(time * 1000) + (w.n = (w.n || 0) + 1), dir); }
   }
   // 水をかけるほど、その畑の土が濃くなる（20 秒ほどで濃くなりきる）
-  if (!wetDone.has(fo.id)) { w.wet = Math.min(1, w.wet + dt / 20); wetField(fo, w.wet); if (w.wet >= 1) wetDone.add(fo.id); }
+  if (pour && !wetDone.has(fo.id)) { w.wet = Math.min(1, w.wet + dt / 12); wetField(fo, w.wet); if (w.wet >= 1) wetDone.add(fo.id); }
   return true;
 }
 

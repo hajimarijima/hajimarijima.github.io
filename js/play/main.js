@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { nav, esc, showError, load } from '../common.js';
 import { icon } from '../icons.js';
-import { setTool } from '../character.js';
+import { setTool, holdCan } from '../character.js';
 import { whoami, atName, faceEl, withDemo } from '../mine.js';
 import { buildScene, tickScene, fadeLeaves, WATER_Y, setWet } from './scene.js';
 import { makeHero, reachOf, place, walkTo, tickHero, faceTo, rodTip } from './hero.js';
@@ -278,11 +278,11 @@ async function main() {
       // じょうろを持つ右手を畑の上へ前に出し、口を前下へ向ける（「水やり」の形は両手を少し出すだけなので、ここで右手を足す）
       const PP = H.ch.userData.parts;
       PP.rarm.rotation.x = -1.35 + Math.sin(t * 1.6) * 0.06; PP.rarm.rotation.z = 0.12;
-      if (PP.tool) PP.tool.rotation.x = Math.PI / 2 - 0.45;
+      holdCan(H.ch, H.ch.rotation.y); // 取っ手が上・胴は立ち・口は前（畑）の前下
       const sp = PP.tool && PP.tool.userData.spout;
-      if (sp) for (dropAcc += dt * 26; dropAcc >= 1 && dropAt.length < DROP_N; dropAcc--) { sp.getWorldPosition(_sp); dropAt.push({ x: _sp.x + (Math.random() - 0.5) * 0.12, y: _sp.y, z: _sp.z + (Math.random() - 0.5) * 0.12, vy: -0.4 - Math.random() * 0.6 }); }
+      if (sp) for (dropAcc += dt * 26; dropAcc >= 1 && dropAt.length < DROP_N; dropAcc--) { sp.getWorldPosition(_sp); const f = 0.8 + Math.random() * 0.5, yw = H.ch.rotation.y; dropAt.push({ x: _sp.x + (Math.random() - 0.5) * 0.1, y: _sp.y, z: _sp.z + (Math.random() - 0.5) * 0.1, vx: Math.sin(yw) * f, vz: Math.cos(yw) * f, vy: -0.2 - Math.random() * 0.4 }); } // 口の先から正面へ
     }
-    for (let i = dropAt.length - 1; i >= 0; i--) { const d = dropAt[i]; d.vy -= 9.8 * dt; d.y += d.vy * dt; if (d.y < 0.14) dropAt.splice(i, 1); }
+    for (let i = dropAt.length - 1; i >= 0; i--) { const d = dropAt[i]; d.vy -= 9.8 * dt; d.y += d.vy * dt; d.x += (d.vx || 0) * dt; d.z += (d.vz || 0) * dt; if (d.y < 0.14) dropAt.splice(i, 1); }
     drops.count = dropAt.length;
     dropAt.forEach((d, i) => { _m.makeTranslation(d.x, d.y, d.z); drops.setMatrixAt(i, _m); });
     drops.instanceMatrix.needsUpdate = true;
