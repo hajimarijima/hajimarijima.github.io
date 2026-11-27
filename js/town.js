@@ -28,6 +28,7 @@ import { makeFoe, animateFoe, makeFoeSmoke, smokeAt, FOE_SCALE } from './nightfo
 import { makeTerrainView } from './terrain.js';
 import { SpatialHash, TILE } from './tilemap.js';
 import { BED, bedParts, sleeperOnBed, bedInHouse } from './beds.js';
+import { loadHomeDecor, homeDecorSolids, addHomeDecor } from './decor3d.js'; // 家の前の郵便受けと、家の外の飾り（js/decor.js）
 import { TENT, MAT, tentExit, tentPlan, tentSites, tentBed, tentFront, tentPoint, inTent } from './tents.js';
 import { islandAt, isOpen, randomLand, radiusAt, onLand, MAIN } from './island.js';
 import { makeClouds } from './clouds.js';
@@ -72,6 +73,7 @@ function addPuff(scene, src) {
 async function main() {
   const TM0 = { start: performance.now() }; // 開くまでの時間の内わけ（確かめ用：window.TOWN.timing）
   const D = await loadAll();
+  const HD = await loadHomeDecor(D); // 家の飾りと郵便受け（data/decor.json・data/mail.json。なければ郵便受けだけ）
   TM0.data = performance.now();
   const { config, state, world, life, active } = D;
   // 小さな島の町（world.islands）：木と岩は少ないので、遠い物も 1 本ずつぶつかる物として扱う（far の印は使わない）
@@ -429,6 +431,7 @@ async function main() {
   }
   // 道と家の前の小道
   scene.add(makeRoads(world.buildings, (world.plots || []).filter((p) => !p.island), config));
+  addHomeDecor(scene, HD, { merge: true });
   // 建てている物・作っている橋（押すと「あと何個いるか」の札。userData.project に projectList の id）
   const projPicks = [];
   const pjTag = (tag, id) => { tag.classList.add('pjtag'); tag.style.pointerEvents = 'auto'; tag.addEventListener('click', (e) => { e.stopPropagation(); openProject(id); }); };
@@ -758,7 +761,7 @@ async function main() {
     const at = (z) => ({ x: b.x + lx * cs + z * sn, z: b.z - lx * sn + z * cs });
     return { ...at(lz + 0.2), stand: at(lz + 1.5) };
   };
-  const solids =obstaclesFor(world, config, { trees: false }).map((o) => ({ x: o.x, z: o.z, r: o.r }));
+  const solids =obstaclesFor(world, config, { trees: false }).map((o) => ({ x: o.x, z: o.z, r: o.r })).concat(homeDecorSolids(HD));
   for (const t of world.trees) if (t.state === 'tree' && !t.far && !t.gone) solids.push({ x: t.x, z: t.z, r: 0.95 * (t.size || 1), tree: t });
   for (const t of world.trees) if (t.state === 'stump' && !t.far && !t.gone) solids.push({ x: t.x, z: t.z, r: 0.75 * (t.size || 1) }); // 切り株にも乗らない
   for (const t of tents) { // テントの奥の壁・両はしの壁・前の壁（入口のところはあける。中は歩ける）
@@ -920,6 +923,8 @@ async function main() {
   // 自分の物（自分のベッド）だけは見ない。持ち主のない物（木・岩・テント）は、self がない時も必ず見る
   const isFree = (x, z, rad, self) => !solidNear(x, z).some((o) => !(self && o.owner === self) && Math.hypot(x - o.x, z - o.z) < o.r + rad) && !lying.some((s) => s.key !== self && segD(x, z, s) < 0.5 + rad);
   // 空いていなければ、いちばん近い空いたマス（1 ブロック）のまん中へずらす
+  // 写真モード（js/photomode.js）：選んだ人に、少し開けた所へ立ってもらう時の「立てる所か」（物・寝ている人・海・池・段の上でない）
+  window.TOWN.spotFree = (x, z) => isFree(x, z, BODY_S) && terrainGen.cell(Math.floor(x / BLOCK), Math.floor(z / BLOCK)).kind !== 'water' && terrainGen.heightAt(x, z) === 0 && !(world.pond && Math.hypot(x - world.pond.x, z - world.pond.z) < world.pond.r + 2);
   function freePt(pt, rad = BODY_S, self) {
     if (!pt || isFree(pt.x, pt.z, rad, self)) return pt;
     const i0 = Math.floor(pt.x / TILE), j0 = Math.floor(pt.z / TILE), c = [];
@@ -1549,6 +1554,8 @@ async function main() {
   const RD = 2.6, DIE = 1.8, SHOT_D = 1.4, SHOT_REL = 0.84, ARROW_T = 0.4, RAID_WALK = 4, RAID = 8, PAUSE = 5;
   TM0.ready = performance.now();
   Object.assign(window.TOWN, { mobs, people, timing: Object.fromEntries(Object.entries(TM0).map(([k, v]) => [k, Math.round(v - TM0.start)])) }); // 確かめ用
+  // 誕生日パーティ・島の行事（js/party3d.js）が使う：今日のデータ・広場・歩く道具・ぶつかる物を足す・元の行動にもどす
+  Object.assign(window.TOWN, { state, world, life, objById, villagers: D.villagers, square: CTR, hourNow, walk: { walkTo, turnTo, keepApart, safeRoute, setTool, setCarry, endChat }, solids, addSolid: (x, z, r) => { const o = { x, z, r }; solids.push(o); walls.push({ x, z, r: r + 0.8 }); if (solidIx) solidIx.set(o, x, z, o); return o; }, reAct: (p) => setAct(p, actNow(life[p.v.key] || {}, curHour), false) });
   const ft = makeFloatText(THREE); // ダメージの数字・クリティカル・ガード・たおした・たおれた
   // 戦いの中身：sim の記録。古いデータ（見張りの体力がない形）は、見張りの装備から決まった乱数でここで戦わせる
   const FT = (() => {
@@ -1904,6 +1911,9 @@ async function main() {
   }
   function updatePerson(p, dt, time) {
     p.t += dt;
+    if (p.party && !p.photo && window.TOWN.partyStep && window.TOWN.partyStep(p, dt, time)) return; // 夕方の誕生日パーティ・島の行事（js/party3d.js）
+    if (!p.photo && window.TOWN.waterStep && window.TOWN.waterStep(p, dt, time)) return; // 畑の水やり（js/watering3d.js）
+    if (p.visit && window.TOWN.visitStep && window.TOWN.visitStep(p, dt, time)) return; // 誰かの家に遊びに行く（js/visit3d.js）
     if (p.photo && p.mode !== 'sleep') { // 写真モード（js/photomode.js）で選んだ人：その場で止まり、カメラの方を向いて手をふる（寝ている人は寝たまま）
       p.ch.visible = true; p.ch.userData.lieY = 0; setCarry(p.ch, null);
       turnTo(p.ch, p.photo.yaw, dt); p.ch.position.set(p.pos.x, 0, p.pos.z);
@@ -2411,7 +2421,7 @@ async function main() {
       bt.element.style.opacity = dd > 75 * VIEW_K && !bt.element.classList.contains('new') && !bt.element.classList.contains('islandtag') && !bt.element.classList.contains('chesttag') && !bt.element.classList.contains('basetag') ? '0' : '1';
     }
     // 地形はどこまでも続くので、見る場所の左右の制限はなし（高さだけ地面に）
-    controls.target.y = 0;
+    controls.target.y = window.TOWN.camY || 0; // 花火の夜だけ、空を見上げるため高くする（js/party3d.js）
     camStep(dt);
     terrain.update(controls.target);
     sky.follow(camera);

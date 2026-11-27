@@ -1035,6 +1035,34 @@ t('持ち物の枠：仕事のおわりの中身（L.held）が残り、枠の�
   assert.ok(h.includes('class="dur"') && h.includes('>12<'), '耐久と個数');
   assert.ok(INV.heldOf({ inv: [] }).label.includes('今の持ち物'), '古いデータは今の持ち物');
 });
+t('畑の水やり：晴れ・くもりの日は農家が畑に水をやり（wf: の行動・f.wet＝その日）、雨の日はやらない', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-water-'));
+  try {
+    fs.copyFileSync(path.join(ROOT, 'data', 'config.json'), path.join(dir, 'config.json'));
+    const env = { ...process.env, TOWN_DATA: dir };
+    execFileSync(process.execPath, [path.join(ROOT, 'tools/init.js'), '--demo'], { env });
+    let dryDays = 0, wetDays = 0, rainDays = 0;
+    for (let i = 0; i < 8; i++) {
+      execFileSync(process.execPath, [path.join(ROOT, 'tools/sim.js'), '--demo', '--days', '1'], { env });
+      const st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')), w = STORE.readWorld(dir), life = STORE.readLife(dir);
+      const codes = Object.values(life).flatMap((L) => HR.decodeHours(L && L.hours)).filter((c) => /^wf:/.test(c));
+      const wet = (w.fields || []).filter((f) => f.wet === st.day);
+      const H = JSON.parse(fs.readFileSync(path.join(dir, 'config.json'), 'utf8')).hours;
+      for (const L of Object.values(life)) HR.decodeHours(L && L.hours).forEach((c, h) => { if (/^wf:/.test(c)) assert.ok(!HR.isNight(h, H), '夜は水やりしない ' + h); });
+      if (st.weather === '雨') { rainDays++; assert.strictEqual(codes.length + wet.length, 0, '雨の日に水やり ' + st.day); continue; }
+      if (!(w.fields || []).length) continue;
+      dryDays++;
+      for (const c of codes) assert.ok(w.fields.some((f) => f.id === c.slice(3) && f.wet === st.day), '水をやった畑は f.wet がその日 ' + c);
+      if (codes.length) wetDays++;
+    }
+    assert.ok(dryDays === 0 || wetDays > 0, `晴れの日に水やりがない（${dryDays} 日中 ${wetDays}・雨 ${rainDays}）`);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+t('畑の水やり：水をやった畑は 1 段早く育つ', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'tools', 'sim.js'), 'utf8');
+  assert.ok(/else if \(f\.wet === day\) g\+\+/.test(src), '水をやった日は育ちが 1 つ多い');
+  assert.ok(/!rain && !night && !c\.watered/.test(src), '雨の日は水やりに行かない');
+});
 // 遠出と寝る場所：近くの岩をぜんぶ掘り切った村で 1 日動かす
 const farRun = (() => {
   let memo = null;
@@ -2665,6 +2693,9 @@ t('役職の変更：コメントの読み取り（表記ゆれは「住みた�
   const cfg = liveCfg();
   const pj = (s, o = {}) => JB.parseJobChange(s, { startTools: cfg.startTools, ...o });
   assert.strictEqual(pj('仕事 釣り'), 'fishing_rod');
+  assert.strictEqual(pj('作業 釣り'), 'fishing_rod', '画面の言葉「作業」でも変えられる');
+  assert.strictEqual(pj('作業：きこり'), 'axe');
+  for (const s of ['作業台を建てよう', '作業がんばって', 'いい作業してるね']) assert.strictEqual(pj(s), null, s);
   assert.strictEqual(pj('役職：きこり'), 'axe');
   assert.strictEqual(pj('役職を漁業に'), 'fishing_rod');
   assert.strictEqual(pj('転職 ツルハシ'), 'pickaxe');
@@ -2706,7 +2737,7 @@ t('役職の変更：住人だけ・1 人 1 日 1 回まで・同じコメント
   assert.ok(s.history.every((h) => h.type === 'event' && h.kind === 'job' && h.who[0] === 'k1'));
   assert.strictEqual(s.villagers[0].startTool, 'hoe');
   assert.strictEqual(s.villagers[1].startTool, undefined, '同じ仕事なら変えない');
-  assert.ok(s.life.k1.diary[0].text.startsWith('きょう。仕事を採掘から漁業にかえた。'), '今日の日記の後ろ');
+  assert.ok(s.life.k1.diary[0].text.startsWith('きょう。作業を採掘から漁業にかえた。'), '今日の日記の後ろ');
   // もう一度読んでも変わらない（15 分ごとに同じコメントを読み直す）
   assert.strictEqual(JB.applyJobChanges(s, cs, { day: 3, date: 'd', owners: ['owner_acc'] }).length, 0);
   assert.strictEqual(s.history.length, 2);
@@ -2727,7 +2758,7 @@ t('役職の変更：木の道具を持ちかえる（石の道具は持った�
   const note = W.ensureLife(L, v, { day: 3, life, config: cfg });
   assert.strictEqual(L.startTool, 'fishing_rod');
   assert.ok(L.inv.some((s) => s && s.item === 'wood_fishing_rod') && !L.inv.some((s) => s && s.item === 'wood_pickaxe'), L.inv);
-  assert.ok(note.includes('仕事が漁業になったので'), note);
+  assert.ok(note.includes('作業が漁業になったので'), note);
   // 持ち物がいっぱい：仕事だけ変わる
   const v2 = { key: 'k2', joinedDay: 1, startTool: 'hoe', jobChangedTo: 'hoe' };
   const L2 = life.k2 = { startTool: 'pickaxe', inv: [{ item: 'stone_pickaxe', dur: 50 }, { item: 'log', n: 64 }, { item: 'cobble', n: 64 }], xp: 0, diary: [] };
@@ -3291,6 +3322,278 @@ t('せつめいに島の決まり（動物は柵で囲ってから・海には�
   assert.ok(/柵で囲ってから/.test(src) && /サメ/.test(src) && /islandrules/.test(src));
   assert.ok(!/マイクラ|マインクラフト/.test(src + fs.readFileSync(path.join(ROOT, 'js', 'animalmove.js'), 'utf8')));
 });
+
+// ---------- 遊ぶ・自分の村人（play.html・me.html・js/play/・js/mine.js・worker.mjs の 5)・tools/play.js。docs/遊びとログインの手順.md） ----------
+at('遊ぶ：釣りの決まりが sim と同じ（大きさ・釣れる物の範囲）・合わせの判定・宝箱とおてつだいの見本', async () => {
+  const R = await import(require('url').pathToFileURL(path.join(ROOT, 'js', 'play', 'rules.js')).href);
+  const FS = require(path.join(ROOT, 'tools', 'fishsize.js'));
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const FC = cfg.fishing;
+  for (const [k, sz] of Object.entries(FC.sizes)) for (let s = 1; s < 40; s++) assert.strictEqual(R.rollSize(sz, R.makeRng(s * 7 + k.length)), FS.rollSize(sz, R.makeRng(s * 7 + k.length)), '大きさは sim と同じ：' + k);
+  const all = [FC.seaFish, FC.seaNightFish, cfg.hours && cfg.hours.nightFish, FC.fish, FC.treasure && FC.treasure.items, FC.junk && FC.junk.items].filter(Array.isArray).flat().map(([k]) => k);
+  const W = await import(require('url').pathToFileURL(path.join(ROOT, 'tools', 'webhook', 'worker.mjs')).href);
+  const rng = R.makeRng(42);
+  for (let i = 0; i < 400; i++) {
+    const c = R.pickCatch(cfg, rng, { night: i % 2 === 0 });
+    assert.ok(all.includes(c.item), '決まりの中の物：' + c.item);
+    if (c.item.startsWith('fish_')) { const sz = FC.sizes[c.item]; assert.ok(c.cm >= sz.min && c.cm <= Math.max(sz.max, sz.bigMax || 0), '大きさの範囲'); }
+    assert.ok(W.fishOk(cfg, c.item, c.item.startsWith('fish_') ? c.cm : null), '受け口も通す：' + c.item);
+  }
+  assert.ok(!W.fishOk(cfg, 'fish_nope', 10) && !W.fishOk(cfg, FC.seaFish[0][0], 99999) && !W.fishOk(cfg, FC.seaFish[0][0], 'big'), '変な魚・大きすぎは通さない');
+  assert.strictEqual(R.judgeHook(1.0, 1.5), 'early');
+  assert.strictEqual(R.judgeHook(1.8, 1.5), 'hit');
+  assert.strictEqual(R.judgeHook(3.0, 1.5), 'late');
+  for (let d = 1; d <= 28; d++) {
+    const date = `2026-02-${String(d).padStart(2, '0')}`;
+    const ix = R.treasureIndex(date, 6); assert.ok(ix >= 0 && ix < 6 && Number.isInteger(ix));
+    const tot = R.demoChoreTotal(date, 300); assert.ok(tot >= 105 && tot <= 195);
+  }
+  assert.strictEqual(R.jstDate(Date.UTC(2026, 0, 1, 15, 0)), '2026-01-02', '日の変わり目は日本時間');
+  assert.strictEqual(R.leftOf({ fish: 2 }, R.PLAY_DEFAULTS, 'fish'), 3);
+  assert.ok(R.validOreMode('self') && R.validOreMode('storage') && !R.validOreMode('toString'));
+});
+at('自分の村人：DM のリンク（印）・/me・遊びの回数・宝箱のいちばん乗り・pull', async () => {
+  const W = await import(require('url').pathToFileURL(path.join(ROOT, 'tools', 'webhook', 'worker.mjs')).href);
+  W._resetSiteConfig(); W._resetDmConfig();
+  const store = new Map();
+  const kv = {
+    get: async (k) => (store.has(k) ? store.get(k) : null), put: async (k, v) => { store.set(k, v); },
+    delete: async (k) => { store.delete(k); }, list: async ({ prefix }) => ({ keys: [...store.keys()].filter((k) => k.startsWith(prefix)).map((name) => ({ name })), list_complete: true }),
+  };
+  const QT = 'z'.repeat(24);
+  const env = { TOWN_KV: kv, DM_QUEUE_TOKEN: QT, SITE_ORIGIN: 'https://isle.example', IG_TOKEN: 'IGtest' };
+  const sent = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.endsWith('/data/config.json')) return new Response(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8').replace('"fishPerDay": 5', '"fishPerDay": 2'), { status: 200 });
+    if (/\/me\/messages$/.test(u)) { sent.push(JSON.parse(init.body)); return new Response('{"message_id":"m"}', { status: 200 }); }
+    return new Response('{}', { status: 404 });
+  };
+  const call = async (p, tok, body, method) => {
+    const res = await W.default.fetch(new Request('https://w.example' + p, { method: method || (body === undefined ? 'GET' : 'POST'), headers: tok ? { Authorization: 'Bearer ' + tok } : {}, body: body === undefined ? undefined : JSON.stringify(body) }), env, { waitUntil: () => {} });
+    return { status: res.status, j: await res.json().catch(() => null), h: res.headers };
+  };
+  try {
+    // 印：32 字・KV にはハッシュだけ。もう一度作ると前の印は使えない
+    const t1 = await W.issueMe(env, 'alice');
+    assert.ok(/^[A-Za-z0-9]{32}$/.test(t1));
+    assert.ok(![...store.keys(), ...store.values()].some((s) => s.includes(t1)), 'KV に印そのものは置かない');
+    let r = await call('/me', t1); assert.strictEqual(r.status, 200); assert.strictEqual(r.j.villager, 'alice');
+    assert.strictEqual(r.h.get('Access-Control-Allow-Origin'), 'https://isle.example');
+    const t2 = await W.issueMe(env, 'alice');
+    assert.strictEqual((await call('/me', t1)).status, 401, '前の印は使えない');
+    assert.strictEqual((await call('/me', t2)).j.villager, 'alice');
+    assert.strictEqual((await call('/me')).status, 401, '印なしは 401');
+    assert.strictEqual((await call('/me', 'x'.repeat(32))).status, 401, '知らない印は 401');
+    const op = await W.default.fetch(new Request('https://w.example/play/fish', { method: 'OPTIONS' }), env, {});
+    assert.strictEqual(op.status, 204); assert.ok(/Authorization/.test(op.headers.get('Access-Control-Allow-Headers')));
+    // 設定
+    assert.strictEqual((await call('/me/settings', t2, { oreMode: 'bad' })).status, 400);
+    assert.strictEqual((await call('/me/settings', t2, { oreMode: 'storage' })).j.settings.oreMode, 'storage');
+    // 誕生日（MM-DD）：片方だけでも保存できる。ありえない日は 400。鉱石の設定は消えない
+    assert.strictEqual((await call('/me/settings', t2, { birthday: '02-30' })).status, 400);
+    assert.strictEqual((await call('/me/settings', t2, {})).status, 400);
+    { const s = (await call('/me/settings', t2, { birthday: '03-14' })).j.settings; assert.deepStrictEqual([s.birthday, s.oreMode, !!s.birthdayAt, !!s.oreAt], ['03-14', 'storage', true, true]); }
+    // 釣り：変な魚は 400・回数は Worker が数える（config の fishPerDay=2）
+    const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+    const [fk] = cfg.fishing.seaFish[0], sz = cfg.fishing.sizes[fk];
+    assert.strictEqual((await call('/play/fish', t2, { item: 'fish_nope', cm: 3 })).status, 400);
+    assert.strictEqual((await call('/play/fish', t2, { item: fk, cm: sz.min })).j.day.fish, 1);
+    assert.strictEqual((await call('/play/fish', t2, { miss: true })).j.day.fish, 2);
+    r = await call('/play/fish', t2, { item: fk, cm: sz.min }); assert.strictEqual(r.status, 429); assert.strictEqual(r.j.error, 'limit');
+    // おてつだい：みんなの合計
+    assert.strictEqual((await call('/play/chore', t2, { kind: 'lava' })).status, 400);
+    assert.strictEqual((await call('/play/chore', t2, { kind: 'tree' })).j.choreTotal, 1);
+    const tb = await W.issueMe(env, 'bob');
+    assert.strictEqual((await call('/play/chore', tb, { kind: 'rock' })).j.choreTotal, 2);
+    assert.strictEqual((await call('/play/chore', tb, { kind: 'field' })).j.choreTotal, 3, '畑に水やりもおてつだいに入る');
+    // 宝箱：最初の人だけいちばん乗り
+    r = await call('/play/treasure', tb, {}); assert.ok(r.j.first); assert.strictEqual(r.j.treasure.villager, 'bob');
+    r = await call('/play/treasure', t2, {}); assert.ok(!r.j.first); assert.strictEqual(r.j.treasure.villager, 'bob');
+    r = await call('/me', t2); assert.deepStrictEqual(r.j.day, { fish: 2, chores: 1, treasure: true }); assert.strictEqual(r.j.choreTotal, 3); assert.strictEqual(r.j.settings.oreMode, 'storage');
+    // pull：合言葉が要る。印では読めない
+    assert.strictEqual((await call('/play/pull', t2)).status, 403);
+    r = await call('/play/pull?days=2', QT);
+    assert.strictEqual(r.status, 200);
+    const today = W.jstDate();
+    assert.strictEqual(r.j.settings.alice.oreMode, 'storage');
+    assert.strictEqual(r.j.days[today].alice.fish, 2); assert.strictEqual(r.j.days[today].bob.chores, 2);
+    assert.strictEqual(r.j.chores[today].total, 3); assert.strictEqual(r.j.chores[today].water, 1, '水やりは water に数える'); assert.strictEqual(r.j.treasure[today].villager, 'bob');
+    assert.strictEqual(Object.keys(r.j.days).length, 2);
+    // tools/play.js：形をととのえて受け取る
+    const PL = require(path.join(ROOT, 'tools', 'play.js'));
+    let asked = null;
+    const pj = await PL.pull({ env: { DM_QUEUE_URL: 'https://w.example/', DM_QUEUE_TOKEN: QT }, days: 2, fetchFn: async (u, init) => { asked = { u, init }; return new Response(JSON.stringify({ ...r.j, settings: { ...r.j.settings, 'bad key!': { oreMode: 'self' }, carol: { oreMode: 'lava' } } }), { status: 200 }); } });
+    assert.strictEqual(asked.u, 'https://w.example/play/pull?days=2'); assert.strictEqual(asked.init.headers.Authorization, 'Bearer ' + QT);
+    assert.deepStrictEqual(Object.keys(pj.settings), ['alice'], '変な名前・変な設定は捨てる');
+    assert.deepStrictEqual(pj.days[today].alice.catches, [[fk, sz.min]]);
+    assert.strictEqual(await PL.pull({ env: {} }), null, '受け口がなければ読まない');
+    assert.deepStrictEqual(PL.clean({ days: { 'x': {} }, treasure: { '2026-01-01': { villager: '../x' } } }), { settings: {}, days: {}, chores: {}, treasure: {} });
+    // DM の返事：villager があれば専用のリンクを入れ、前の印は使えなくなる
+    store.set('dmq:' + 'a'.repeat(32), JSON.stringify({ igsid: '5001', at: new Date().toISOString() }));
+    store.set('dmq:' + 'b'.repeat(32), JSON.stringify({ igsid: '5002', at: new Date().toISOString() }));
+    const done = await W.default.fetch(new Request('https://w.example/dm/done', { method: 'POST', headers: { Authorization: 'Bearer ' + QT }, body: JSON.stringify({ items: [{ ids: ['a'.repeat(32)], text: 'ようこそ', villager: 'alice' }, { ids: ['b'.repeat(32)], text: 'ようこそ {me} だよ' }] }) }), env, {});
+    assert.strictEqual((await done.json()).sent, 2);
+    const m1 = sent[0].message.text, m2 = sent[1].message.text;
+    const mm = /https:\/\/isle\.example\/\?me=([A-Za-z0-9]{32})/.exec(m1);
+    assert.ok(mm && m1.startsWith('ようこそ\n'), '最後の行に専用のリンク');
+    assert.strictEqual((await call('/me', mm[1])).j.villager, 'alice');
+    assert.strictEqual((await call('/me', t2)).status, 401, 'DM し直すと前の印は使えない');
+    assert.strictEqual(m2, 'ようこそ  だよ', '村人がない時は {me} を消すだけ（リンクは作らない）');
+    assert.strictEqual(W.meText('a {me} b', 'U'), 'a U b');
+    env.ME_LINKS = 'off';
+    store.set('dmq:' + 'c'.repeat(32), JSON.stringify({ igsid: '5003', at: new Date().toISOString() }));
+    await W.default.fetch(new Request('https://w.example/dm/done', { method: 'POST', headers: { Authorization: 'Bearer ' + QT }, body: JSON.stringify({ items: [{ ids: ['c'.repeat(32)], text: 'ようこそ', villager: 'carol' }] }) }), env, {});
+    assert.strictEqual(sent[2].message.text, 'ようこそ', 'ME_LINKS=off ならリンクを作らない');
+    assert.ok(!store.has('mev:carol'));
+  } finally { globalThis.fetch = realFetch; W._resetSiteConfig(); W._resetDmConfig(); }
+});
+t('自分の村人：DM の返事に村人の key を渡す（印は GitHub 側に作らない）', () => {
+  const DM = require(path.join(ROOT, 'tools', 'dm.js'));
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  const rep = DM.replyTexts({ replies: [{ ids: ['a'.repeat(32)], kind: 'welcome', v: { key: 'alice', display: 'alice' } }] }, cfg);
+  assert.strictEqual(rep[0].villager, 'alice');
+  const src = ['tools/dm.js', 'tools/play.js', 'js/mine.js', 'js/me.js'].map((f) => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('');
+  assert.ok(!/newMeToken|getRandomValues/.test(fs.readFileSync(path.join(ROOT, 'tools', 'dm.js'), 'utf8')), '印は受け口だけが作る');
+  assert.ok(/replaceState/.test(src), 'リンクを開いたら URL から印を消す');
+});
+at('自分の村人：DM の done が villager を送る（text がある時だけ）', async () => {
+  const DM = require(path.join(ROOT, 'tools', 'dm.js'));
+  let body = null;
+  await DM.done([{ ids: ['a'.repeat(32)], text: 'hi', villager: 'alice' }, { ids: ['b'.repeat(32)], text: null, villager: 'bob' }], { env: { DM_QUEUE_URL: 'https://w.example', DM_QUEUE_TOKEN: 'q'.repeat(24) }, fetchFn: async (u, init) => { body = JSON.parse(init.body); return new Response('{"sent":1,"removed":2}', { status: 200 }); } });
+  assert.strictEqual(body.items[0].villager, 'alice');
+  assert.ok(!('villager' in body.items[1]));
+});
+t('遊ぶ・自分の村人：メニュー・ページ・文字の決まり', () => {
+  const files = ['play.html', 'me.html', 'js/mine.js', 'js/me.js', 'js/play/rules.js', 'js/play/scene.js', 'js/play/hero.js', 'js/play/store.js', 'js/play/main.js', 'tools/play.js', 'docs/遊びとログインの手順.md'];
+  const all = files.map((f) => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n');
+  assert.ok(!/マイクラ|マインクラフト/.test(all), '作品の名前を入れない');
+  assert.ok(!/firebase|signInWith/i.test(files.slice(0, 10).map((f) => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('')), '遊び・自分の村人は Google ログインを使わない');
+  const common = fs.readFileSync(path.join(ROOT, 'js', 'common.js'), 'utf8');
+  assert.ok(/'play\.html'/.test(common) && /'me\.html'/.test(common) && /'自分の村人'/.test(common));
+  assert.ok(/noindex/.test(fs.readFileSync(path.join(ROOT, 'me.html'), 'utf8')));
+  const js = fs.readFileSync(path.join(ROOT, 'js', 'joinsheet.js'), 'utf8');
+  assert.ok(/あなた専用のリンク/.test(js));
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8'));
+  assert.ok(cfg.play && typeof cfg.play.apiUrl === 'string' && cfg.play.fishPerDay > 0);
+});
+
+// ---------- 誕生日パーティ・島の行事・鉱石の持ち方 ----------
+const loadEsm = (f) => require(path.join(ROOT, 'js', f));
+t('島の行事：暦の窓（年をまたぐ時も）・冬祭りの日数・誕生日は何人でも 1 回', () => {
+  const EVM = loadEsm('islandevents.js');
+  assert.ok(EVM.inWindow('12-31', '12-30', '01-02') && EVM.inWindow('01-01', '12-30', '01-02') && !EVM.inWindow('01-03', '12-30', '01-02'));
+  const w = EVM.seasonalOn('2026-11-27');
+  assert.deepStrictEqual(w.map((e) => [e.id, e.name, e.day]), [['winter', '冬祭り', 2]]);
+  assert.deepStrictEqual(EVM.seasonalOn('2026-06-01'), []);
+  for (const id of ['fireworks', 'harvest', 'fishing']) assert.ok(EVM.EVENTS.some((e) => e.id === id), id);
+  const ev = EVM.eventsOn('2026-11-27', ['a', 'b']);
+  assert.strictEqual(ev.filter((e) => e.id === 'birthday').length, 1, '2 人でもパーティは 1 回');
+  assert.deepStrictEqual(ev[0].who, ['a', 'b']);
+  const nm = { a: 'ゆい', b: 'そら' };
+  assert.strictEqual(EVM.todayLine(ev[0], (k) => nm[k]), '今日は ゆい さん・そら さんの誕生日');
+  assert.strictEqual(EVM.todayLine(ev[1], (k) => nm[k]), '今日は冬祭り（2日目）');
+  assert.strictEqual(EVM.partyTitle(['ゆい']), 'ゆいさんの誕生日パーティ');
+  // 設定で行事を変えられる
+  assert.deepStrictEqual(EVM.seasonalOn('2026-03-03', { islandEvents: [{ id: 'hina', name: 'ひなまつり', from: '03-03', to: '03-03' }] }).map((e) => e.name), ['ひなまつり']);
+  // 3D・設定の文に作品の名前を入れない。town.js は p.party の人を party3d.js にまかせる
+  const src = ['js/party3d.js', 'js/islandevents.js', 'tools/oremode.js', 'js/me.js'].map((f) => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n');
+  assert.ok(!/マイクラ|マインクラフト/.test(src));
+  assert.ok(/partyStep/.test(fs.readFileSync(path.join(ROOT, 'js', 'town.js'), 'utf8')) && /party3d\.js/.test(fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')));
+  // 贈り物：好きな食べ物があればそれ
+  assert.strictEqual(EVM.giftFor({ key: 'x', profile: { food: 'りんご' } }, { apple: {} }, P.hashStr || require('../tools/rand').hashStr), 'apple');
+});
+t('鉱石の持ち方：コメント「鉱石 自分」「鉱石 倉庫」・新しい方が勝つ・web の設定（self / storage）と誕生日', () => {
+  const OMx = require('../tools/oremode');
+  for (const [s, m] of [['鉱石 自分', 'keep'], ['鉱石：倉庫', 'chest'], ['鉱石は自分で持つ', 'keep'], ['鉱石 チェスト', 'chest'], ['こうせき じぶん', 'keep'], ['こんにちは', null], ['倉庫 鉱石', null]]) assert.strictEqual(OMx.parseOreMode(s), m, s);
+  const S = { config: { joinWord: '住みたい' }, villagers: [{ key: 'k1', igId: P.igHash('9001'), name: 'ore_a', display: 'ore_a' }], history: [] };
+  const c = (text, ts, id) => ({ id, text, timestamp: ts, from: { id: '9001', username: 'ore_a' } });
+  OMx.applyOreComments(S, [c('鉱石 倉庫', '2026-11-02T01:00:00Z', 'c1')], { day: 2, date: '2026-11-02' });
+  assert.strictEqual(S.villagers[0].oreMode, 'chest');
+  assert.strictEqual(OMx.applyOreComments(S, [c('鉱石 倉庫', '2026-11-02T01:00:00Z', 'c1')]).length, 0, '同じコメントは 2 回使わない');
+  // web の設定が新しければ web、古ければコメントのまま
+  OMx.applyPlaySettings(S, { k1: { oreMode: 'self', oreAt: '2026-11-01T00:00:00Z' } });
+  assert.strictEqual(S.villagers[0].oreMode, 'chest', '古い web の設定は使わない');
+  OMx.applyPlaySettings(S, { k1: { oreMode: 'self', oreAt: '2026-11-03T00:00:00Z', birthday: '03-14', birthdayAt: '2026-11-03T00:00:00Z' } }, { day: 3 });
+  assert.deepStrictEqual([S.villagers[0].oreMode, S.villagers[0].birthday], ['keep', '03-14']);
+  assert.ok(S.history.some((h) => h.kind === 'ore' && /自分で持つ/.test(h.text)));
+  assert.strictEqual(OMx.modeOf({}), 'keep', 'ふつうは自分で持つ');
+  // play.js pull の形：誕生日と時刻も残す・変な誕生日は捨てる
+  const PLx = require('../tools/play');
+  const cl = PLx.clean({ settings: { a: { oreMode: 'self', at: '2026-11-03T00:00:00Z', birthday: '13-01' }, b: { birthday: '03-14', birthdayAt: '2026-11-03T00:00:00Z' } } });
+  assert.deepStrictEqual(cl.settings, { a: { oreMode: 'self', oreAt: '2026-11-03T00:00:00.000Z' }, b: { birthday: '03-14', birthdayAt: '2026-11-03T00:00:00.000Z' } });
+});
+t('鍛冶屋：鉱石を自分で持つ人の装備は、本人の鉱石を先に使う（チェストの分は残る）', () => {
+  const SMx = loadEsm('smithing.js'), CRx = require('../tools/craft');
+  const cfg = liveCfg();
+  // 石のつるはしを持つ人に、鉄のつるはしを作る（鉄は本人が持っている）
+  const iron = Object.entries(cfg.crafting.recipes).find(([, r]) => r.tool === 'pickaxe' && r.tier === 'iron');
+  assert.ok(iron, '鉄のつるはしの作り方');
+  const need = iron[1].from;
+  const own = Object.fromEntries(Object.entries(need).filter(([k]) => ['iron', 'coal', 'gold', 'diamond'].includes(k)));
+  assert.ok(Object.keys(own).length, '鉄を使う');
+  const store = { log: 50, planks: 20, stick: 20, cobble: 50, iron: 0 };
+  const L = { inv: [{ item: 'stone_pickaxe', n: 1, dur: 10 }], slots: 4, gear: { head: 'x', body: 'x', feet: 'x' }, ores: { ...own } };
+  const smc = { ...cfg.smithing, armor: {} };
+  const r = SMx.pickJob({ store, people: [{ key: 'me', L, guard: false }], config: { ...cfg, smithing: smc }, built: Object.keys(cfg.buildings), CR: CRx });
+  assert.ok(r.job && r.job.key === iron[0], JSON.stringify(r));
+  for (const k of Object.keys(own)) { assert.strictEqual(r.job.own[k], 0, '本人の ' + k + ' を使った'); assert.strictEqual(r.job.store[k] || 0, 0); }
+  // 本人が持っていなければ、チェストに鉄がないので作れない
+  const r2 = SMx.pickJob({ store, people: [{ key: 'me', L: { ...L, ores: {} }, guard: false }], config: { ...cfg, smithing: smc }, built: Object.keys(cfg.buildings), CR: CRx });
+  assert.ok(!r2.job);
+});
+t('sim.js：誕生日パーティ（同じ日の人はまとめて 1 回・経験値と贈り物・年表）・冬祭り・鉱石の持ち方', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-party-'));
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(liveCfg()));
+  const env = { ...process.env, TOWN_DATA: dir };
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+  node('tools/init.js', '--seed', 'party', '--start', '2026-11-20');
+  const inbox = path.join(dir, 'inbox.json');
+  fs.writeFileSync(inbox, JSON.stringify({ followers: sample.followers, joinComments: sample.joinComments, voteComments: null }));
+  node('tools/sim.js', '--inbox', inbox, '--now', '2026-11-20T12:00:00+09:00');
+  let vs = JSON.parse(fs.readFileSync(path.join(dir, 'villagers.json'), 'utf8'));
+  assert.ok(vs.length >= 2 && vs.every((v) => /^\d{2}-\d{2}$/.test(v.birthday)), 'みんな誕生日がある');
+  const auto = vs.find((v) => v.source !== 'comment');
+  if (auto) assert.strictEqual(auto.birthday, P.autoBirthday(auto.key), 'key から決まる');
+  // 2 日目（11/21）が誕生日の人を 2 人。web の設定で 1 人目は倉庫、ほかは自分で持つ
+  vs[0].birthday = '11-21'; vs[1].birthday = '11-21';
+  fs.writeFileSync(path.join(dir, 'villagers.json'), JSON.stringify(vs));
+  fs.mkdirSync(path.join(dir, 'inbox'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'inbox', 'play.json'), JSON.stringify({ settings: { [vs[0].key]: { oreMode: 'storage', oreAt: '2026-11-20T00:00:00Z' } } }));
+  const life0 = STORE.readLife(dir);
+  node('tools/sim.js', '--now', '2026-11-21T12:00:00+09:00');
+  const st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
+  const hist = JSON.parse(fs.readFileSync(path.join(dir, 'history.json'), 'utf8'));
+  const life = STORE.readLife(dir);
+  vs = JSON.parse(fs.readFileSync(path.join(dir, 'villagers.json'), 'utf8'));
+  assert.strictEqual(st.date, '2026-11-21');
+  const bd = st.today.events.filter((e) => e.id === 'birthday');
+  assert.strictEqual(bd.length, 1); assert.deepStrictEqual(bd[0].who.sort(), [vs[0].key, vs[1].key].sort());
+  const ph = hist.filter((h) => h.day === st.day && h.type === 'birthday');
+  assert.strictEqual(ph.length, 1, '年表は 1 行');
+  assert.ok(/さん・.+さんの誕生日パーティ/.test(ph[0].text), ph[0].text);
+  for (const v of vs.slice(0, 2)) {
+    assert.ok(life[v.key].xp > (life0[v.key] || { xp: 0 }).xp + 15, '経験値');
+    assert.ok((life[v.key].gifts || []).some((g) => g.day === st.day), '贈り物');
+  }
+  assert.strictEqual(vs[0].oreMode, 'chest'); assert.ok(!vs[1].oreMode || vs[1].oreMode === 'keep');
+  // 冬祭り（11/26〜）まで進める：行事が年表と今日の行事に出る。倉庫の人は鉱石を持たない
+  node('tools/sim.js', '--days', '6', '--now', '2026-11-27T12:00:00+09:00');
+  const st2 = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
+  const hist2 = JSON.parse(fs.readFileSync(path.join(dir, 'history.json'), 'utf8'));
+  const life2 = STORE.readLife(dir);
+  assert.ok(st2.today.events.some((e) => e.id === 'winter'), JSON.stringify(st2.today.events));
+  assert.ok(hist2.some((h) => h.event === 'winter' && /^冬祭り/.test(h.text)));
+  const o0 = life2[vs[0].key].ores || {};
+  assert.ok(!Object.values(o0).some((n) => n > 0), '倉庫に入れる人は鉱石を持たない');
+  for (const k of Object.keys(life2)) for (const [it, n] of Object.entries(life2[k].ores || {})) assert.ok(['coal', 'iron', 'gold', 'diamond'].includes(it) && n >= 0, it);
+});
+
+// ---------- 手紙と家の飾り（tests/home_tests.js） ----------
+require('./home_tests.js')({ t, at, ROOT });
+// ---------- 誰かの家に遊びに行く（tests/visit_tests.js） ----------
+require('./visit_tests.js')({ t, at, ROOT });
 
 (async () => {
   for (const [name, fn] of asyncTests) { await fn(); ok++; console.log('OK  ' + name); }

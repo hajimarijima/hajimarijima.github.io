@@ -19,6 +19,7 @@ export function setupMenu(head, items) {
     `<div class="sm-head"><a class="sm-brand" href="./">はじまり島</a><button type="button" class="sm-x" data-close aria-label="閉じる" title="閉じる">${icon('x', { size: 22 })}</button></div>` +
     '<ul class="sm-list">' + items.map((it) => `<li><a href="${it.href}"${it.on ? ' class="on" aria-current="page"' : ''}>${icon(it.icon, { size: 22 })}<span>${it.text}</span>${icon('chevron-right', { size: 18, cls: 'sm-go' })}</a></li>`).join('') + '</ul>' +
     `<a class="sm-join" href="./?join=open" id="sm-join">${icon('house', { size: 20 })}<span>住むには</span></a>` +
+    `<a class="sm-join sm-photo" href="./?photo=1" id="sm-photo">${icon('camera', { size: 20 })}<span>写真をとる</span></a>` +
     '</nav>';
   document.body.append(wrap);
   const panel = wrap.querySelector('.sm-panel');
@@ -47,6 +48,10 @@ export function setupMenu(head, items) {
   // 住むには：町の画面にいれば、その場で案内のシートを開く
   wrap.querySelector('#sm-join').addEventListener('click', (e) => {
     if (window.TOWN_JOIN && window.TOWN_JOIN.open) { e.preventDefault(); close(false); window.TOWN_JOIN.open(); }
+  });
+  // 写真をとる：町の画面にいれば、その場で写真モード（js/photomode.js）。ほかの画面からは町の画面で開く
+  wrap.querySelector('#sm-photo').addEventListener('click', (e) => {
+    if (window.TOWN_PHOTO && window.TOWN_PHOTO.open) { e.preventDefault(); close(false); window.TOWN_PHOTO.open(); }
   });
   // PC の幅に広げたら閉じる
   const mq = window.matchMedia && window.matchMedia('(min-width: 601px)');

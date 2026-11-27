@@ -61,6 +61,12 @@ jobs:
         env:
           TOWN_SALT: ${{ secrets.TOWN_SALT }}
           TOWN_HIDDEN: ${{ secrets.TOWN_HIDDEN }}
+      - name: 遊び・手紙・家の飾りの記録を受け口から読む
+        # DM_QUEUE_URL / DM_QUEUE_TOKEN が空なら何もしないで終わる（data/inbox/play.json は公開しない）
+        run: node tools/play.js pull --days 3
+        env:
+          DM_QUEUE_URL: ${{ secrets.DM_QUEUE_URL }}
+          DM_QUEUE_TOKEN: ${{ secrets.DM_QUEUE_TOKEN }}
       - name: 「次の朝6時」を選んだ時は、始める日時を書くだけ
         if: github.event_name == 'workflow_dispatch' && inputs.start == '次の朝6時'
         run: |
@@ -84,5 +90,6 @@ jobs:
           git config user.name "town-bot"
           git config user.email "town-bot@users.noreply.github.com"
           git add data/config.json data/villagers.json data/world.json data/state.json data/life.json data/history.json data/social.json data/diary data/requests.json data/requests_seen.json
+          for f in data/mail.json data/decor.json data/visits.json; do if [ -e "$f" ]; then git add "$f"; fi; done
           git diff --cached --quiet || git commit -m "町は $(node -p "require('./data/state.json').day") 日目"
           git push

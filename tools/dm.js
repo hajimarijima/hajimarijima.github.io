@@ -109,7 +109,8 @@ function replyTexts(res, config) {
   const dc = dmConfig(config);
   return res.replies.map((r) => {
     if (!r.v) return { ids: r.ids, text: r.text || null, kind: r.kind };
-    return { ids: r.ids, text: fill(dc.messages[r.kind] || dc.messages.welcome, { name: r.v.display || r.v.name || '', url: houseUrl(dc, r.v.key) }), kind: r.kind };
+    // villager：受け口（Worker）がこの人専用のリンク（?me=印）を作って文に入れる（印は受け口の中だけ。ここには書かない）
+    return { ids: r.ids, text: fill(dc.messages[r.kind] || dc.messages.welcome, { name: r.v.display || r.v.name || '', url: houseUrl(dc, r.v.key) }), kind: r.kind, villager: r.v.key };
   });
 }
 
@@ -132,7 +133,7 @@ async function pull({ env = process.env, fetchFn = globalThis.fetch } = {}) {
 async function done(items, { env = process.env, fetchFn = globalThis.fetch } = {}) {
   const q = queueEnv(env);
   if (!q || !items.length) return null;
-  const body = { items: items.map((x) => ({ ids: x.ids, text: x.text || null })) };
+  const body = { items: items.map((x) => ({ ids: x.ids, text: x.text || null, ...(x.villager && x.text ? { villager: x.villager } : {}) })) };
   const r = await fetchFn(q.url + '/dm/done', { method: 'POST', headers: { Authorization: 'Bearer ' + q.token, 'Content-Type': 'application/json', 'User-Agent': 'town-join' }, body: JSON.stringify(body) });
   if (!r.ok) throw new Error('受け口に返事を渡せませんでした（' + r.status + '）');
   return r.json().catch(() => ({}));

@@ -1,0 +1,108 @@
+/* 手紙（mail.html）・家を飾る（home.html）・自分の村人の郵便受け・村人のページの「手紙」と「家」 */
+.me-h .lnew, .lhead .lnew { margin-left: 8px; }
+.lnew { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #d8302c; color: #fff; font-size: 11px; font-weight: 700; line-height: 1.6; white-space: nowrap; }
+.letters { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.letter { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: #fffaf0; border: 1px solid var(--line); }
+.letter.new { background: #fff4e0; border-color: #f2c27a; }
+.lface { flex: 0 0 36px; width: 36px; height: 36px; border-radius: 8px; overflow: hidden; background: #efe6d2; }
+.lface canvas { display: block; width: 36px; height: 36px; image-rendering: pixelated; }
+.lbody { flex: 1 1 auto; min-width: 0; }
+.lhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 14px; }
+.lhead a { font-weight: 700; overflow-wrap: anywhere; }
+.lday { font-size: 12px; }
+.ltext { margin: 4px 0 0; font-size: 15px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.lgifts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.lgift { display: inline-flex; align-items: center; gap: 4px; background: #e7f1dc; color: #3f5a2a; }
+.lgift img { image-rendering: pixelated; }
+.ldecor { background: #fde7b0; color: #6a4a10; }
+.mailform { display: flex; flex-direction: column; gap: 10px; }
+.mf-row { display: flex; flex-direction: column; gap: 4px; position: relative; }
+.mf-k { font-size: 13px; font-weight: 700; color: var(--sub); }
+.mailform select, .mailform textarea { width: 100%; box-sizing: border-box; min-height: var(--ctl-h); border: 1px solid #d9cdb2; border-radius: var(--radius-s); padding: 6px 10px; font: inherit; font-size: 16px; background: #fff; color: var(--ink); }
+.mailform textarea { resize: vertical; line-height: 1.6; padding-bottom: 22px; }
+.mf-cnt { position: absolute; right: 10px; bottom: 6px; font-size: 12px; color: var(--sub); pointer-events: none; }
+.mf-cnt.over { color: #d8302c; font-weight: 700; }
+.mf-msg { min-height: 1.4em; margin: 0; }
+.mf-note { margin: 0; line-height: 1.6; }
+.mailpage .me-h, .homepage .me-h, .mepost .me-h { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
+
+/* 家を飾る */
+.hnote { margin: 0 0 10px; }
+.htabs { display: flex; gap: 6px; margin: 0 0 10px; }
+.htabs button { flex: 1 1 0; min-height: var(--ctl-h); border: 2px solid var(--accent); background: #fff; color: var(--accent-ink); border-radius: var(--radius-pill); font: inherit; font-weight: 700; cursor: pointer; }
+.htabs button.on { background: var(--accent); color: #fff; }
+.hgrid2 { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 12px; }
+@media (min-width: 860px) { .hgrid2 { grid-template-columns: 1.05fr 1fr; align-items: start; } .homepage.wrap { max-width: 1100px; } }
+.hviewcard { padding: 8px; }
+.hview { width: 100%; height: 260px; border-radius: 12px; overflow: hidden; background: linear-gradient(#cfe8f6, #eaf5ea); touch-action: none; }
+@media (min-width: 860px) { .hview { height: 420px; } }
+.hview canvas { display: block; }
+.hhint { margin: 6px 4px 0; }
+.hplanhead { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.hplanwrap { display: flex; flex-direction: column; align-items: stretch; }
+.hhouse { height: 22px; border-radius: 6px 6px 0 0; background: repeating-linear-gradient(90deg, #c9a777 0 18px, #b8956a 18px 20px); position: relative; }
+.hhouse::after { content: '家'; position: absolute; left: 50%; top: 2px; transform: translateX(-50%); padding: 0 8px; background: #5a3a22; color: #fff; border-radius: 4px; font-size: 12px; line-height: 18px; }
+.hdoor { height: 14px; position: relative; }
+.hdoor::after { content: '扉'; position: absolute; left: 50%; top: 0; transform: translateX(-50%); padding: 0 8px; background: #5a3a22; color: #fff; border-radius: 0 0 4px 4px; font-size: 11px; line-height: 14px; }
+.hplan { position: relative; display: grid; grid-template-columns: repeat(var(--cols), 1fr); background: #86b85a; padding: 0; border-radius: 0 0 8px 8px; overflow: hidden; }
+.hcell { aspect-ratio: 1; border: 1px solid rgba(40, 60, 20, .25); background: transparent; padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.hcell:hover { background: rgba(255, 255, 255, .25); }
+.hcell.bl-path { background: #cbb48a; cursor: default; }
+.hcell.bl-door { background: #d8c08a; cursor: default; }
+.hcell.bl-mailbox, .hcell.bl-anvil { background: rgba(0, 0, 0, .12); cursor: default; }
+.hcell i { font-style: normal; font-size: 11px; color: #6a5638; }
+.hitem { position: absolute; display: flex; align-items: center; justify-content: center; pointer-events: none; box-sizing: border-box; }
+.hitem img { width: 92%; height: 92%; object-fit: contain; filter: drop-shadow(0 2px 1px rgba(0, 0, 0, .28)); }
+.hdir { position: absolute; right: 3px; bottom: 3px; width: 15px; height: 15px; border-radius: 50%; background: rgba(255, 255, 255, .85); color: var(--accent-ink); font-size: 9px; line-height: 15px; text-align: center; }
+.hitem.ly-rug { z-index: 1; opacity: .9; } .hitem.ly-floor { z-index: 2; } .hitem.ly-wall { z-index: 3; }
+.hitem.ly-wall img { width: auto; height: 100%; }
+.hitem.mine.on { outline: 3px solid #fff; outline-offset: -3px; border-radius: 6px; box-shadow: 0 0 0 3px var(--accent) inset; background: rgba(255, 241, 223, .35); }
+.hitem.other { opacity: .55; filter: grayscale(.4); }
+.hitem.mbox { color: #2c5080; z-index: 2; }
+.homepage .hplan .hcell.bl-mailbox { background: rgba(63, 111, 168, .18); }
+.hsel { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--accent-soft); }
+.hsel[hidden], .hhouse[hidden], .hdoor[hidden] { display: none; }
+.hsel #hseln { font-weight: 700; margin-right: auto; }
+.hsel .btn { gap: 4px; min-height: 34px; }
+.hh3 { font-size: 15px; margin: 14px 0 8px; }
+.hpal { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.hpi { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border: 2px solid var(--line); border-radius: 12px; background: #fff; cursor: pointer; font: inherit; color: var(--ink); min-width: 0; }
+.hpi img { width: 56px; height: 56px; object-fit: contain; }
+.hpi span { font-size: 13px; font-weight: 700; line-height: 1.3; text-align: center; overflow-wrap: anywhere; }
+.hpi small { font-size: 11px; color: var(--sub); }
+.hpi.on { border-color: var(--accent); background: var(--accent-soft); }
+.hpi:disabled { opacity: .45; cursor: default; }
+.hhow { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.hhow li { display: flex; gap: 8px; font-size: 14px; line-height: 1.5; }
+.hhow b { flex: 0 0 6.5em; color: var(--accent-ink); }
+.homepage .me-save, .mailpage .me-save { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+
+/* 手紙のきまり（terms.html）と、手紙を書く所の同意 */
+.terms { margin: 0; padding: 0 0 0 1.4em; display: flex; flex-direction: column; gap: 10px; }
+.terms li { line-height: 1.7; }
+.terms b { display: block; font-size: 15px; }
+.terms span { font-size: 14px; color: var(--sub); }
+.agree[hidden], .mailform[hidden] { display: none; }
+.agree .terms { gap: 6px; }
+.agree .terms li { font-size: 14px; }
+.agree .me-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+.mf-guide { margin: 0 0 10px; padding: 8px 10px; border-radius: 10px; background: #fff4e0; font-size: 14px; line-height: 1.6; }
+.lrep { margin-left: auto; border: 0; background: none; color: var(--sub); font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; padding: 2px 4px; white-space: nowrap; }
+.lrep:disabled { text-decoration: none; cursor: default; }
+
+/* 自分の村人の郵便受け（me.html） */
+.mepost .letters { margin-bottom: 10px; }
+.mepost .me-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.mepost .btn { gap: 6px; }
+
+/* 村人のページ */
+.vhome .hview { height: 240px; }
+@media (min-width: 700px) { .vhome .hview { height: 320px; } }
+.vhome .htabs { margin-top: 10px; }
+/* 家を飾るが「近日公開」の間（config.decor.enabled が false）：「近日」の印と案内カード */
+.soon { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: #ffe9b8; color: #8a5a00; font-size: 11px; font-weight: 700; line-height: 1.6; vertical-align: middle; white-space: nowrap; }
+h1 .soon { font-size: 13px; }
+.soon-card { display: flex; gap: 14px; align-items: center; background: linear-gradient(180deg, #fffaf0, #fff3dc); border: 1px solid #f3dfb4; box-shadow: 0 2px 8px rgba(120, 80, 20, .08); }
+.soon-card .me-h { margin: 0 0 4px; }
+.soon-card p { margin: 0; line-height: 1.7; }
+.soon-ic { flex: none; width: 58px; height: 58px; border-radius: 16px; display: grid; place-items: center; background: #ffe2a6; color: #8a5a00; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .08); }

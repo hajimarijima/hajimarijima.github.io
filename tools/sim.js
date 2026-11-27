@@ -27,6 +27,9 @@ const BASE = require('./base'); // 拠点の場所の投票（0 日目）
 const FZ = require('./fishsize'); // 釣った魚の大きさと釣りランキング
 const SMT = require('../js/smithing.js'); // 鍛冶屋と鍛冶職人（道具の作り直し・防具）
 const TN = require('../js/tents.js'); // テント（家のない人の寝床。1 つに何人・いくつまで）
+const OM = require('./oremode'); // 鉱石の持ち方（自分で持つ／島の倉庫）。コメントと web の設定（data/inbox/play.json）
+const EV = require('../js/islandevents.js'); // 島の行事（冬祭りなど）と誕生日パーティ
+const ORE_ITEMS = new Set(Object.values(O.ORE_ITEM)); // 石炭・鉄・金・ダイヤ（自分で持つ人は、チェストに入れない）
 // 村のまん中（拠点）。前のデータは (0, -1)
 const ctrOf = (world) => (world && world.square ? { x: world.square.x, z: world.square.z } : { x: 0, z: -1 });
 
@@ -190,7 +193,13 @@ function stepDay(S) {
     const owners = W.ownerNames(inbox, config);
     // 日記は下の ensureLife（「仕事が◯◯になったので…」）が書く
     require('./jobs').applyJobChanges(S, [...inbox.joinComments, ...(inbox.voteComments || [])], { day, date, enemies: !!(config.enemies && config.enemies.enabled), owners, diary: false });
+    // 鉱石の持ち方のコメント「鉱石 自分」「鉱石 倉庫」（tools/oremode.js）
+    OM.applyOreComments(S, [...inbox.joinComments, ...(inbox.voteComments || [])], { day, date, owners });
   }
+  // web の設定（me.html の鉱石・誕生日 → Worker → tools/play.js pull → data/inbox/play.json）。コメントと新しい方が勝つ
+  if (S.play && S.play.settings) OM.applyPlaySettings(S, S.play.settings, { day, date });
+  // 誕生日がまだない人には、名前の印（key）から決まった日を入れる（同じ人はいつも同じ。コメント「誕生日 3/14」で変えられる）
+  for (const v of villagers) if (!v.birthday) v.birthday = P.autoBirthday(v.key);
   // 公開しない項目（firestore_sync.js が data/inbox/ に書く）は、書き出さない形で持つ
   for (const v of villagers) if (S.priv && S.priv[v.key]) Object.defineProperty(v, '_priv', { value: S.priv[v.key], enumerable: false, configurable: true });
   const active = villagers.filter((v) => v.joinedDay <= day);
@@ -451,6 +460,7 @@ function stepDay(S) {
   const H = config.hours;
   const R4 = makeRng(state.seed + ':hours:' + day); // 1 時間ごとの行動は別の乱数（投票・天気・生えかわりの流れを変えない）
   const CHRONO = ['朝型', '夜型'];
+  const wetting = new Set(); // 今日水をやった畑（2 人が同じ畑に行かない）
   const takenFields = new Set(), takenBushes = new Set(), takenApple = new Set();
   const AP = config.apples; // りんごの木（数は config.json の apples）
   const bushCap = Math.ceil(world.bushes.length * (H.bushShare ?? 1));
@@ -560,6 +570,8 @@ function stepDay(S) {
   const unloadAll = (c) => {
     const out = I.unload(c.L.inv);
     if (c.pending) { for (const [it, n] of Object.entries(c.pending)) out[it] = (out[it] || 0) + n; c.pending = null; }
+    // 鉱石を「自分で持つ」人（v.oreMode が chest でない人）：掘った鉱石はチェストに入れず、自分の鉱石袋（L.ores）へ。鍛冶屋で自分の装備に使う
+    if (OM.modeOf(c.v) === 'keep') for (const it of Object.keys(out)) if (ORE_ITEMS.has(it)) { c.L.ores = c.L.ores || {}; c.L.ores[it] = (c.L.ores[it] || 0) + out[it]; delete out[it]; }
     if (Object.keys(out).length) { const val = deposit(out); for (const r of RES) c.L.contrib[r] += val[r]; }
   };
   const invFull = (L) => { // 枠がぜんぶ埋まっていて、道具でない物が 1 つはある（配列を作らずに見る）
@@ -658,6 +670,7 @@ function stepDay(S) {
       if (!I.addTool(T.inv, T.slots, j.key, CC.tiers[j.tier].durability)) { if (oldCopy) I.addTool(T.inv, T.slots, oldCopy.item, oldCopy.dur); return null; }
     } else { T.gear = T.gear || {}; T.gear[j.slot] = j.key; }
     replaceStore(j.store);
+    if (j.own) T.ores = j.own; // 本人が持っていた鉱石を使った分（js/smithing.js の pickJob）
     today.smithed = (today.smithed || 0) + 1;
     today.crafted.push({ who: c.v.key, item: j.key, for: j.to });
     const self = j.to === c.v.key;
@@ -775,6 +788,11 @@ function stepDay(S) {
       if (slotN < world.fieldSlots.length) return { action: 'till', slot: world.fieldSlots[slotN] };
       const wildN = world.fields.filter((f) => f.wild).length;
       if (I.getTool(L.inv, 'hoe') && (state.store.seeds || 0) > 0 && wildN < GR.maxFields && !c.noSpot) return { action: 'till', wild: true };
+      // 水やり：雨でない日に、まだ水をやっていない育ちかけの畑へ（1 人 1 日 1 時間。水をやった畑はその夜もう 1 段育つ）
+      if (sub === 'farm' && !rain && !night && !c.watered) {
+        const dry = world.fields.filter((f) => f.wet !== day && !wetting.has(f.id) && f.stage < (f.max || 3));
+        if (dry.length) return { action: 'water', f: dry[0] };
+      }
       const grow = world.fields.filter((f) => !takenFields.has(f.id) && f.stage < (f.max || 3) - 1);
       if (grow.length) return { action: 'tend', f: R2.pick(grow) };
       void FA;
@@ -802,7 +820,7 @@ function stepDay(S) {
   function freeHour(c, h) {
     if (!c.freeK || c.freeUntil <= h) {
       const opts = [['walk', FW.walk], ['chat', FW.chat], ['view', FW.view]];
-      if (world.fields.length) opts.push(['water', FW.water]);
+      if (world.fields.length && !rain && !HR.isNight(h, H)) opts.push(['water', FW.water]); // 雨の日と夜は水やりしない
       if (penOK) opts.push(['pet', FW.pet]);
       if (carriers.some((x) => x !== c)) opts.push(['help', FW.help]);
       c.freeK = R4.weighted(opts); c.freeUntil = h + R4.int(1, 2); c.freeT = null;
@@ -810,7 +828,7 @@ function stepDay(S) {
     const k = c.freeK;
     c.freeH = (c.freeH || 0) + 1;
     if (k === 'chat') { chatList.push(c); return 'tk'; } // 相手は resolveChat で決める
-    if (k === 'water') { if (!c.freeT) c.freeT = R4.pick(world.fields).id; logFree(c, h, k); return 'wf:' + c.freeT; }
+    if (k === 'water') { if (!c.freeT) c.freeT = R4.pick(world.fields).id; const wf = world.fields.find((x) => x.id === c.freeT); if (wf) wf.wet = day; logFree(c, h, k); return 'wf:' + c.freeT; }
     if (k === 'help') {
       const o = carriers.find((x) => x !== c);
       if (o) { logFree(c, h, k, o.v); return 'hk:' + o.v.key; }
@@ -1099,6 +1117,13 @@ function stepDay(S) {
       c.crop = c.crop || f.crop; c.target = c.target || f.id; c.tilled = (c.tilled || 0) + 1; L.targets.push(f.id); wear();
       return finish('ti:' + f.id, 'heavy');
     }
+    if (a.action === 'water') { // じょうろで畑の列に水をまく（とれる物はない）
+      const f = a.f; wetting.add(f.id); f.wet = day; c.watered = true;
+      c.target = c.target || f.id; L.targets.push(f.id);
+      today.watered = (today.watered || 0) + 1;
+      first('water_field', `${v.display}が、はじめてじょうろで畑に水をやった。水をやった畑は早く育つ。`, { who: [v.key] });
+      return finish('wf:' + f.id, 'light');
+    }
     if (a.action === 'tend') {
       const f = a.f; takenFields.add(f.id);
       // 世話だけでは実らない（実るのは夜のあいだに育った時）
@@ -1275,7 +1300,8 @@ function stepDay(S) {
       berry: [`${t0}草むらで木の実を集めた。${haul}。`, `${t0}赤い実をかごいっぱいにつんだ。${haul}。`],
       apple: [`${t0}りんごの木から赤い実をもいだ。${haul}。`, `${t0}手をのばして、りんごをかごに入れた。${haul}。`],
       till: [`${t0}くわで土を起こして、${(FA0.crops[c.crop] || FA0.crops.wheat).name}の種をまいた。${haul}。`, `${t0}新しい畑を耕した。${haul}。`],
-      tend: [`${t0}畑の世話をした。芽がのびてきた。${haul}。`, `${t0}畑に水をまいた。${haul}。`],
+      tend: [`${t0}畑の世話をした。芽がのびてきた。${haul}。`, `${t0}畑の草をぬいて、土をならした。${haul}。`],
+      water: [`${t0}じょうろを持って、畑の列に水をまいた。`, `${t0}畑の土が乾いていたので、じょうろで水をやった。`],
       harvest: [`${t0}畑で${(FA0.crops[c.crop] || FA0.crops.wheat).name}を収穫した。${haul}。`, `${t0}畑の作物をかりとった。${haul}。`],
       forage: c.guardH && !Object.keys(c.got).length ? [`${t0}村のはずれで見張りをした。`] : [`${t0}野原で草や実を集めた。${haul}。`],
       fish: c.target === 'sea' ? (Object.keys(c.got).length ? [`${t0}海べで釣りをした。波の上のうきが沈むのを待って、${haul}を釣り上げた。`, `${t0}釣りざおを持って海べへ行った。${haul}。`] : [`${t0}海べで釣りをしたが、何もかからなかった。`])
@@ -1326,7 +1352,7 @@ function stepDay(S) {
     for (const e of c.ev.sort((a, b) => a.h - b.h).slice(0, 4)) put(e.h + 0.5, e.text);
     for (const n of c.notes) put(after + 0.1, n);
     const lastTrip = (c.tripHs || []).slice(-1)[0];
-    if (c.fullStop) put(c.fullStopAt ?? after + 0.2, `チェストまで${c.trips}回往復したが、また持ち物がいっぱいになったので、早めに仕事をおしまいにした。`);
+    if (c.fullStop) put(c.fullStopAt ?? after + 0.2, `チェストまで${c.trips}回往復したが、また持ち物がいっぱいになったので、早めに作業をおしまいにした。`);
     else if (c.trips) put((lastTrip ?? after) + 0.2, `持ち物がいっぱいになって、チェストまで${c.trips}回往復した。`);
     // 仕事のあとの時間：ときどき 1 つだけ書く
     if (c.freeLog && c.freeLog.length && R4.chance(H.freeDiaryP ?? 0.6)) {
@@ -1422,6 +1448,7 @@ function stepDay(S) {
       if (f.day === day && f.stage === 0 && takenFields.has(f.id)) continue; // 今日まいた種は明日から
       let g = 1;
       if (rain) g++;
+      else if (f.wet === day) g++; // 水をやった畑（雨の日は水やりはいらない）
       if (canal && Math.hypot(f.x - canal.x, f.z - canal.z) < FA.canalRange && R2.chance(FA.canalBoost)) { g++; f.water = 1; }
       f.stage = Math.min(max, f.stage + g);
     }
@@ -1662,10 +1689,45 @@ function stepDay(S) {
   // ---- 10. 誕生日（月日だけ） ----
   const md = date.slice(5);
   today.birthdays = active.filter((v) => v.birthday === md).map((v) => v.key);
-  for (const k of today.birthdays) {
-    const v = active.find((x) => x.key === k);
-    hist('birthday', `今日は${v.display}の誕生日。町のみんなでささやかにお祝いした。`, { who: [k] });
-    life[k].diary[life[k].diary.length - 1].text += '今日は誕生日。みんながお祝いしてくれた。';
+  // ---- 10.5 誕生日パーティと島の行事（js/islandevents.js）。同じ日が誕生日の人が何人いても、夕方の広場で 1 回にまとめる ----
+  today.events = EV.eventsOn(date, today.birthdays, config);
+  const EVX = (config.islandEventsXp || {});
+  const noteDiary = (k, text) => { const L = life[k], d = L && L.diary[L.diary.length - 1]; if (d && d.day === day) d.text += text; else if (L) L.diary.push({ day, date, text }); };
+  for (const ev of today.events) {
+    if (ev.id === 'birthday') {
+      const vs = ev.who.map((k) => active.find((x) => x.key === k)).filter(Boolean);
+      const guests = active.filter((v) => !ev.who.includes(v.key)).length;
+      ev.gifts = {};
+      for (const v of vs) {
+        const L = life[v.key];
+        L.xp += EVX.birthday ?? 20; // 本人には経験値と小さな贈り物
+        const g = EV.giftFor(v, ITEMS0, hashStr);
+        if (g) {
+          ev.gifts[v.key] = g;
+          if (!L.inv || I.addItem(L.inv, L.slots, g, 1, IC.stack) > 0) deposit({ [g]: 1 }); // 持ち物がいっぱいならチェストへ
+          L.gifts = (L.gifts || []).concat({ day, item: g }).slice(-20);
+        }
+        noteDiary(v.key, `今日は誕生日。夕方、広場でみんながパーティを開いてくれた。${g ? `贈り物に${(ITEMS0[g] || {}).name || g}をもらった。` : ''}`);
+      }
+      hist('birthday', `${EV.partyTitle(vs.map((v) => v.display))}。夕方、広場にケーキと飾りを出して${guests ? `、${guests}人でお祝いした` : 'お祝いした'}。`, { who: ev.who, event: 'birthday', title: EV.partyTitle(vs.map((v) => v.display)) });
+      continue;
+    }
+    // 季節の行事：みんなに少し経験値。釣り大会は今日いちばん大きな魚を釣った人が優勝
+    for (const v of active) if (life[v.key]) life[v.key].xp += EVX.festival ?? 5;
+    const def = EV.eventList(config).find((e) => e.id === ev.id) || {};
+    let extra = '', who;
+    if (ev.id === 'fishing') {
+      let best = null;
+      for (const v of active) for (const f of ((life[v.key] || {}).today || {}).fish || []) if (!best || f[1] > best.cm) best = { k: v.key, it: f[0], cm: f[1], name: v.display };
+      if (best) {
+        ev.winner = best.k; who = [best.k];
+        life[best.k].xp += EVX.fishingWin ?? 15;
+        extra = `優勝は${best.name}さん（${best.cm}cm の${(ITEMS0[best.it] || {}).name || best.it}）。`;
+        noteDiary(best.k, `釣り大会で優勝した（${best.cm}cm）。`);
+      }
+    }
+    hist('event', `${ev.name}${ev.day > 1 ? `（${ev.day}日目）` : ''}。${def.text || ''}${extra}`, { kind: 'festival', event: ev.id, ...(who ? { who } : {}) });
+    for (const v of active) if (!who || !who.includes(v.key)) noteDiary(v.key, `夕方は広場の${ev.name}に行った。`);
   }
 
   // ---- 11. 関係と立ち話 ----
@@ -1708,6 +1770,11 @@ function stepDay(S) {
   for (const c of rehour) c.L.hours = HR.encodeHours(c.codes);
   // 夜おそく寝た文は、その日のいちばん最後（このあとの夜のできごとの前）
   for (const c of ctxs) if (c.tail && c.entry) c.entry.text += c.tail;
+
+  // ---- 11.5 家の飾りと手紙（tools/decor.js・tools/mail.js。web の分は data/inbox/play.json）。別の乱数なので、ここまでの結果は変わらない ----
+  require('./decor').stepDecor(S, { day, play: S.play });
+  require('./mail').stepMail(S, { day, play: S.play, since: Date.parse(jst(addDays(date, -1), 0)), R: makeRng('mail:' + state.seed + ':' + day).next, built: today.built.length ? B(world.buildings.find((b) => b.id === today.built[0]).type).name : '' });
+  require('./visit').stepVisit(S, { day, play: S.play, R: makeRng('visit:' + state.seed + ':' + day).next, hist }); // 誰かの家に遊びに行く（tools/visit.js）
 
   // ---- 12. 夜（敵が来る・見張りが追い払う）。別の乱数なので、ここまでの結果は変わらない ----
   // 見張りの装備：剣（いちばん良い物）、なければ持っている道具、なければたいまつ、なければ素手。盾はチェストの数だけ、先の見張りから
@@ -1781,6 +1848,9 @@ const S = {
   life: ST.readLife(DATA), history: read('history.json', []), hidden: P.loadHidden(DATA),
   social: read('social.json', { pairs: {}, talks: [] }),
   priv: read('inbox/profiles_private.json', null),
+  play: read('inbox/play.json', null), // web の設定（鉱石の持ち方・誕生日）。tools/play.js pull が置く
+  mail: read('mail.json', null), decor: read('decor.json', null), // 手紙と家の飾り（tools/mail.js・tools/decor.js）
+  visits: read('visits.json', null), // 遊びに行った・来た人ノート（tools/visit.js）
 };
 S.demo = args.includes('--demo') || S.state.demo;
 const inboxFile = opt('--inbox', path.join(DATA, 'inbox', 'instagram.json'));
@@ -1823,6 +1893,9 @@ write('state.json', S.state);
 ST.writeLife(DATA, S.life);
 write('history.json', S.history);
 write('social.json', S.social);
+if (S.mail) write('mail.json', S.mail);
+if (S.decor) write('decor.json', S.decor);
+if (S.visits) write('visits.json', S.visits);
 require('./requests').updateFiles( // コメントがない日もファイルは作る（daily.yml の git add で使う）
 DATA, reqComments, S.config, S.state.day);
 console.log(`${S.state.day} 日目まで進めました（村人 ${S.villagers.filter((v) => v.joinedDay <= S.state.day).length} 人・建物 ${S.world.buildings.length}・フォロワー ${S.state.followers}）`);

@@ -50,7 +50,7 @@ function setupSearch(D) {
     const ig = igUrl(v);
     const el = document.createElement('article'); el.className = 'card vres';
     el.innerHTML = `<div class="vhead"><span class="vface"></span><div><h2>${esc(v.display)}</h2>${titleBadges(v, D.config, L)}` +
-      `<small class="muted">${v.body === 'chibi' ? '2 頭身' : '通常の体'}・${esc(o ? o.job + '（木の' + o.label + '）' : JOB[L.job] || 'まだ仕事なし')}</small></div></div>` +
+      `<small class="muted">${v.body === 'chibi' ? '2 頭身' : '通常の体'}・${esc(o ? o.job + '（木の' + o.label + '）' : JOB[L.job] || 'まだ作業なし')}</small></div></div>` +
       `<dl class="info vinfo">` +
       `<dt>レベル</dt><dd>Lv${L.level || 1}・持ち物の枠 ${L.slots || IC.base || 3}/${IC.max || 9}</dd>` +
       `<dt>持ち物</dt><dd>${slotsHtml(L, D.config)}<small class="muted">${esc(heldOf(L).label)}</small></dd>` +

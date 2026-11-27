@@ -46,8 +46,10 @@ export async function loadDiary(key, L) {
 
 export function nav(current) {
   // [ページ, 名前]。NAV_ICON はそのアイコン（js/icons.js）。PC は上の帯、スマホの幅は右上のメニューボタン（js/menu.js・css/style.css）
-  const items = [['index.html', '町'], ['history.html', '年表'], ['vote.html', '投票'], ['people.html', '村人'], ['relations.html', '関係'], ['fish.html', '釣り'], ['badges.html', 'バッジ']];
-  const NAV_ICON = { 'index.html': 'house', 'history.html': 'calendar-days', 'vote.html': 'vote', 'people.html': 'users', 'relations.html': 'share-2', 'fish.html': 'fish', 'badges.html': 'award' };
+  const items = [['index.html', '町'], ['history.html', '年表'], ['vote.html', '投票'], ['people.html', '村人'], ['relations.html', '関係'], ['fish.html', '釣り'], ['badges.html', 'バッジ'], ['play.html', '遊ぶ'], ['me.html', '自分の村人']];
+  const NAV_ICON = { 'index.html': 'house', 'history.html': 'calendar-days', 'vote.html': 'vote', 'people.html': 'users', 'relations.html': 'share-2', 'fish.html': 'fish', 'badges.html': 'award', 'play.html': 'gamepad-2', 'me.html': 'circle-user' };
+  // DM で届いた専用のリンク（?me=印）で来た時は、最初の案内のシートを出さない（js/joinsheet.js）。印の保存と「自分の村人」の名前・顔は js/mine.js
+  if (/[?&]me=/.test(location.search)) { try { localStorage.setItem('town.joinSeen', '1'); } catch (e) { /* 覚えられなくてもよい */ } }
   const el = document.createElement('header');
   el.className = 'site-head';
   // 町のページは「./」で開く（URL の末尾に index.html が付かないように）
@@ -56,6 +58,7 @@ export function nav(current) {
     items.map(([h, t]) => `<a href="${link(h)}"${h === current ? ' class="on" aria-current="page"' : ''}>${icon(NAV_ICON[h], { size: 18 })}<span>${t}</span></a>`).join('') + '</nav>';
   document.body.prepend(el);
   setupMenu(el, items.map(([h, t]) => ({ href: link(h), text: t, icon: NAV_ICON[h], on: h === current })));
+  import('./mine.js').then((m) => m.setupMine()).catch((e) => console.warn('自分の村人の表示', e));
 }
 
 // 村人が 0 人の時の案内（どの画面でも同じ言葉）
@@ -83,7 +86,7 @@ export function startNote(state, config) {
 // 「住みたい」の案内（どの画面でも同じ言葉）
 export const joinText = (config) => `フォローして、インスタの投稿に「${(config && config.joinWord) || '住みたい'}」とコメントすると、すぐ町に住めます（15 分ほどで入居）。` +
   `道具・誕生日・好きな食べ物${mbtiOn(config) ? '・MBTI' : ''}もいっしょに書けます（例「${(config && config.joinWord) || '住みたい'} ピッケル 12/11 りんご${mbtiOn(config) ? ' INFP' : ''}」）。住んだあとも「誕生日 12/11」のようにコメントすれば変えられます。` +
-  (config && config.jobChange && config.jobChange.enabled === false ? '' : `仕事も「仕事 釣り」のようにコメントすると変えられます（1 日 ${(config && config.jobChange && config.jobChange.perDay) || 1} 回まで）。`) +
+  (config && config.jobChange && config.jobChange.enabled === false ? '' : `作業も「作業 釣り」のようにコメントすると変えられます（1 日 ${(config && config.jobChange && config.jobChange.perDay) || 1} 回まで）。`) +
   dmJoinText(config);
 // DM で入居（config.dm.enabled の時だけ config.dm.howTo を出す。docs/DMで入居する手順.md）
 export const dmJoinText = (config) => (config && config.dm && config.dm.enabled === true && config.dm.howTo ? String(config.dm.howTo) : '');

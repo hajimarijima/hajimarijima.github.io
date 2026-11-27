@@ -218,6 +218,16 @@ function makeTool(kind0) {
     g.add(box(0.06, 0.56, 0.06, toolMats.wood, 0, 0.18, 0));
     g.add(box(0.13, 0.13, 0.26, toolMats.ironDark, 0, 0.47, 0.02));
     g.add(box(0.135, 0.135, 0.04, toolMats.ironTip, 0, 0.47, 0.16));
+  } else if (kind === 'can') {
+    // じょうろ：手で持つ取っ手の下に、ブリキの胴と、前へのびる細い口（先 userData.spout から水が出る）
+    const tin = toolMats.ironDark || head, tinL = toolMats.ironTip || light;
+    g.add(box(0.06, 0.06, 0.2, tin, 0, 0.02, 0.1)); // 取っ手
+    g.add(box(0.26, 0.24, 0.3, tin, 0, -0.14, 0.12)); // 胴
+    g.add(box(0.27, 0.04, 0.31, tinL, 0, -0.03, 0.12)); // 上のふち（明るい）
+    g.add(box(0.27, 0.03, 0.31, tinL, 0, -0.25, 0.12)); // 下のふち
+    g.add(box(0.06, 0.06, 0.26, tin, 0, -0.1, 0.38)); // 口
+    g.add(box(0.1, 0.1, 0.05, tinL, 0, -0.1, 0.52)); // はす口
+    const sp = new THREE.Object3D(); sp.position.set(0, -0.1, 0.56); g.add(sp); g.userData.spout = sp;
   } else if (kind === 'basket') {
     g.add(box(0.28, 0.18, 0.22, toolMats.basket, 0, -0.05, 0.12));
     g.add(box(0.08, 0.06, 0.08, toolMats.berry, 0.05, 0.06, 0.1));

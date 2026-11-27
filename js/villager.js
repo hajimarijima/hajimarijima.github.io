@@ -53,7 +53,7 @@ async function main() {
     ['参加した日', v.joinedAt && /^\d{2}:\d{2}$/.test(v.joinedAt) ? `${fmtDate(v.joined)} ${v.joinedAt} に島に来た（${v.joinedDay}日目）` : `${fmtDate(v.joined)}（${v.joinedDay}日目）`],
     // 誕生日・好きな食べ物（「住みたい 誕生日3月14日 りんご」で書いた値。書いていない人は島が決めた値）。プロフィールの欄を出す時はそちらに出る
     ...(ps && !ps.hidden ? [] : [...(v.birthday ? [['誕生日', mdText(v.birthday)]] : []), ...(v.profile && v.profile.food ? [['好きな食べ物', v.profile.food]] : []), ...(mbtiText(v, D.config) ? [['MBTI', mbtiText(v, D.config).replace('MBTI：', '')]] : [])]),
-    ['今の仕事', `${JOB[L.job] || 'まだなし'}${L.action ? '（' + ACTION[L.action] + '）' : ''}${L.smith && L.job !== 'smith' ? '・村の鍛冶職人' : ''}`],
+    ['今の作業', `${JOB[L.job] || 'まだなし'}${L.action ? '（' + ACTION[L.action] + '）' : ''}${L.smith && L.job !== 'smith' ? '・村の鍛冶職人' : ''}`],
     ['装備', gearNames(L, D.config.items).join('・') || 'なし（素手）'],
     ...hourRows(L),
     ['住んでいる家', homeName(L, D.world, D.config, D.state)],
@@ -84,6 +84,7 @@ async function main() {
   // 持ち物
   renderInventory(L, D.config, v);
   renderSocial(v, D);
+  import('./villagerhome.js').then((m) => m.renderVillagerHome(v, D)).catch((e) => console.warn('家と手紙', e)); // 家（飾り）と手紙の欄
   renderProfile(v, D.config, { day: D.state.day, L });
 
   // 3D の姿
@@ -118,7 +119,7 @@ async function main() {
   const clock = new THREE.Clock();
   renderer.setAnimationLoop(() => { animate(ch, mode, clock.getElapsedTime()); controls.update(); renderer.render(scene, camera); });
   const hint = document.createElement('div');
-  hint.className = 'hint'; hint.textContent = 'タップで仕事の動き'; el.appendChild(hint);
+  hint.className = 'hint'; hint.textContent = 'タップで作業の動き'; el.appendChild(hint);
 }
 // 関係の一覧と最近の立ち話
 function renderSocial(v, D) {
@@ -272,7 +273,9 @@ function buildForm(form, fields, vals, onSave, locked = new Set(), { lookUsed = 
 
 function renderProfile(v, config, ctx) {
   renderProfileView(v, config);
-  renderAuth(v, config, ctx);
+  // Google ログイン（js/auth.js）は今は使わない（自分の村人は DM の招待リンク。js/mine.js・me.html）。config.firebase.enabled が true の時だけ
+  if (config.firebase && config.firebase.enabled === true) renderAuth(v, config, ctx);
+  else { const ab = document.getElementById('authbox'); if (ab) ab.innerHTML = '<p class="muted">自分の村人の設定は、DM で届いた専用のリンクから開く「<a href="me.html">自分の村人</a>」のページでできます。</p>'; }
   const word = config.profileWord || 'プロフ';
   const sm = document.getElementById('pmbti'), mo = document.getElementById('pmonth'), da = document.getElementById('pday');
   sm.innerHTML = '<option value="">えらぶ</option>' + MBTI.map((m) => `<option>${m}</option>`).join('');

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>手紙のきまり | はじまり島</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/home.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1e2a4f">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/apple-touch-icon.png">
+<script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js"));</script>
+</head>
+<body>
+<!-- 手紙の利用のきまり。変えたら js/terms.js と worker.mjs の TERMS_VERSION を上げる（みんなに同意し直してもらう） -->
+<main class="wrap termspage" id="main">
+  <h1>手紙のきまり</h1>
+  <p class="muted">第 1 版。手紙を送る前に読んで、「同意する」を押してね。</p>
+  <section class="card mecard">
+    <ol class="terms">
+      <li><b>手紙は公開です</b><span>送った手紙は、相手の村人のページにものり、島のみんなが読めます。ひみつの話は書かないでね。</span></li>
+      <li><b>書かないこと</b><span>悪口やいやな言葉。住所・電話番号・学校の名前・SNS の ID などの個人情報。会う約束。お店や物の宣伝。</span></li>
+      <li><b>運営ができること</b><span>きまりに合わない手紙は、運営が消したり、その人が手紙を送れないようにしたりします。いやな手紙は「通報」で知らせてね。</span></li>
+      <li><b>13 歳より下の人</b><span>おうちの人と一緒に読んで、一緒に使ってね。</span></li>
+      <li><b>こまった時は</b><span>Instagram の DM で、運営に知らせてください。</span></li>
+    </ol>
+  </section>
+  <p class="me-btns"><a class="btn" href="mail.html" id="tback">手紙へもどる</a></p>
+</main>
+<script type="module">
+import { nav } from './js/common.js';
+import { withDemo } from './js/mine.js';
+nav('me.html');
+const a = document.getElementById('tback'); a.href = withDemo('mail.html');
+</script>
+</body>
+</html>

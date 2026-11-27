@@ -1,0 +1,60 @@
+/* 誰かの家に遊びに行く：町の画面の上の知らせ（.vbanner）・家の中（.vroom）・来た人ノート（.vnote）・home.html の「遊びに行く」（.visitcard） */
+.vnote { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.vnote li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 12px; background: #fffaf0; border: 1px solid var(--line, #eadfca); }
+.vnote .lface { flex: 0 0 32px; width: 32px; height: 32px; border-radius: 8px; overflow: hidden; background: #efe6d2; }
+.vnote .lface canvas { display: block; width: 32px; height: 32px; image-rendering: pixelated; }
+.vnote li > div { flex: 1 1 auto; min-width: 0; }
+.vnote .lhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 14px; }
+.vnote .lhead a { font-weight: 700; overflow-wrap: anywhere; }
+.vnote .lday { font-size: 12px; }
+.vword { margin: 2px 0 0; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; }
+.vnempty { margin: 0; }
+.vvisit { margin-top: 10px; }
+.vvisit .me-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn.vgo { gap: 6px; }
+.btn.vgo.off { opacity: .45; pointer-events: none; }
+.visitcard .me-h { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.vleft { margin-left: auto; font-size: 13px; font-weight: 400; }
+.vlist { list-style: none; margin: 0 0 10px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.vlist li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line, #eadfca); border-radius: 12px; background: #fff; min-width: 0; }
+.vlist .lface { flex: 0 0 32px; width: 32px; height: 32px; border-radius: 8px; overflow: hidden; background: #efe6d2; }
+.vlist .lface canvas { display: block; width: 32px; height: 32px; image-rendering: pixelated; }
+.vlist b { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.vlist .btn { flex: 0 0 auto; min-height: 34px; gap: 4px; }
+.vpick { display: flex; gap: 8px; align-items: center; }
+.vpick select { flex: 1 1 auto; min-width: 0; min-height: var(--ctl-h, 40px); border: 1px solid #d9cdb2; border-radius: 10px; padding: 4px 8px; font: inherit; font-size: 16px; background: #fff; }
+.vpick .btn { flex: 0 0 auto; gap: 4px; }
+
+/* 町の画面の上の知らせ */
+.vbanner { position: fixed; z-index: 60; left: 50%; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 8px 10px 8px 14px; border-radius: 14px; background: rgba(30, 42, 79, .92); color: #fff; font-size: 14px; font-weight: 700; line-height: 1.5; box-shadow: 0 6px 18px rgba(0, 0, 0, .25); }
+.vbanner[hidden] { display: none; }
+.vbanner > span { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.vbanner .btn { flex: 0 0 auto; min-height: 32px; padding: 0 12px; font-size: 13px; }
+
+/* 家の中 */
+html.vroom-open, html.vroom-open body { overflow: hidden; }
+.vroom { position: fixed; inset: 0; z-index: 80; display: flex; flex-direction: column; background: #2b2f3a; color: #fff; }
+.vr-top { display: flex; flex-direction: column; gap: 2px; padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 8px; background: #1e2a4f; }
+.vr-top b { font-size: 17px; }
+.vr-top span { font-size: 12px; opacity: .85; }
+.vr-view { position: relative; flex: 1 1 auto; min-height: 0; touch-action: none; }
+.vr-view canvas { display: block; }
+.vr-bubble { position: absolute; z-index: 2; transform: translate(-50%, -100%); max-width: min(260px, 70vw); padding: 6px 12px; border-radius: 12px; background: #fff; color: #2a2a2a; font-size: 14px; font-weight: 700; line-height: 1.5; box-shadow: 0 3px 10px rgba(0, 0, 0, .25); pointer-events: none; }
+.vr-bubble::after { content: ''; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: #fff; }
+.vr-bubble[hidden] { display: none; }
+.vroom .vr-view { --top: 0px; }
+.vroom > .vr-bubble { top: 0; }
+.vr-acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px)); background: #1e2a4f; }
+.vr-acts .btn { min-height: 38px; gap: 6px; }
+.vr-acts .btn.sub { background: #fff; color: #2a2a2a; }
+.vr-leave { margin-left: auto; }
+.vr-sheet { position: absolute; inset: 0; z-index: 5; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, .45); }
+.vr-sheet[hidden] { display: none; }
+.vr-card { width: min(560px, 100%); max-height: 88vh; overflow: auto; box-sizing: border-box; margin: 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); border-radius: 18px 18px 0 0; color: var(--ink, #2a2a2a); }
+.vr-card h2 { margin: 0 0 10px; font-size: 17px; }
+.vr-notes { margin-bottom: 12px; }
+.vr-words { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.vr-word { min-height: 44px; padding: 6px 10px; border: 2px solid var(--accent, #f08a24); border-radius: 12px; background: #fff; color: var(--ink, #2a2a2a); font: inherit; font-size: 14px; font-weight: 700; line-height: 1.4; cursor: pointer; text-align: center; }
+.vr-word:hover { background: var(--accent-soft, #fff1df); }
+.vr-sbtns { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 12px; }
+@media (min-width: 900px) { .vr-sheet { align-items: center; } .vr-card { border-radius: 18px; } }

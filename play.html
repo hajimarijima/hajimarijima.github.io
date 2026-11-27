@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>遊ぶ | はじまり島</title>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.min.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1e2a4f">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/apple-touch-icon.png">
+<script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js"));</script>
+</head>
+<body>
+<main class="wrap playpage" id="main">
+  <div class="playhead"><h1>遊ぶ</h1></div>
+  <div id="whobox"></div>
+  <div class="ptabs" role="tablist" aria-label="遊び">
+    <button type="button" class="ptab on" role="tab" aria-selected="true" data-tab="fish" data-icon="fish">釣り</button>
+    <button type="button" class="ptab" role="tab" aria-selected="false" data-tab="treasure" data-icon="gift">宝探し</button>
+    <button type="button" class="ptab" role="tab" aria-selected="false" data-tab="chore" data-icon="trees">おてつだい</button>
+  </div>
+  <div class="pstage" id="stage">
+    <div class="phud"><span class="chip" id="left" hidden></span><div class="cbar" id="cbar" hidden></div></div>
+    <p class="pmsg" id="pmsg" role="status" aria-live="polite"></p>
+    <button type="button" class="pact" id="act" hidden></button>
+    <div class="pcard card" id="pcard" role="dialog" aria-live="polite" hidden></div>
+  </div>
+  <section class="card pinfo" id="pinfo"></section>
+</main>
+<script type="module">import { applyIcons } from './js/icons.js'; applyIcons(document);</script>
+<script type="module" src="js/play/main.js"></script>
+</body>
+</html>

@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>村人 | はじまり島</title>
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/home.css">
+<link rel="stylesheet" href="css/visit.css">
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.min.js",
@@ -42,6 +44,14 @@
   <div class="card"><ul class="rels" id="rels"></ul><p class="muted" style="margin:8px 0 0"><a href="relations.html" id="relmap">町の相関図を見る</a></p></div>
   <h2>最近の立ち話</h2>
   <div class="card"><ul class="talks" id="talks"></ul></div>
+  <section id="homesec" class="vhome" hidden>
+  <h2>家</h2>
+  <div class="card"><div class="hview" id="homeview"></div><div class="htabs" id="hometabs" role="tablist"><button type="button" role="tab" data-t="out">家の外</button><button type="button" role="tab" data-t="in">家の中</button></div><p class="muted" id="homenote" style="margin:6px 0 0"></p></div>
+  </section>
+  <section id="mailsec" hidden>
+  <h2>手紙</h2>
+  <div class="card"><ul class="letters" id="letters"></ul></div>
+  </section>
   <!-- プロフィール（今は出さない。config.json の ui.profileSection を true にすると出る） -->
   <section id="profsec" hidden>
   <h2>プロフィール</h2>

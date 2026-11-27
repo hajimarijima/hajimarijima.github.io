@@ -377,13 +377,28 @@ const vcMat = () => lam('vcolor', () => new THREE.MeshLambertMaterial({ vertexCo
 // 物の一覧 → チャンクごとの Mesh を入れた Group。lite：遠くの木を簡単な形に。shadow：影を落とすか
 export function makeChunkObjects(list, { lite = false, shadow = true } = {}) {
   const g = new THREE.Group(), by = new Map();
-  for (const o of list) { const k = Math.floor(o.x / CHUNK_W) + ',' + Math.floor(o.z / CHUNK_W); let a = by.get(k); if (!a) by.set(k, (a = [])); objectBoxes(o, lite, a); }
-  for (const boxes of by.values()) {
+  for (const o of list) { const k = Math.floor(o.x / CHUNK_W) + ',' + Math.floor(o.z / CHUNK_W); let a = by.get(k); if (!a) by.set(k, (a = { boxes: [], objs: [] })); objectBoxes(o, lite, a.boxes); a.objs.push(o); }
+  for (const { boxes, objs } of by.values()) {
     if (!boxes.length) continue;
     const m = new THREE.Mesh(boxesToGeometry(boxes), vcMat());
     m.castShadow = shadow; m.receiveShadow = true; m.matrixAutoUpdate = false; g.add(m);
+    // 写真モード（photomode.js）：ids の木・岩だけ抜いた形にする（空の Set で元にもどす）
+    const full = m.geometry;
+    m.userData.objs = objs;
+    let hid = '';
+    m.userData.hideObjs = (ids) => {
+      const key = ids && ids.size ? objs.filter((o) => ids.has(o.id)).map((o) => o.id).join() : '';
+      if (key === hid) return;
+      hid = key;
+      if (m.geometry !== full) m.geometry.dispose();
+      m.geometry = full; m.visible = true;
+      if (!ids || !ids.size || !objs.some((o) => ids.has(o.id))) return;
+      const b = []; for (const o of objs) if (!ids.has(o.id)) objectBoxes(o, lite, b);
+      if (b.length) m.geometry = boxesToGeometry(b); else m.visible = false;
+    };
+    m.userData.disposeAll = () => { if (m.geometry !== full) m.geometry.dispose(); full.dispose(); };
   }
-  g.userData.dispose = () => g.traverse((m) => { if (m.isMesh) m.geometry.dispose(); });
+  g.userData.dispose = () => g.traverse((m) => { if (m.isMesh) (m.userData.disposeAll || (() => m.geometry.dispose()))(); });
   return g;
 }
 

@@ -6,6 +6,7 @@
 <title>はじまり島</title>
 <meta name="description" content="インスタの参加者が村人になって、毎日すこしずつ町を育てます。">
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/visit.css">
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.min.js",
@@ -33,6 +34,7 @@
         <span class="popbadge" id="popbadge">住民 <b>0</b> 人</span>
         <span class="tc-links">
           <button class="joinbtn" id="joinbtn" type="button" data-icon="house" data-icon-size="15" aria-haspopup="dialog">住むには</button>
+          <button class="photobtn" id="photobtn" type="button" data-icon="camera" data-icon-size="20" aria-label="写真をとる" title="写真をとる"><span>写真</span></button>
         </span>
       </div>
     </div>
@@ -99,5 +101,9 @@
 </main>
 <script type="module" src="js/town.js"></script>
 <script type="module" src="js/joinsheet.js"></script>
+<script type="module" src="js/photomode.js"></script>
+<script type="module" src="js/party3d.js"></script>
+<script type="module" src="js/watering3d.js"></script>
+<script type="module" src="js/visit3d.js"></script>
 </body>
 </html>

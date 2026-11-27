@@ -30,6 +30,7 @@ export function iconOf(h) {
   if (/サメ/.test(x)) return 'shark';
   if (t === 'fish' || /釣/.test(x)) return 'fish';
   if (t === 'social') return h.kind === 'family' ? 'users' : 'heart';
+  if (t === 'visit') return 'house'; // 仲の良い人の家へ遊びに行った（tools/visit.js）
   if (t === 'level') return 'shovel';
   if (t === 'craft') return 'pickaxe';
   if (t === 'find') return 'gem';
@@ -142,7 +143,7 @@ export const HIST_KINDS = [['all', 'すべて'], ['build', '建物'], ['vote', '
 export function histKind(h) {
   const t = (h && h.type) || '';
   if (t.startsWith('vote')) return 'vote';
-  if (t === 'social' || t === 'birthday') return 'social';
+  if (t === 'social' || t === 'birthday' || t === 'visit') return 'social';
   if (t === 'build' || t === 'join' || t === 'night') return t;
   return 'event';
 }
@@ -245,7 +246,7 @@ export function howCommentHtml(config) {
     ['message-circle', `「${w}」`, '町に住む（フォローしてから）'],
     ['backpack', `「${w} ピッケル 12/11 りんご」`, '最初の道具・誕生日・好きな食べ物もいっしょに'],
     ['cake', '「誕生日 12/11」', 'あとから誕生日を変える'],
-    ...(job ? [['fish', '「仕事 釣り」', '仕事を変える（1 日の回数に決まりあり）']] : []),
+    ...(job ? [['fish', '「作業 釣り」', '作業を変える（1 日の回数に決まりあり）']] : []),
     ['vote', '「A」「B」', '投票の投稿に書くと 1 票'],
   ];
   return rows.map(([i, c, t]) => `<li><span class="hi">${icon(i, { size: 18 })}</span><span><b class="cmt">${esc(c)}</b> ${esc(t)}</span></li>`).join('');

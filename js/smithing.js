@@ -95,6 +95,23 @@ export function pickJob({ store, people, config, built, CR }) {
   cand.sort((a, b) => (b.p.guard - a.p.guard) || (a.rank - b.rank) || (b.gain - a.gain) || ((a.type === 'armor' ? 0 : 1) - (b.type === 'armor' ? 0 : 1)));
   let want = null;
   for (const c of cand) {
+    // 鉱石を「自分で持つ」人（L.ores）の装備は、本人の鉱石を先に使い、足りない分をチェストから（keep の決まりはチェストの分だけ）
+    const own = c.p.L.ores || null;
+    if (own && Object.values(own).some((n) => n > 0)) {
+      const merged = { ...store };
+      for (const [k, n] of Object.entries(own)) merged[k] = (merged[k] || 0) + n;
+      const s = canMake(merged, c.from, SM.keep, CR.plan, CC); // 本人の分を先に使うので、チェストに残る数は keep のまま
+      if (s) {
+        const left = { ...s }, mine = {};
+        for (const [k, n] of Object.entries(own)) {
+          const used = (merged[k] || 0) - (s[k] || 0), fromOwn = Math.min(n, Math.max(0, used));
+          mine[k] = n - fromOwn;
+          left[k] = (store[k] || 0) - (used - fromOwn);
+          if (!left[k] && !(k in store)) delete left[k];
+        }
+        return { job: { type: c.type, key: c.key, to: c.p.key, kind: c.kind, slot: c.slot, tier: c.tier, store: left, own: mine }, want };
+      }
+    }
     const s = canMake(store, c.from, SM.keep, CR.plan, CC);
     if (s) return { job: { type: c.type, key: c.key, to: c.p.key, kind: c.kind, slot: c.slot, tier: c.tier, store: s }, want };
     if (!want) want = { key: c.key, to: c.p.key };

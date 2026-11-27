@@ -25,7 +25,7 @@ export function joinSheetHtml(config, mode) {
   const steps = dm
     ? [['user-plus', `インスタで <b>@${esc(acct)}</b> をフォローします。`],
       ['send', `DM で「<b>${esc(word)}</b>」と送ります。`],
-      ['house', 'すぐに家が建ち、あなたの家へのリンクが DM で届きます。']]
+      ['house', 'すぐに家が建ち、<b>あなた専用のリンク</b>が DM で届きます。開くと、その端末で自分の村人として遊べます。']]
     : [['user-plus', `インスタで <b>@${esc(acct)}</b> をフォローします。`],
       ['message-circle', `最新のリールに「<b>${esc(word)}</b>」とコメントします。`],
       ['clock', '15 分ほどで家が建ちます。上の欄で @ユーザー名 をさがすと、あなたの家へ行けます。']];
@@ -36,7 +36,7 @@ export function joinSheetHtml(config, mode) {
     : `<a class="js-main" href="${esc(prof)}" target="_blank" rel="noopener">${icon('instagram', { size: 20 })}<span>インスタのアカウントを開く</span></a>` +
       `<button type="button" class="js-sub" id="js-copy">${icon('copy', { size: 20 })}<span>『${esc(word)}』をコピー</span></button>`;
   const already = dm
-    ? `同じように DM で「${esc(word)}」と送ると、新しい家ではなく<b>元の家のリンク</b>が届きます。家はインスタのアカウントにひもづいているので、別のスマホからでも戻れます。`
+    ? `同じように DM で「${esc(word)}」と送ると、新しい家ではなく<b>元の家のリンク</b>と、新しい専用のリンクが届きます（前の専用のリンクは使えなくなります）。家はインスタのアカウントにひもづいているので、別のスマホからでも戻れます。`
     : `もう一度コメントしても、新しい家は建たず<b>元の家</b>のままです。家はインスタのアカウントにひもづいているので、別のスマホからでも上の欄で @ユーザー名 をさがせば戻れます。`;
   return `<div class="js-grab" aria-hidden="true"></div>` +
     `<button type="button" class="js-x" aria-label="閉じる" title="閉じる">${icon('x', { size: 22 })}</button>` +
@@ -100,7 +100,7 @@ async function setup() {
   document.getElementById('joinbtn')?.addEventListener('click', open);
   window.TOWN_JOIN = { open, close, mode }; // 確かめ用
   // 最初に開いた人だけ。DM の返事のリンク（?v=）・人さがし（?who=）で来た人には出さない。?join= の時はいつも出す
-  if (qs.get('join') || (!getSeen() && !qs.get('v') && !qs.get('who'))) setTimeout(open, 600);
+  if (qs.get('join') || (!getSeen() && !qs.get('v') && !qs.get('who') && !qs.has('me'))) setTimeout(open, 600);
 }
 if (typeof document !== 'undefined') {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setup); else setup();

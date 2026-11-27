@@ -8,7 +8,7 @@
 //   「住みたい」のコメント（はじめての受付）は読まない（道具は registrationsFrom が読む）。
 const P = require('./people');
 
-const DEF_WORDS = ['仕事', '役職', '職業', '転職', 'ジョブ'];
+const DEF_WORDS = ['仕事', '作業', '役職', '職業', '転職', 'ジョブ'];
 const cfgOf = (config) => {
   const J = (config && config.jobChange) || {};
   if (J.enabled === false) return null;
@@ -97,7 +97,7 @@ function applyJobChanges(S, comments, { day = 0, date = '', enemies = false, own
     S.history.push({ day, date, type: 'event', kind: 'job', text: `${v.display}さんが${from}から${to}になった。`, who: [v.key] });
     if (L && diary) {
       L.diary = L.diary || [];
-      const d = L.diary[L.diary.length - 1], note = `仕事を${from}から${to}にかえた。`;
+      const d = L.diary[L.diary.length - 1], note = `作業を${from}から${to}にかえた。`;
       if (d && d.day === day) d.text += note; else L.diary.push({ day, date, text: note });
     }
     out.push({ v, from, to });

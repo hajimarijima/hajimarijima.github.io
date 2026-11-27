@@ -34,10 +34,10 @@ function giveStartTool(L, v, { life, config }) {
     const has = byJob && !!I.getTool(L.inv, want.id); // 同じ種類の道具（石・鉄なども）をもう持っている
     if (has || I.addTool(L.inv, L.slots, want.item, dur)) {
       L.startTool = want.id; L.startAuto = false;
-      return byJob ? (has ? '' : `仕事が${want.job}になったので、${ITEMS[want.item].name}を持った。`) : `最初の道具を${ITEMS[want.item].name}にかえた。`;
+      return byJob ? (has ? '' : `作業が${want.job}になったので、${ITEMS[want.item].name}を持った。`) : `最初の道具を${ITEMS[want.item].name}にかえた。`;
     }
     // 持ち物がいっぱいでも、コメントで変えた仕事は変える（道具はあとで作る）
-    if (byJob) { L.startTool = want.id; L.startAuto = false; return `仕事が${want.job}になった（持ち物がいっぱいで、${ITEMS[want.item].name}は持てなかった）。`; }
+    if (byJob) { L.startTool = want.id; L.startAuto = false; return `作業が${want.job}になった（持ち物がいっぱいで、${ITEMS[want.item].name}は持てなかった）。`; }
     return '';
   }
   let pick = want;

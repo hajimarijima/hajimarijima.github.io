@@ -1,3 +1,5 @@
+// ※ 今は使わない：自分の村人は DM で届く専用のリンク（?me=印）でつなぐ（js/mine.js・me.html・docs/遊びとログインの手順.md）。
+//   villager.js は config.firebase.enabled が true の時だけここを呼ぶ。
 // Google ログイン（Firebase Authentication）と、自分の村人のプロフィールの読み書き（Firestore）。
 // 設定（js/firebase-config.js）が空なら mode: 'off' を返して、何も読みこまない。
 // DM で届いた招待リンク（?invite=印）で開いた時は、ログインすると useInvite でそのまま村人とつながる。

@@ -4,7 +4,7 @@
 
 // 持ち物の枠に出す中身と、その説明
 export function heldOf(L) {
-  if (L && Array.isArray(L.held)) return { list: L.held, label: 'きのうの仕事のおわりに持っていた物（夜にチェストへ入れる前）' };
+  if (L && Array.isArray(L.held)) return { list: L.held, label: 'きのうの作業のおわりに持っていた物（夜にチェストへ入れる前）' };
   return { list: (L && L.inv) || [], label: '今の持ち物（集めた物は夜にチェストへ入れたあと）' };
 }
 
