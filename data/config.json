@@ -9,7 +9,7 @@
   "photoNote": "写真モード（js/photomode.js）で共有する時の文に入れるハッシュタグ（# は付けない）と島の URL。featureTag は保存したあとの「#〇〇 で投稿すると、島で紹介されるかも」に出すタグ。url が空なら今のページの URL",
   "profileUrl": "https://www.instagram.com/comment_de_sodatsu/",
   "profileUrlNote": "投票の投稿の URL（votePostUrl）が空の時、投票のボタンはここ（インスタのプロフィール）へ飛ぶ",
-  "liveStatsUrl": "",
+  "liveStatsUrl": "https://town-webhook.winterekordbox.workers.dev/stats",
   "liveStatsUrlNote": "フォロワー数を 2〜3 分ごとに新しく出すための、Cloudflare の受け口の URL の後ろに /stats を付けたもの。例 \"https://town-webhook.〇〇.workers.dev/stats\"（docs/すぐ反映する手順.md）。空のあいだは、15 分ごとの受付で書いた数（state.followers）を出す",
   "joinWord": "住みたい",
   "mbtiOn": true,

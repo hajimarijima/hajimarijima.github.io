@@ -2576,7 +2576,7 @@ at('Webhook の受け口（tools/webhook/worker.mjs）：署名を確かめる�
   } finally { globalThis.fetch = realFetch; }
   const vh = fs.readFileSync(path.join(ROOT, 'vote.html'), 'utf8');
   assert.ok(/config\.liveStatsUrl/.test(vh) && /state\.followers\.toLocaleString/.test(vh), '投票のページ：liveStatsUrl があれば読む・なければ state.followers');
-  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8')).liveStatsUrl, '', 'liveStatsUrl は空にしておく');
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'config.json'), 'utf8')).liveStatsUrl.replace(/^https:\/\/[^/]+\.workers\.dev\/stats$/, ''), '', 'liveStatsUrl は空か、Worker の /stats');
   const src = fs.readFileSync(path.join(ROOT, 'tools', 'webhook', 'worker.mjs'), 'utf8');
   assert.ok(!/ghp_|github_pat_/.test(src), '鍵をコードに書かない');
   const wf = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'join.yml'), 'utf8');
