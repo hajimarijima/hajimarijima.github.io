@@ -199,6 +199,10 @@ export function dmMessages(payload) {
   }
   return out;
 }
+// 住んでいる人がプロフィールを書き直す DM（「性別 女の子」「ひとこと よろしく」「趣味 釣り」「色 水色」「誕生日 12/11」「MBTI ENFP」「好きな食べ物 りんご」）。
+// 名札で始まる DM だけ（どの村人かは join.js の tools/dm.js が決める。住んでいない人の DM は消すだけ）
+const DM_PROFILE_RE = /^\s*(性別|せいべつ|ひとこと|一言|自己紹介|趣味|しゅみ|好きな色|すきな色|色|いろ|カラー|誕生日|たんじょうび|mbti|好きな食べ物|好物)/i;
+export const dmProfileHit = (text) => DM_PROFILE_RE.test(nfkc(text));
 export const dmWordHit = (text, words) => { const t = nfkc(text); return (words && words.length ? words : DM_WORDS).some((w) => nfkc(w) && t.includes(nfkc(w))); };
 
 // サイトの data/config.json の dm（enabled・words）。5 分おぼえておく。読めない時は「積んでおく」（入居するかは join.js が config で決め直す）
@@ -247,7 +251,7 @@ async function handleDm(env, msgs) {
   if (!cfg.enabled) return 0;
   let queued = 0;
   for (const m of msgs) {
-    if (!dmWordHit(m.text, cfg.words)) continue; // ふつうの話の DM は積まない
+    if (!dmWordHit(m.text, cfg.words) && !dmProfileHit(m.text)) continue; // ふつうの話の DM は積まない（住んでいる人のプロフィールの書き直しは積む）
     const key = 'dmq:' + (await sha256Hex(m.mid)).slice(0, 32);
     if (await kv.get(key)) continue; // Meta の送り直し
     const prof = await igProfile(env, m.igsid);
