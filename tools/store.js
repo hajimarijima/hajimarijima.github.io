@@ -10,7 +10,8 @@ const DF = require('../js/datafiles.js');
 const readJSON = (p, d) => (fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : d);
 const writeJSON = (p, o) => fs.writeFileSync(p, JSON.stringify(o, null, 1) + '\n');
 
-function readWorld(dir) { return TM.decodeWorld(readJSON(path.join(dir, 'world.json'))); }
+// 読む時に、はじまり島の広さ・周りの島（js/isles.js）と、広げた岸の内側の区画（island_layout の extendMainPlots）を今の決まりに合わせる
+function readWorld(dir) { return require('./island_layout').extendMainPlots(TM.decodeWorld(readJSON(path.join(dir, 'world.json')))); }
 function writeWorld(dir, world, opt) { writeJSON(path.join(dir, 'world.json'), TM.encodeWorld(world, opt)); }
 
 const groupRaw = new Map(); // 読んだ時の組のファイルの中身（書く時に、変わったかを比べる）

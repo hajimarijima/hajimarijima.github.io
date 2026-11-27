@@ -8,8 +8,9 @@ import * as THREE from 'three';
 import { BLOCK, CHUNK } from './terrain_gen.js';
 import { makeChunkObjects } from './blocks.js';
 
-const TOP = { grass: 0x7fb456, sand: 0xe3d29a, stone: 0x8d9095, snow: 0xf1f4f8, water: 0xc2b48a };
-const SIDE = { grass: 0x8a6a46, sand: 0xd0bc84, stone: 0x767a80, snow: 0x9a9ea6, water: 0xa89a74 };
+// dgrass・dstone：敵の多い島の暗い草と石。ore_c・ore_i・ore_g：鉱石のまじった石（石炭・鉄・金）
+const TOP = { grass: 0x7fb456, sand: 0xe3d29a, stone: 0x8d9095, snow: 0xf1f4f8, water: 0xc2b48a, dgrass: 0x4f7440, dstone: 0x62656c, ore_c: 0x5f6166, ore_i: 0xa98e78, ore_g: 0xb9a356 };
+const SIDE = { grass: 0x8a6a46, sand: 0xd0bc84, stone: 0x767a80, snow: 0x9a9ea6, water: 0xa89a74, dgrass: 0x725c42, dstone: 0x5c5f66, ore_c: 0x4f5155, ore_i: 0x917a66, ore_g: 0x9e8b4a };
 const WATER_Y = -0.3;
 export const topY = (c) => (c.h >= 0 ? c.h * BLOCK : c.h * 1.1);
 
@@ -37,8 +38,8 @@ function chunkGeometry(gen, ci, cj, step) {
       if (dz === 1) quad([x1, y, z1], [x0, y, z1], [x0, ny, z1], [x1, ny, z1], n, D);
       if (dz === -1) quad([x0, y, z0], [x1, y, z0], [x1, ny, z0], [x0, ny, z0], n, D);
       // 草のブロックは、横の面の上 1 段だけ緑（マイクラの草ブロック）
-      if (c.kind === 'grass' && step === 1 && y - ny > 0.5) {
-        const g = new THREE.Color(TOP.grass).multiplyScalar(shade * 0.92), yy = y - 0.35, e = 0.01;
+      if ((c.kind === 'grass' || c.kind === 'dgrass') && step === 1 && y - ny > 0.5) {
+        const g = new THREE.Color(TOP[c.kind]).multiplyScalar(shade * 0.92), yy = y - 0.35, e = 0.01;
         if (dx === 1) quad([x1 + e, y, z0], [x1 + e, y, z1], [x1 + e, yy, z1], [x1 + e, yy, z0], n, g);
         if (dx === -1) quad([x0 - e, y, z1], [x0 - e, y, z0], [x0 - e, yy, z0], [x0 - e, yy, z1], n, g);
         if (dz === 1) quad([x1, y, z1 + e], [x0, y, z1 + e], [x0, yy, z1 + e], [x1, yy, z1 + e], n, g);

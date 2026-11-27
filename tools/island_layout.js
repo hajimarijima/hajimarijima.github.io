@@ -16,28 +16,13 @@ const NORTH = { id: 'north', name: '北の島', x: 6, z: -104, r: 32, wob: [[0.0
 //   見えるだけで、今は行けない（wild：木と岩は見た目だけ。村人は使わない）。町の画面を開くと右上にかすんで見える
 const FARLAND = { id: 'far', x: 310, z: -190, r: 235, wob: [[0.05, 3, 0.4], [0.035, 5, 1.7], [0.02, 9, 2.9]], wild: true, open: 0 };
 
-// 海の島々：はじまり島のまわりの海に、大きさも形もいろいろな島（はじめはどれも行けない）。
-//   look：small（小島）・rocky（岩の多い島。まわりの海に岩の柱）・long（細長い島）・forest（森の島）・beach（砂浜の広い島）
+// 海の島々（周りの島）：形・場所・特徴（traits）は js/isles.js（サイトと共通）。はじめはどれも行けない。
 //   from：橋をかける元の島（その島が開いてから、こちらへの橋を作り始める。config.json の expansion.bridges に開く条件）
-//   開くまでは、地形（js/terrain_gen.js）が見た目だけの木と岩を少しだけ出す。橋ができた日に sim.js が populateIsland で本物の木・岩・区画を置く
-//   開く島はどれも北の島（半径 32）に近い大きさ（半径 26〜29）で、家が何軒も建つ。from のない小島（ことり島・こじま）は飾りで、開かない
-//   並び：はじまり島のまわりの輪（中心から約 100）に 5 つ、その外の輪（約 157）に 4 つ。橋はどれも 25〜33
-const SEA_ISLES = [
-  { id: 'iwa', name: 'いわ島', x: 87, z: 50, r: 27, wob: [[0.08, 4, 0.9], [0.04, 7, 2.2]], look: 'rocky', from: 'main' },
-  { id: 'minami', name: 'みなみ島', x: 19, z: 99, r: 28, wob: [[0.1, 2, 0.3], [0.04, 5, 2.6]], look: 'beach', from: 'main' },
-  { id: 'kame', name: 'かめ島', x: -62, z: 80, r: 28, wob: [[0.05, 3, 1.1], [0.03, 6, 0.2]], look: 'forest', from: 'main' },
-  { id: 'kujira', name: 'くじら島', x: -104, z: 5, r: 29, wob: [[0.18, 2, 0], [0.04, 3, 0.6]], look: 'long', from: 'main' },
-  { id: 'mori', name: 'もり島', x: -70, z: -73, r: 29, wob: [[0.06, 3, 0.2], [0.04, 5, 1.8]], look: 'forest', from: 'main' },
-  { id: 'umineko', name: 'うみねこ島', x: 89, z: 128, r: 26, wob: [[0.09, 3, 0.8], [0.04, 5, 0.1]], look: 'rocky', from: 'iwa' },
-  { id: 'takara', name: 'たから島', x: -38, z: 151, r: 27, wob: [[0.08, 3, 2.4], [0.04, 4, 1.0]], look: 'beach', from: 'minami' },
-  { id: 'yuuhi', name: 'ゆうひ島', x: -141, z: 72, r: 29, wob: [[0.06, 3, 1.5], [0.04, 5, 0.4]], look: 'forest', from: 'kame' },
-  { id: 'hoshi', name: 'ほし島', x: -146, z: -59, r: 26, wob: [[0.09, 5, 0.3], [0.04, 3, 1.2]], look: 'rocky', from: 'mori' },
-  // 飾りの小島（橋はかからない）
-  { id: 'kotori', name: 'ことり島', x: 44, z: -67, r: 6.5, wob: [[0.12, 3, 0.5], [0.06, 5, 1.2]], look: 'small' },
-  { id: 'kojima', name: 'こじま', x: 104, z: -5, r: 7, wob: [[0.14, 3, 2.0], [0.06, 5, 0.7]], look: 'rocky' },
-];
+//   開くまでは、地形（js/terrain_gen.js）が見た目だけの木と岩を出す。橋ができた日に sim.js が populateIsland で本物の木・岩・区画を置く
+const ISL = require('../js/isles.js');
+const SEA_ISLES = ISL.SEA_ISLES;
 // world.islands に足す形（from は橋のほうに持たせる）と、その橋（まだかかっていない）
-function seaIslands() { return SEA_ISLES.map(({ from, ...i }) => ({ ...i, wob: i.wob.map((w) => w.slice()), open: 0 })); }
+function seaIslands() { return ISL.seaIslandsNew(); }
 function seaBridges(islands) {
   const by = Object.fromEntries(islands.map((i) => [i.id, i]));
   return SEA_ISLES.filter((s) => by[s.from] && by[s.id]).map((s) => {
@@ -52,7 +37,8 @@ function buildIslandWorld({ seed, ores, gather, debris, candidates = null }) {
   const nearCand = (x, z, d) => !!candidates && candidates.some((c) => Math.hypot(c.x - x, c.z - z) < d);
   const R = makeRng('island:' + seed);
   const GA = gather || { rockItems: [6, 10] };
-  const main = { ...MAIN }, north = { ...NORTH };
+  // はじまり島は一回り広い（js/isles.js の MAIN_R）。木と岩・区画の場所は前の大きさ（MAIN）で決め、広がった岸の内側は平らな草地のまま空けておく
+  const main = { ...MAIN, r: ISL.MAIN_R }, north = { ...NORTH }, main0 = { ...MAIN };
   const islands = [main, north, { ...FARLAND }, ...seaIslands()];
   const ends = IS.bridgeEnds(main, north, 2.5);
   const bridge = { id: 'north', to: 'north', name: '北の島への橋', a: r2p(ends.a), b: r2p(ends.b), w: 3.4, built: 0 };
@@ -70,7 +56,7 @@ function buildIslandWorld({ seed, ores, gather, debris, candidates = null }) {
   for (let tries = 0; bushes.length < 12 && tries < 2000; tries++) {
     const a = R.range(-0.4, 0.4), r = R.range(31, 39);
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
-    if (IS.shoreDist(main, x, z) < 6 || near(bushes, x, z, 2.2)) continue;
+    if (IS.shoreDist(main0, x, z) < 6 || near(bushes, x, z, 2.2)) continue;
     bushes.push({ id: 'b' + bushes.length, x: +x.toFixed(2), z: +z.toFixed(2), ready: true, regrow: 0 });
   }
 
@@ -97,7 +83,7 @@ function buildIslandWorld({ seed, ores, gather, debris, candidates = null }) {
       else if (roll < pTree) trees.push(TM.treeAt(x, z));
     }
   };
-  scatter(main, 5, 0.12, 0.64);
+  scatter(main0, 5, 0.12, 0.64);
   scatter(north, 4.6, 0.2, 0.78); // 北の島は森が深く、岩も多い
   // 最初の日に掘る岩が近くにあるように、まん中のそばに 2 つ
   for (const [x0, z0] of candidates ? [] : [[11.5, -9.5], [-10.5, 7.5]]) {
@@ -111,16 +97,18 @@ function buildIslandWorld({ seed, ores, gather, debris, candidates = null }) {
   const uniq = (list) => list.filter((o) => { const k = TM.tileOf(o.x) + ',' + TM.tileOf(o.z); if (seen.has(k)) return false; seen.add(k); return true; });
   const rocksU = uniq(rocks), treesU = uniq(trees);
 
-  // ---------- 建てる区画：村のまん中のまわりの輪（半径 12・19・26。道もこの輪にそう）と、北の島の輪 ----------
+  // ---------- 建てる区画：村のまん中のまわりの輪（半径 12・19・26・33・40。道もこの輪にそう。33・40 は広げた岸の内側）と、北の島の輪 ----------
   const plots = [];
   const ring = (cx, cz, r, n, off, island) => { for (let i = 0; i < n; i++) { const a = off + (i / n) * Math.PI * 2; const p = { x: +(cx + Math.cos(a) * r).toFixed(2), z: +(cz + Math.sin(a) * r * 0.92 - (island ? 0 : 1)).toFixed(2) }; if (island) p.island = island; plots.push(p); } };
   ring(0, 0, 12, 8, 0.2);
   ring(0, 0, 19, 12, 0.05);
   ring(0, 0, 26, 16, 0.3);
+  ring(0, 0, 33, 20, 0.12);
+  ring(0, 0, 40, 24, 0.22);
   ring(north.x, north.z, 10, 6, 0.4, 'north');
   ring(north.x, north.z, 18, 10, 0.15, 'north');
   // 海べの特別な場所（港・漁師小屋・灯台）：南の岸から少し内側
-  const sp = (ang, inset) => r2p(IS.shorePoint(main, ang, inset));
+  const sp = (ang, inset) => r2p(IS.shorePoint(main0, ang, inset)); // 海べの特別な場所は前の岸から（広げても動かさない）
   const special = { center: { x: 0, z: -1 }, coast: sp(Math.PI / 2, 9), coast2: sp(Math.PI / 2 + 0.45, 9), coast3: sp(Math.PI / 2 - 0.5, 8) };
   const coastPts = [special.coast, special.coast2, special.coast3];
   const okPlot = (p) => {
@@ -128,6 +116,7 @@ function buildIslandWorld({ seed, ores, gather, debris, candidates = null }) {
     if (IS.shoreDist(isl, p.x, p.z) < 12) return false;
     if (Math.hypot(p.x - POND.x, p.z - POND.z) < POND.r + 3.5) return false;
     if (near(coastPts, p.x, p.z, 9) || nearBridge(p.x, p.z, 7)) return false;
+    if (!p.island && (near(rocksU, p.x, p.z, 2.6) || near(bushes, p.x, p.z, 3.5))) return false; // 外の輪は前の森の中にもかかるので、岩と草むらの上はよける
     return true;
   };
 
@@ -142,7 +131,7 @@ function buildIslandWorld({ seed, ores, gather, debris, candidates = null }) {
     for (let k = 0; k < 40; k++) {
       const a = RW.range(0, Math.PI * 2), r = Math.sqrt(RW.next()) * mr;
       const tx = mx + Math.cos(a) * r, tz = mz + Math.sin(a) * r;
-      if (IS.shoreDist(isl, tx, tz) < 9) continue;
+      if (IS.shoreDist(isl === main ? main0 : isl, tx, tz) < 9) continue;
       x = tx; z = tz;
       if (!near(treesU, x, z, 1.4) && !near(rocksU, x, z, 2) && !near(animals, x, z, 1.6)) break;
     }
@@ -151,7 +140,7 @@ function buildIslandWorld({ seed, ores, gather, debris, candidates = null }) {
   for (let i = 0; i < 16; i++) place(i, MEADOWS[i % MEADOWS.length]);
   for (let i = 16; i < 21; i++) place(i, NORTH_M[0]);
 
-  const south = IS.shorePoint(main, Math.PI / 2, 0);
+  const south = IS.shorePoint(main0, Math.PI / 2, 0);
   return {
     layout: 'island',
     size: 2 * Math.ceil(main.r * 1.15), seaZ: +south.z.toFixed(2), // seaZ・size は前の形の画面のため（島の南の岸）
@@ -171,7 +160,16 @@ function r2p(p) { return { x: +p.x.toFixed(2), z: +p.z.toFixed(2) }; }
 // 橋がかかった海の島（look のある島）に、本物の木・岩・区画を置く（tools/sim.js が橋のできた日に 1 回だけ呼ぶ）。
 //   look ごとに森の濃さと岩の多さを変える。岸・橋のたもと・ほかの木と岩のそばには置かない。決まった種なので何度呼んでも同じ所
 //   [岩の割合, 岩＋木の割合, 格子の目の大きさ, 岸から空ける幅（砂浜の上には置かない）]。開く前の見た目（js/terrain_gen.js の ISLE_OBJ）と同じくらいの濃さ
-const LOOK = { small: [0.1, 0.65, 3, 2.6], rocky: [0.32, 0.55, 4.4, 4.4], long: [0.12, 0.62, 4, 4.4], forest: [0.08, 0.85, 4.1, 4.4], beach: [0.06, 0.45, 4.4, 8] };
+//   周りの島（traits）は地形の段・池・入り江があるので、木・岩・区画は平らな所（高さ 0 の草地。水と段から離れた所）だけに置く（js/terrain_gen.js の形を見る）
+const LOOK = { small: [0.1, 0.65, 3, 2.6], rocky: [0.32, 0.55, 4.4, 4.4], long: [0.12, 0.62, 4, 4.4], forest: [0.08, 0.85, 4.1, 4.4], beach: [0.06, 0.45, 4.4, 8], cove: [0.08, 0.55, 4.4, 4.4], meadow: [0.04, 0.22, 4.6, 4.4], dark: [0.1, 0.75, 4.1, 4.4] };
+let TG = null;
+// (x, z) のまわり rad ブロックが、どこも高さ 0 の陸（水・段がない）か
+function flatAround(world, x, z, rad) {
+  if (!TG || TG.islands !== world.islands) TG = require('../js/terrain_gen.js').makeTerrain({ islands: world.islands, seaZ: world.seaZ });
+  const B = require('../js/terrain_gen.js').BLOCK, i0 = Math.floor(x / B), j0 = Math.floor(z / B);
+  for (let a = -rad; a <= rad; a++) for (let b = -rad; b <= rad; b++) { const c = TG.cell(i0 + a, j0 + b); if (c.h !== 0 || c.kind === 'water') return false; }
+  return true;
+}
 function populateIsland(world, isl, { seed, ores, gather } = {}) {
   const R = makeRng('isle:' + seed + ':' + isl.id);
   const GA = gather || { rockItems: [6, 10] };
@@ -187,6 +185,7 @@ function populateIsland(world, isl, { seed, ores, gather } = {}) {
     if (IS.shoreDist(isl, x, z) < shore || nearBridge(x, z, roll < pRock ? 4 : 5.5)) continue; // 木は葉が橋にかからないように少し広く空ける
     const k = TM.tileOf(x) + ',' + TM.tileOf(z);
     if (taken.has(k)) continue;
+    if (isl.traits && !flatAround(world, x, z, roll < pRock ? 1 : 2)) continue;
     if (roll < pRock) {
       if (near(rocks, x, z, 4)) continue;
       const max = R.int(GA.rockItems[0], GA.rockItems[1]);
@@ -200,16 +199,30 @@ function populateIsland(world, isl, { seed, ores, gather } = {}) {
     const a = k * 2.4, rr = k ? Math.min(3, isl.r * 0.35) : 0;
     const sp = TM.spotIn(TM.tileOf(isl.x + Math.cos(a) * rr), TM.tileOf(isl.z + Math.sin(a) * rr));
     const kk = TM.tileOf(sp.x) + ',' + TM.tileOf(sp.z);
-    if (taken.has(kk) || IS.shoreDist(isl, sp.x, sp.z) < 2.6 || nearBridge(sp.x, sp.z, 4) || near(rocks, sp.x, sp.z, 2) || near(trees, sp.x, sp.z, 2.5)) continue;
+    if (taken.has(kk) || IS.shoreDist(isl, sp.x, sp.z) < 2.6 || (isl.traits && !flatAround(world, sp.x, sp.z, 2)) || nearBridge(sp.x, sp.z, 4) || near(rocks, sp.x, sp.z, 2) || near(trees, sp.x, sp.z, 2.5)) continue;
     trees.push(TM.treeAt(sp.x, sp.z)); taken.add(kk);
   }
   // 家を建てる区画：島のまん中のまわりの輪（岸から 10 以上・橋のたもとの外）。小さな島はなし
   //   北の島（半径 32 に 10 と 18 の輪）と同じ形で、島の大きさに合わせて輪を縮める
+  //   小さめの島（半径 26 未満）は輪を少し外へ・岸からの幅を少し狭く。周りの島は、まわり 2 ブロックが平らな所だけ（家が段や水の上に出ない）
   if (isl.r >= 15) {
-    const rings = [[isl.r * 0.33, 6, 0.3], [isl.r * 0.6, 10, 0.1]];
+    const small = isl.r < 26;
+    const rings = small ? [[isl.r * 0.3, 6, 0.3], [isl.r * 0.56, 9, 0.1]] : [[isl.r * 0.33, 6, 0.3], [isl.r * 0.6, 10, 0.1]];
+    if (isl.r >= 34) rings.push([isl.r * 0.78, 14, 0.2]);
+    if (isl.traits) rings.push([isl.r * 0.18, 4, 0.9], [isl.r * 0.46, 8, 0.6]); // 池・入り江・丘でつぶれる分の、予備の輪
     for (const [rr, n, off] of rings) for (let i = 0; i < n; i++) {
       const a = off + (i / n) * Math.PI * 2, p = { x: +(isl.x + Math.cos(a) * rr).toFixed(2), z: +(isl.z + Math.sin(a) * rr).toFixed(2), island: isl.id };
-      if (IS.shoreDist(isl, p.x, p.z) >= 8.5 && !nearBridge(p.x, p.z, 7)) plots.push(p);
+      if (IS.shoreDist(isl, p.x, p.z) >= (small ? 6 : 8.5) && !nearBridge(p.x, p.z, 7) && (!isl.traits || flatAround(world, p.x, p.z, 2)) && !near(plots, p.x, p.z, 6.5)) plots.push(p); // 区画どうしは 6.5 あける
+    }
+  }
+  // 周りの島で区画が 8 つに足りない時（小さな島・池や岩山のある島）は、平らな所を格子で探して足す（まん中に近い順）
+  if (isl.traits && isl.r >= 15 && plots.length < 8) {
+    const cand = [];
+    for (let gz = isl.z - isl.r; gz <= isl.z + isl.r; gz += 3) for (let gx = isl.x - isl.r; gx <= isl.x + isl.r; gx += 3) cand.push({ x: +gx.toFixed(2), z: +gz.toFixed(2), island: isl.id });
+    cand.sort((a, b) => Math.hypot(a.x - isl.x, a.z - isl.z) - Math.hypot(b.x - isl.x, b.z - isl.z));
+    for (const p of cand) {
+      if (plots.length >= 8) break;
+      if (IS.shoreDist(isl, p.x, p.z) >= 6 && !nearBridge(p.x, p.z, 7) && flatAround(world, p.x, p.z, 2) && !near(plots, p.x, p.z, 6.5)) plots.push(p);
     }
   }
   // 区画の上の木と岩はよける
@@ -219,13 +232,13 @@ function populateIsland(world, isl, { seed, ores, gather } = {}) {
   return { trees: T, rocks: K, plots };
 }
 
-// 拠点（村のまん中）が決まった時の、はじまり島の区画：拠点のまわりの輪（半径 12・19・26）。
+// 拠点（村のまん中）が決まった時の、はじまり島の区画：拠点のまわりの輪（半径 12・19・26・33・40。33・40 は広げた岸の内側）。
 //   岸から 12 未満・池・海べの特別な場所・橋のたもと・草むらにかかる区画は使わない。北の島の区画は今のまま
 function basePlots(world, c) {
   const main = world.islands[0];
   const out = [];
   const ring = (r, n, off) => { for (let i = 0; i < n; i++) { const a = off + (i / n) * Math.PI * 2; out.push({ x: +(c.x + Math.cos(a) * r).toFixed(2), z: +(c.z + Math.sin(a) * r * 0.92).toFixed(2) }); } };
-  ring(12, 8, 0.2); ring(19, 12, 0.05); ring(26, 16, 0.3);
+  ring(12, 8, 0.2); ring(19, 12, 0.05); ring(26, 16, 0.3); ring(33, 20, 0.12); ring(40, 24, 0.22);
   const sp = world.special || {};
   const coastPts = [sp.coast, sp.coast2, sp.coast3].filter(Boolean);
   const pond = world.pond;
@@ -233,8 +246,19 @@ function basePlots(world, c) {
     && !(pond && Math.hypot(p.x - pond.x, p.z - pond.z) < pond.r + 3.5)
     && !coastPts.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < 9)
     && !(world.bridges || []).some((b) => IS.bridgeDist(b, p.x, p.z) < 7)
-    && !(world.bushes || []).some((b) => Math.hypot(b.x - p.x, b.z - p.z) < 3.5);
+    && !(world.bushes || []).some((b) => Math.hypot(b.x - p.x, b.z - p.z) < 3.5)
+    && (Math.hypot(p.x - c.x, p.z - c.z) < 30 || !(world.rocks || []).some((r) => r.hp > 0 && Math.hypot(r.x - p.x, r.z - p.z) < 2.6)); // 外の輪は岩の上をよける
   return out.filter(ok).concat((world.plots || []).filter((p) => p.island));
 }
 
-module.exports = { buildIslandWorld, basePlots, populateIsland, seaIslands, seaBridges, SEA_ISLES, MAIN, NORTH, FARLAND };
+// 前の大きさ（半径 50）で作った world.json の、はじまり島の区画に、広げた岸の内側の輪（33・40）を足す（tools/store.js が読む時に呼ぶ）。
+//   後ろに足すだけなので、今の区画の番号（建物の plot）は変わらない。今の区画から 4 以内の所は足さない。何度呼んでも同じ
+function extendMainPlots(world) {
+  if (!world || world.layout !== 'island' || !Array.isArray(world.plots) || !world.islands) return world;
+  const c = world.square ? { x: world.square.x, z: world.square.z } : { x: 0, z: -1 };
+  const add = basePlots(world, c).filter((p) => !p.island && Math.hypot(p.x - c.x, p.z - c.z) > 30);
+  for (const p of add) if (!world.plots.some((q) => !q.island && Math.hypot(q.x - p.x, q.z - p.z) < 4)) world.plots.push(p);
+  return world;
+}
+
+module.exports = { buildIslandWorld, basePlots, extendMainPlots, populateIsland, seaIslands, seaBridges, SEA_ISLES, MAIN, NORTH, FARLAND };

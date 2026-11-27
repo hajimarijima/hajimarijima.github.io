@@ -64,9 +64,11 @@ function siteOptions(world, state) {
   const used = new Set(world.buildings.map((b) => b.plot));
   // まだ橋がかかっていない島の区画は、候補に出さない
   const openIsl = (id) => !id || IS.isOpen((world.islands || []).find((i) => i.id === id));
-  const free = world.plots.map((p, i) => ({ x: p.x, z: p.z, plot: i, island: p.island })).filter((p) => !used.has(p.plot) && openIsl(p.island));
   const C = ctrOf(world);
   const r = (p) => Math.hypot(p.x - C.x, p.z - C.z);
+  const free0 = world.plots.map((p, i) => ({ x: p.x, z: p.z, plot: i, island: p.island })).filter((p) => !used.has(p.plot) && openIsl(p.island));
+  // はじまり島の外の輪（拠点から 30 より先。広げた岸の内側）は、内側の区画が残り 3 つより少なくなってから使う
+  const free = free0.filter((p) => !p.island && r(p) <= 30).length >= 3 ? free0.filter((p) => p.island || r(p) <= 30) : free0;
   const isl = (p) => (p.island && world.islands ? IS.islandName(world, p.x, p.z) : '');
   const trees = (p) => world.trees.filter((t) => !t.gone && t.state === 'tree' && Math.hypot(t.x - p.x, t.z - p.z) < 9).length;
   const mainFree = free.filter((p) => !p.island);

@@ -1425,7 +1425,7 @@ t('小さな島：はじまり島は 1 画面ほど（前の一辺 220 の半分
   const m = w0.islands[0];
   let rmin = 1e9, rmax = 0;
   for (let a = 0; a < Math.PI * 2; a += 0.02) { const r = ISX.radiusAt(m, a); rmin = Math.min(rmin, r); rmax = Math.max(rmax, r); }
-  assert.ok(rmax * 2 <= 220 * 0.55 && rmin * 2 >= 220 * 0.35, `はじまり島のはば ${(rmin * 2).toFixed(0)}〜${(rmax * 2).toFixed(0)}`);
+  assert.ok(rmax * 2 <= 220 * 0.56 && rmin * 2 >= 220 * 0.35, `はじまり島のはば ${(rmin * 2).toFixed(0)}〜${(rmax * 2).toFixed(0)}`);
   assert.ok(!ISX.onLand(w0, 0, rmax + 6, 0, { open: false }) && !ISX.onLand(w0, rmax + 6, 0, 0, { open: false }), '島の外は海');
   assert.ok(!ISX.isOpen(w0.islands[1]), '北の島は、はじめは行けない');
   for (const list of ['trees', 'rocks', 'bushes', 'animals', 'plots']) for (const o of w0[list]) assert.ok(ISX.onLand(w0, o.x, o.z, 0, { open: false }), `${list} が海の中 ${o.x},${o.z}`);
@@ -1489,10 +1489,18 @@ t('海の島々：重ならず、橋は陸から陸へ（とちゅうで別の�
   const sea = w0.islands.filter((i) => i.look);
   assert.ok(sea.length >= 8, '海の島が 8 つ以上 ' + sea.length);
   assert.ok(sea.every((i) => i.name && !ISX.isOpen(i)), 'どれも名前があり、はじめは行けない');
-  // 橋がかかる島は、どれも村人が住める大きさ（北の島に近い。いちばん細い所でも半径 22 以上）。橋のない小島は飾りで 2 つまで
+  // 橋がかかる島は、どれも村人が住める大きさ（いちばん細い所でも半径 17 以上）。大きさはばらばら：近い島は半径 30〜34、遠い島は 36〜40 で、小さい島が 1〜2 つまじる。橋のない小島は飾りで 2 つまで
   const bridged = sea.filter((i) => w0.bridges.some((b) => b.to === i.id));
   assert.ok(bridged.length >= 8 && sea.length - bridged.length <= 2, '開く島 ' + bridged.length + '・飾りの小島 ' + (sea.length - bridged.length));
-  for (const i of bridged) { let m = 1e9; for (let a = 0; a < Math.PI * 2; a += 0.05) m = Math.min(m, ISX.radiusAt(i, a)); assert.ok(i.r >= 26 && m >= 22, `${i.id} が小さい（r ${i.r}・細い所 ${m.toFixed(1)}）`); }
+  for (const i of bridged) { let m = 1e9; for (let a = 0; a < Math.PI * 2; a += 0.05) m = Math.min(m, ISX.radiusAt(i, a)); assert.ok(i.r >= 20 && m >= 17, `${i.id} が小さい（r ${i.r}・細い所 ${m.toFixed(1)}）`); }
+  const smallN = bridged.filter((i) => i.r < 28).length;
+  assert.ok(smallN >= 1 && smallN <= 2, '小さい島は 1〜2 つ ' + smallN);
+  for (const i of bridged.filter((b) => b.r >= 28)) assert.ok(i.safe ? i.r >= 30 && i.r <= 34 : i.r >= 36 && i.r <= 40, `${i.id} の大きさ（近い島 30〜34・遠い島 36〜40）r ${i.r}`);
+  // 特徴は 1〜2 個。敵が多いのは遠い島だけ。決まった種なので何度読んでも同じ
+  for (const i of bridged) {
+    assert.ok(Array.isArray(i.traits) && i.traits.length >= 1 && i.traits.length <= 2, '特徴は 1〜2 個 ' + i.id);
+    assert.ok(!i.traits.includes('foe') || !i.safe, '敵の多い島は遠い島だけ ' + i.id);
+  }
   for (const a of w0.islands) for (const b of w0.islands) {
     if (a === b) continue;
     for (let k = 0; k < 72; k++) { const p = ISX.shorePoint(a, (k / 72) * Math.PI * 2); assert.ok(ISX.shoreDist(b, p.x, p.z) < -10, `${a.id} と ${b.id} が近すぎる`); }
@@ -1509,6 +1517,48 @@ t('海の島々：重ならず、橋は陸から陸へ（とちゅうで別の�
     }
     if (br.from) { assert.ok(EXB[br.id].followers > prev, '開く順に followers が大きい ' + br.id); prev = EXB[br.id].followers; }
   }
+});
+t('周りの島：前の world.json も読む時に今の形・特徴へ（はじまり島は広がるだけで物は動かない）。行き先選び用の一覧・地形の木と岩は段や崖に埋まらない', () => {
+  const ISL = require('../js/isles.js');
+  const TG = require('../js/terrain_gen.js');
+  // 前の形（半径 50・海の島は半径 26〜29）の world
+  const old = { layout: 'island', islands: [{ id: 'main', x: 0, z: 0, r: 50, wob: [[0.05, 3, 0.7]] }, { id: 'iwa', name: 'いわ島', x: 87, z: 50, r: 27, wob: [], look: 'rocky', open: 0 }], bridges: [{ id: 'iwa', to: 'iwa', from: 'main', a: { x: 1, z: 1 }, b: { x: 2, z: 2 }, built: 0 }], trees: [{ id: 't', x: 3, z: 4 }] };
+  const w = ISL.applyIsles(JSON.parse(JSON.stringify(old)));
+  assert.strictEqual(w.islands[0].r, ISL.MAIN_R, 'はじまり島は一回り広がる');
+  assert.ok(ISL.MAIN_R >= 54 && ISL.MAIN_R <= 56, 'はじまり島の半径 +4〜6');
+  assert.deepStrictEqual(w.trees, old.trees, '木は動かない');
+  const iwa = w.islands.find((i) => i.id === 'iwa');
+  assert.ok(iwa.r === 32 && iwa.traits.length >= 1, '海の島は今の形と特徴');
+  assert.ok(ISX.shoreDist(w.islands[0], w.bridges[0].a.x, w.bridges[0].a.z) > 1 && ISX.shoreDist(iwa, w.bridges[0].b.x, w.bridges[0].b.z) > 1, 'まだの橋の両はしは新しい岸');
+  assert.deepStrictEqual(ISL.applyIsles(JSON.parse(JSON.stringify(w))).islands, w.islands, '何度読んでも同じ');
+  // 開いた島は場所も形も変えない
+  const op = JSON.parse(JSON.stringify(old)); op.islands[1].open = 3;
+  const w2 = ISL.applyIsles(op), iwa2 = w2.islands.find((i) => i.id === 'iwa');
+  assert.ok(iwa2.x === 87 && iwa2.r === 27 && iwa2.traits, '開いた島はそのまま（特徴だけ足す）');
+  // 行き先選び・橋の投票の一覧
+  const full = ISL.applyIsles({ layout: 'island', islands: [{ id: 'main', x: 0, z: 0, r: 50, wob: [] }, ...ISL.seaIslandsNew()], bridges: [] });
+  const list = ISL.isleList(full);
+  assert.strictEqual(list.length, ISL.SEA_ISLES.length);
+  for (const e of list) {
+    assert.ok(e.name && e.traitNames.length === e.traits.length && e.gap >= 18 && e.dist > 0 && typeof e.safe === 'boolean' && e.hops >= 1, '一覧の中身 ' + e.id);
+    assert.strictEqual(e.safe, e.hops === 1, '本島のとなりは安全・遠い島は敵が出る ' + e.id);
+  }
+  // 地形：木と岩は地面の高さに立つ。木の葉が届く所（まわり 2 マス）に高い崖がない。岩はふちから浮かない
+  const tg = TG.makeTerrain({ islands: full.islands });
+  let nTree = 0, nRaised = 0;
+  for (const isl of full.islands.filter((i) => i.traits)) {
+    const B = TG.BLOCK, c0 = Math.floor((isl.x - isl.r * 1.3) / B / TG.CHUNK), c1 = Math.floor((isl.x + isl.r * 1.3) / B / TG.CHUNK), d0 = Math.floor((isl.z - isl.r * 1.3) / B / TG.CHUNK), d1 = Math.floor((isl.z + isl.r * 1.3) / B / TG.CHUNK);
+    for (let ci = c0; ci <= c1; ci++) for (let cj = d0; cj <= d1; cj++) {
+      const { trees, rocks } = tg.chunkObjects(ci, cj);
+      for (const o of [...trees, ...rocks]) {
+        const i = Math.floor(o.x / B), j = Math.floor(o.z / B), c = tg.cell(i, j);
+        assert.ok(Math.abs(o.y - c.h * B) < 1e-6 && c.kind !== 'water', '地面の高さに置く');
+        if (o.state === 'tree') { nTree++; if (c.h > 0) nRaised++; for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) assert.ok(tg.cell(i + a, j + b).h <= c.h + 2, '木の葉が届く所に高い崖がない'); }
+        else for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) assert.strictEqual(tg.cell(i + a, j + b).h, c.h, '岩のまわりは同じ高さ');
+      }
+    }
+  }
+  assert.ok(nTree > 200 && nRaised > 10, `周りの島に木（${nTree}・段の上 ${nRaised}）`);
 });
 t('海の島々：北の島のあと、1 つずつ橋を作って開き、開いた日に木と岩が置かれる', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-isles-'));
@@ -1599,7 +1649,7 @@ t('拠点の投票：0 日目は候補 A/B/C が陸の上に出て、チェス�
     BASE.applyBase(w2, o, { seed: 'x', key: o.key, name: o.name });
     const mp = w2.plots.filter((p) => !p.island);
     assert.ok(mp.length >= 16, `${o.key} のまわりの区画 ${mp.length}`);
-    for (const p of mp) assert.ok(ISX.onLand(w2, p.x, p.z, 8, { open: false }) && Math.hypot(p.x - o.x, p.z - o.z) < 28, '区画は拠点のまわりの陸の上');
+    for (const p of mp) assert.ok(ISX.onLand(w2, p.x, p.z, 8, { open: false }) && Math.hypot(p.x - o.x, p.z - o.z) < 42, '区画は拠点のまわりの陸の上（輪は 12〜40。33・40 は広げた岸の内側）');
   }
   for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) assert.ok(Math.hypot(bv.options[i].x - bv.options[j].x, bv.options[i].z - bv.options[j].z) >= 20, '候補どうしは離れている');
   assert.ok(JSON.parse(fs.readFileSync(path.join(dir, 'history.json'), 'utf8')).some((h) => h.kind === 'base' && /拠点の場所の投票が始まった/.test(h.text)), '歴史に残る');
@@ -1684,7 +1734,7 @@ t('拠点の投票：1 日目にする朝に決まり、そこにチェスト・
   assert.ok(where && r.st.votes.some((v) => v.kind === 'what'), '「何を」「どこに」の投票はそのあと開く');
   for (const o of where.options) assert.ok(Math.hypot(o.x - C.x, o.z - C.z) < 30, '建てる場所の候補は拠点のまわり ' + o.name);
   const mp = r.w.plots.filter((p) => !p.island);
-  assert.ok(mp.every((p) => Math.hypot(p.x - C.x, p.z - C.z) < 28), '区画は拠点のまわり');
+  assert.ok(mp.every((p) => Math.hypot(p.x - C.x, p.z - C.z) < 42), '区画は拠点のまわり（輪は 12〜40）');
   assert.ok(Date.parse(r.st.votes.find((v) => v.kind === 'what').opensAt) >= Date.parse(r.st.base.closesAt) - 1000, '拠点の票は「何を」に数えない');
   for (const b of r.w12.buildings) assert.ok(b.plot === 'ring' || b.island || Math.hypot(b.x - C.x, b.z - C.z) < 30 || /coast/.test(b.plot), '建物は拠点のまわり ' + b.id);
   // 票がない時：決めておいた場所（config の fallback ＝ B）
@@ -2142,7 +2192,7 @@ t('拠点の候補：A 浜辺・B 池・C 森 は島の陸の上で、たがい�
   const m = w.islands[0];
   for (const c of [A, B, C]) assert.ok(ISX2.shoreDist(m, c.x, c.z) >= 15, '岸から 15 以上 ' + c.name);
   for (const [a, b] of [[A, B], [B, C], [A, C]]) assert.ok(Math.hypot(a.x - b.x, a.z - b.z) >= 40, `${a.name} と ${b.name} がはなれている`);
-  assert.ok(ISX2.shoreDist(m, A.x, A.z) < 20 && A.z > 25, 'A は南の砂浜のそば');
+  assert.ok(ISX2.shoreDist(m, A.x, A.z) < 20 + (m.r - 50) && A.z > 25, 'A は南の砂浜のそば'); // はじまり島を広げた分（半径 50 → 55）だけ岸が遠い
   assert.ok(Math.hypot(B.x - w.pond.x, B.z - w.pond.z) < 17, 'B は池のそば');
   assert.ok(C.z < -20 && ISX2.bridgeDist(w.bridges[0], C.x, C.z) < 30, 'C は北（森と橋のほう）');
   for (const c of [A, B, C]) assert.ok(IL.basePlots(w, c).filter((p) => !p.island).length >= 16, '家を建てる区画が足りる ' + c.name);

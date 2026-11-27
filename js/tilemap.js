@@ -6,6 +6,7 @@
 //   ふつうの木と岩（その場所から決まる形・向き・大きさのまま）は文字だけ。ちがう所がある物だけ objs に残す。
 // もう 1 つ、動く物（村人・動物）用の「空間ハッシュ」（SpatialHash）：大きめのマスごとに、そこにいる物の一覧を持つ。
 //   近くを探す時は、周りのマスだけを見る（全員を調べない）。
+import { applyIsles } from './isles.js'; // 読む時に、はじまり島の広さと周りの島を今の決まりに合わせる
 export const TILE = 1.9;
 export const CH = 16;
 export const tileOf = (v) => Math.floor(v / TILE);
@@ -193,7 +194,7 @@ export function encodeWorld(world, opt = {}) {
 }
 // 保存した形 → いつもの形（木と岩の一覧は id の順にそろえる）
 export function decodeWorld(w) {
-  if (!w || !w.tiles) return w;
+  if (!w || !w.tiles) return applyIsles(w);
   const m = TileMap.decode(w.tiles);
   const trees = [], rocks = [];
   for (const [k, c] of m.chunks) {
@@ -212,5 +213,5 @@ export function decodeWorld(w) {
   trees.sort(byId); rocks.sort(byId);
   const out = { ...w, trees, rocks };
   delete out.tiles; delete out.objs; delete out.extra;
-  return out;
+  return applyIsles(out);
 }
