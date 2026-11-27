@@ -119,7 +119,10 @@ h2 { font-size: 17px; margin: 22px 0 10px; }
 .bdgcard.none h3 { color: var(--sub, #777); }
 .bdgcard h3 { margin: 2px 0 2px; font-size: 16px; }
 .bdgcard p { margin: 2px 0; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
-.bdgcard .who a { margin-right: 6px; white-space: nowrap; }
+.bdgcard .who .names { display: block; }
+.bdgcard .who .names[hidden] { display: none; }
+.bdgcard .who a { display: inline-block; max-width: 100%; margin-right: 8px; overflow-wrap: anywhere; }
+.bdgcard .who .morebtn { margin-top: 4px; padding: 4px 10px; font-size: 12px; border: 1px solid rgba(0,0,0,.18); border-radius: 999px; background: transparent; color: inherit; cursor: pointer; }
 .bdgcard .tiers { display: flex; gap: 4px; margin: 4px 0 2px; flex-wrap: wrap; }
 .bdgcard .tiers figure { margin: 0; text-align: center; font-size: 11px; line-height: 1.2; color: var(--sub, #777); }
 .bdgcard .tiers .bdgimg { width: 48px; height: 48px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.3)); }

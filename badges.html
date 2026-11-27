@@ -29,11 +29,18 @@
 import { loadAll, nav, esc, villagerUrl, showError, emptyNote } from './js/common.js';
 import { versusTitles } from './js/versus.js';
 nav('badges.html');
-const MAXW = 12; // 名前を出すのは 12 人まで（ほかは「ほか ◯ 人」）
+const FIRST = 3; // 名前は 3 人まで出して、あとは「もっと見る」で開く
 loadAll().then((D) => {
   if (!D.active.length) document.getElementById('empty').innerHTML = emptyNote(D.config);
   const link = (v) => `<a href="${villagerUrl(v)}">${esc(v.display)}</a>`;
-  const names = (vs) => vs.slice(0, MAXW).map(link).join('') + (vs.length > MAXW ? `<span class="muted">ほか ${vs.length - MAXW} 人</span>` : '');
+  // 名前は 1 人ずつ折り返す（横にはみ出さない）。4 人目からは閉じておく
+  const names = (vs) => `<span class="names">${vs.slice(0, FIRST).map(link).join(' ')}</span>` +
+    (vs.length > FIRST ? `<span class="names more" hidden>${vs.slice(FIRST).map(link).join(' ')}</span><button type="button" class="morebtn" data-n="${vs.length - FIRST}">もっと見る（ほか ${vs.length - FIRST} 人）</button>` : '');
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.morebtn'); if (!b) return;
+    const m = b.previousElementSibling, open = m.hidden;
+    m.hidden = !open; b.textContent = open ? 'とじる' : `もっと見る（ほか ${b.dataset.n} 人）`;
+  });
   const img = (src, alt, size) => src ? `<img class="bdgimg pixel" src="${esc(src)}" alt="${esc(alt)}" width="${size}" height="${size}" decoding="async">` : '';
 
   // ---- 称号バッジ（config.titles.list と、対決投票の称号 config.versus。対決の称号は、だれかが持っている物だけ出す） ----
