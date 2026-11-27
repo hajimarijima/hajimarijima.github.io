@@ -164,14 +164,15 @@ export function makeBag({ root, store, config, L, guest, mode, onChange }) {
     const ov = document.createElement('div'); ov.className = 'roul'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', '宝箱を開ける');
     ov.innerHTML = `<div class="rl-res" aria-live="polite"></div>` +
       `<div class="rl-win"><div class="rl-strip">${strip.map(([k, n, t]) => `<span class="rl-cell t-${esc(t)}">${img(k, 40)}${n > 1 ? `<b>×${n}</b>` : ''}</span>`).join('')}</div><i class="rl-line"></i></div>` +
-      `<div class="rl-chest"><i class="rl-burst"></i><img class="pixel" src="icons/treasure_box.png" alt="" width="112" height="112"></div>` +
+      `<div class="rl-chest"><i class="rl-burst"></i><i class="rl-beam"></i><img class="pixel rl-base" src="icons/chest_base.png" alt="" width="128" height="128"><img class="pixel rl-lid" src="icons/chest_lid.png" alt="" width="128" height="128"></div>` +
       `<button type="button" class="btn rl-ok" hidden>受け取る</button>`;
     document.body.append(ov);
-    const win = ov.querySelector('.rl-win'), el = ov.querySelector('.rl-strip'), cells = el.children, chest = ov.querySelector('.rl-chest'), cimg = chest.querySelector('img'), burst = chest.querySelector('.rl-burst');
+    const win = ov.querySelector('.rl-win'), el = ov.querySelector('.rl-strip'), cells = el.children, chest = ov.querySelector('.rl-chest'), lid = chest.querySelector('.rl-lid'), beam = chest.querySelector('.rl-beam'), burst = chest.querySelector('.rl-burst');
+    new Image().src = 'icons/chest_lid_open.png'; // 開いたふたを先に読んでおく（入れかえた時にちらつかない）
     const pitch = cells[1].offsetLeft - cells[0].offsetLeft, cw = cells[0].offsetWidth, ww = win.clientWidth;
     const target = stop * pitch + j.offset * cw - ww / 2;
-    // 時間割（ms）：宝箱が上がる → ゆれる → 開く（光る）→ 帯が宝箱から出る → 流れる（だんだん遅く）
-    const T = reduce ? { up: 0, shake: 0, open: 150, out: 250, spin: 1200 } : { up: 500, shake: 650, open: 250, out: 450, spin: 5600 };
+    // 時間割（ms）：宝箱が上がる → ゆれる → ふたがパカッと開く → 中から光 → 帯が宝箱から出る → 流れる（だんだん遅く）
+    const T = reduce ? { up: 0, shake: 0, open: 200, out: 250, spin: 1200 } : { up: 500, shake: 700, open: 420, out: 450, spin: 5600 };
     const tOpen = T.up + T.shake, tOut = tOpen + T.open, tSpin = tOut + T.out, tEnd = tSpin + T.spin;
     window.PLAY_ROUL = { target, pitch, cw, ww, stop, got, tier, tEnd }; // 確かめ用
     let lastCell = -1, popped = false;
@@ -180,14 +181,29 @@ export function makeBag({ root, store, config, L, guest, mode, onChange }) {
     await new Promise((done) => {
       const step = (now) => {
         const t = now - t0;
-        // 宝箱：下から上がる → ゆれる → ぽんと開く
+        // 宝箱：下から上がる → ゆれる（ふたがカタカタ浮く）→ ふたがパカッと開く → 中から光
         const up = T.up ? clamp01(t / T.up) : 1, sh = clamp01((t - T.up) / Math.max(1, T.shake));
-        const rot = t < tOpen && t > T.up ? Math.sin(t / 32) * 7 * sh : 0;
+        const rot = t < tOpen && t > T.up ? Math.sin(t / 30) * 6 * sh : 0;
         const pop = t >= tOpen ? Math.max(0, 1 - (t - tOpen) / 380) : 0;
-        chest.style.transform = `translate3d(0,${(1 - easeBack(up)) * 160}%,0) rotate(${rot}deg) scale(${1 + pop * 0.16 - (t >= tOpen ? 0.08 : 0)})`;
-        burst.style.opacity = String(t < tOpen ? sh * 0.5 : Math.max(0.35, pop));
-        burst.style.transform = `scale(${t < tOpen ? 0.6 + sh * 0.3 : 0.9 + (1 - pop) * 0.5})`;
-        if (!popped && t >= tOpen) { popped = true; tone(660, 90, 0.05, 'triangle'); tone(990, 140, 0.05, 'triangle', 0.06); cimg.classList.add('open'); }
+        chest.style.transform = `translate3d(0,${(1 - easeBack(up)) * 160}%,0) rotate(${rot}deg) scale(${1 + pop * 0.08})`;
+        const lo = clamp01((t - tOpen) / Math.max(1, T.open)); // ふたが開く進み
+        if (t < tOpen) {
+          // ゆれる間：ふたが少しだけ浮いてはもどる（4px＝1 ドットずつ）
+          const rattle = t > T.up && Math.sin(t / 45) > 0.55 ? -4 * Math.ceil(sh * 1.5) : 0;
+          lid.style.transform = `translate3d(0,${rattle}px,0)`;
+        } else if (lo < 0.3) {
+          lid.style.transform = `translate3d(0,${-Math.round(lo / 0.3 * 3) * 4}px,0)`; // 閉じたまま持ち上がる
+        } else {
+          if (!popped) { popped = true; lid.src = 'icons/chest_lid_open.png'; tone(520, 70, 0.05, 'square'); tone(880, 120, 0.05, 'triangle', 0.05); tone(1320, 160, 0.04, 'triangle', 0.12); }
+          const b = (lo - 0.3) / 0.7, k = 1 + Math.sin(Math.min(1, b) * Math.PI) * 0.18 * (1 - b); // 開いた勢いで少しのびて、もどる
+          lid.style.transform = `scale(1,${k.toFixed(3)})`;
+        }
+        // 中からの光：ふたが開いた時に立ち上がり、帯が出たあとは少し落ち着く
+        const li = popped ? clamp01((t - tOpen - T.open * 0.3) / 260) : 0;
+        beam.style.opacity = String(li * (t > tSpin ? Math.max(0.45, 1 - (t - tSpin) / 1500) : 1));
+        beam.style.transform = `scale(${(0.5 + 0.5 * easeOut(li)).toFixed(3)},${easeOut(li).toFixed(3)})`;
+        burst.style.opacity = String(t < tOpen ? sh * 0.35 : Math.max(0.35, popped ? Math.max(pop, li * 0.9) : 0.35));
+        burst.style.transform = `scale(${t < tOpen ? 0.6 + sh * 0.25 : 0.9 + li * 0.35})`;
         // 帯：宝箱の口から上へのびて出てくる
         const o = clamp01((t - tOut) / Math.max(1, T.out)), oe = easeOut(o);
         win.style.opacity = String(o > 0 ? Math.min(1, o * 2) : 0);

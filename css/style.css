@@ -1045,7 +1045,7 @@ html.fs-on .townpage .vcard, html.fs-on .vcard { bottom: calc(46px + env(safe-ar
 .roul.t-common .rl-res b { color: #fff; }
 .rl-res small { color: #cfc9e8; font-size: 12px; }
 .rl-tag { padding: 2px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; color: #1a1830; background: var(--tc); box-shadow: 0 0 12px var(--tc); }
-.rl-win { --cw: 76px; position: relative; width: min(720px, 100%); height: calc(var(--cw) + 22px); overflow: hidden; border-radius: 14px; background: #12101e; border: 3px solid #4a4670; box-shadow: inset 0 4px 10px rgba(0,0,0,.6); transform-origin: 50% 100%; opacity: 0; }
+.rl-win { --cw: 76px; position: relative; z-index: 4; width: min(720px, 100%); height: calc(var(--cw) + 22px); overflow: hidden; border-radius: 14px; background: #12101e; border: 3px solid #4a4670; box-shadow: inset 0 4px 10px rgba(0,0,0,.6); transform-origin: 50% 100%; opacity: 0; }
 .roul.done .rl-win { border-color: var(--tc); box-shadow: inset 0 4px 10px rgba(0,0,0,.6), 0 0 18px var(--tc); }
 .rl-strip { position: absolute; left: 0; top: 11px; display: flex; gap: 6px; will-change: transform; }
 .rl-cell { position: relative; flex: 0 0 var(--cw); width: var(--cw); height: var(--cw); box-sizing: border-box; display: grid; place-items: center; border-radius: 10px; border: 3px solid var(--tc); background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--tc) 40%, #2a2840), #1e1c30 78%); box-shadow: inset 0 -5px 0 rgba(0,0,0,.35), inset 0 3px 0 rgba(255,255,255,.14); }
@@ -1055,9 +1055,15 @@ html.fs-on .townpage .vcard, html.fs-on .vcard { bottom: calc(46px + env(safe-ar
 .rl-line { position: absolute; left: 50%; top: 2px; bottom: 2px; width: 4px; margin-left: -2px; border-radius: 2px; background: #ffe27a; box-shadow: 0 0 8px #ffd75a; pointer-events: none; z-index: 2; }
 .rl-line::before, .rl-line::after { content: ''; position: absolute; left: -6px; border: 8px solid transparent; }
 .rl-line::before { top: -2px; border-top-color: #ffe27a; } .rl-line::after { bottom: -2px; border-bottom-color: #ffe27a; }
-.rl-chest { position: relative; width: 112px; height: 112px; display: grid; place-items: center; transform: translate3d(0,160%,0); }
-.rl-chest img { position: relative; image-rendering: pixelated; filter: drop-shadow(0 6px 0 rgba(0,0,0,.45)); }
-.rl-burst { position: absolute; inset: -40px; border-radius: 50%; background: radial-gradient(circle, rgba(255,236,150,.95) 0%, rgba(255,210,80,.45) 35%, rgba(255,200,60,0) 70%); opacity: 0; pointer-events: none; }
+.rl-chest { position: relative; z-index: 1; width: 128px; height: 128px; flex: none; transform: translate3d(0,160%,0); }
+.rl-chest img { position: absolute; left: 0; top: 0; width: 128px; height: 128px; image-rendering: pixelated; }
+.rl-base { z-index: 1; filter: drop-shadow(0 4px 0 rgba(0,0,0,.35)); }
+.rl-lid { z-index: 2; transform-origin: 50% 34%; } /* 34% ＝ 32 ドットのうち 11 段目（ふたの付け根） */
+.rl-beam { position: absolute; z-index: 3; left: 12px; width: 104px; bottom: 74px; height: 230px; transform-origin: 50% 100%; opacity: 0; pointer-events: none; mix-blend-mode: screen;
+  background: linear-gradient(to top, rgba(255,240,170,.62) 0%, rgba(255,222,110,.5) 28%, rgba(255,210,90,.18) 62%, rgba(255,200,80,0) 100%);
+  clip-path: polygon(22% 100%, 78% 100%, 100% 0, 0 0); }
+.roul.done .rl-beam { background: linear-gradient(to top, color-mix(in srgb, var(--tc) 35%, #fff) 0%, color-mix(in srgb, var(--tc) 55%, transparent) 30%, color-mix(in srgb, var(--tc) 18%, transparent) 62%, transparent 100%); }
+.rl-burst { position: absolute; inset: -64px -40px -16px; border-radius: 50%; background: radial-gradient(circle, rgba(255,236,150,.95) 0%, rgba(255,210,80,.45) 35%, rgba(255,200,60,0) 70%); opacity: 0; pointer-events: none; }
 .roul.done .rl-burst { background: radial-gradient(circle, color-mix(in srgb, var(--tc) 85%, #fff) 0%, color-mix(in srgb, var(--tc) 40%, transparent) 38%, transparent 70%); }
 .rl-ok { min-width: 160px; min-height: 46px; font-weight: 700; }
 .rl-ok[hidden] { display: inline-flex; visibility: hidden; } /* 止まるまで出さない（場所は取っておき、出た時に動かない） */
