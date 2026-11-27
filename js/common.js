@@ -85,7 +85,8 @@ export function startNote(state, config) {
 }
 // 「住みたい」の案内（どの画面でも同じ言葉）
 export const joinText = (config) => `フォローして、インスタの投稿に「${(config && config.joinWord) || '住みたい'}」とコメントすると、すぐ町に住めます（15 分ほどで入居）。` +
-  `道具・誕生日・好きな食べ物${mbtiOn(config) ? '・MBTI' : ''}もいっしょに書けます（例「${(config && config.joinWord) || '住みたい'} ピッケル 12/11 りんご${mbtiOn(config) ? ' INFP' : ''}」）。住んだあとも「誕生日 12/11」のようにコメントすれば変えられます。` +
+  `道具・性別（男の子／女の子）・誕生日・好きな食べ物${mbtiOn(config) ? '・MBTI' : ''}もいっしょに書けます（例「${(config && config.joinWord) || '住みたい'} ピッケル 女の子 12/11 りんご${mbtiOn(config) ? ' INFP' : ''}」）。` +
+  `「性別 ひみつ」「ひとこと よろしくね」（20 字まで）「趣味 釣り」「色 水色」も書けます。住んだあとも「誕生日 12/11」「性別 女の子」「ひとこと よろしく」のようにコメントすれば変えられます。` +
   (config && config.jobChange && config.jobChange.enabled === false ? '' : `作業も「作業 釣り」のようにコメントすると変えられます（1 日 ${(config && config.jobChange && config.jobChange.perDay) || 1} 回まで）。`) +
   dmJoinText(config);
 // DM で入居（config.dm.enabled の時だけ config.dm.howTo を出す。docs/DMで入居する手順.md）

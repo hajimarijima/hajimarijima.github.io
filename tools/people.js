@@ -5,6 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { skinFor, hashStr } = require('./rand');
 const G = require('./gender');
+const PX = require('./profile_extra');
 
 // 名前やインスタの ID から作る印は、秘密の塩（env TOWN_SALT、GitHub Secrets）入りの HMAC-SHA256 にする。
 // 塩なしの sha256 だと、ユーザー名を知っている人が同じ計算をして、名前をかくした人まで見つけられてしまうため。
@@ -124,15 +125,18 @@ function registrationsFrom(comments, word, startTools, opts = {}) {
     const u = commentUser(c);
     const id = u.igId ? 'ig:' + u.igId : 'user:' + norm(u.username).toLowerCase();
     const prev = byUser.get(id);
-    const tool = startTools ? parseStartTool(c.text, startTools, opts) : null;
+    // 名札のある「性別 ひみつ」「ひとこと …」「趣味 釣り」「色 水色」を先に読んで消す（趣味の「釣り」を道具に、ひとことの言葉を食べ物にしない）
+    const ex = PX.splitExtras(c.text);
+    const tool = startTools ? parseStartTool(ex.rest, startTools, opts) : null;
     const r = { ...(prev || {}), ...u, firstAt: prev ? prev.firstAt : c.timestamp, lastAt: c.timestamp };
     if (tool) r.startTool = tool;
-    const p = parseCommentProfile(c.text, { word, startTools, mbti: opts.mbti !== false, join: true });
+    const p = parseCommentProfile(ex.rest, { word, startTools, mbti: opts.mbti !== false, join: true });
     if (p.birthday) { r.birthday = p.birthday; r.bdAt = c.timestamp; }
     if (p.food) { r.food = p.food; r.foodAt = c.timestamp; }
     if (p.mbti) { r.mbti = p.mbti; r.mbtiAT = p.mbtiAT || null; r.mbtiAt = c.timestamp; }
-    const g = G.parseGenderWord(c.text); // 「住みたい 女の子」「住みたい 男性」
+    const g = ex.gender || G.parseGenderWord(ex.rest); // 「住みたい 女の子」「住みたい 男性」「性別 ひみつ」
     if (g) { r.gender = g; r.genderAt = c.timestamp; }
+    putExtras(r, ex, c.timestamp);
     byUser.set(id, r);
   }
   return [...byUser.values()];
@@ -158,8 +162,9 @@ const skinTag = (n) => (skinTags().f.has(n) ? 'f' : skinTags().m.has(n) ? 'm' : 
 // プロフィールで見た目を選んだ人（v.look）・分からない人は変えない。変えたら true
 function fitGenderSkin(v) {
   if (!v || v.look) return false;
+  if (v.gender === 's') return false; // 「性別 ひみつ」の人は、名前から決めることもしない（今のスキンのまま）
   const g = v.gender || (v.name ? G.confidentGender(v.name) : null);
-  if (!g) return false;
+  if (g !== 'f' && g !== 'm') return false;
   const body = g === 'f' ? 'female' : 'male';
   if (v.skinBody === body) return false;
   if (!v.skinBody && skinTag(v.skin) === g) return false;
@@ -327,9 +332,11 @@ function profileUpdatesFrom(comments, word, { mbti = true } = {}) {
   const byUser = new Map();
   for (const c of [...(comments || [])].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))) {
     if (!c || isJoin(c.text, word)) continue;
-    const p = parseCommentProfile(c.text, { word, mbti, join: false });
-    const g = G.parseGenderWord(c.text, { strict: true }); // あとからは「女の子です」「男性」のような、ほぼその言葉だけのコメントだけ
-    if (!p.birthday && !p.food && !p.mbti && !g) continue;
+    const ex = PX.splitExtras(c.text);
+    const p = parseCommentProfile(ex.rest, { word, mbti, join: false });
+    // あとからは「性別 女の子」の名札つきか、「女の子です」「男性」のような、ほぼその言葉だけのコメントだけ
+    const g = ex.gender || (ex.rest ? G.parseGenderWord(ex.rest, { strict: true }) : null);
+    if (!p.birthday && !p.food && !p.mbti && !g && !PX.hasExtras(ex)) continue;
     const u = commentUser(c);
     if (!u.igId && !u.username) continue;
     const id = u.igId ? 'ig:' + u.igId : 'user:' + norm(u.username).toLowerCase();
@@ -338,10 +345,14 @@ function profileUpdatesFrom(comments, word, { mbti = true } = {}) {
     if (p.food) { r.food = p.food; r.foodAt = c.timestamp; }
     if (p.mbti) { r.mbti = p.mbti; r.mbtiAT = p.mbtiAT || null; r.mbtiAt = c.timestamp; }
     if (g) { r.gender = g; r.genderAt = c.timestamp; }
+    putExtras(r, ex, c.timestamp);
     byUser.set(id, r);
   }
   return [...byUser.values()];
 }
+// 名札で書いたひとこと・趣味・好きな色（tools/profile_extra.js）を、値と時刻で持つ
+const EXTRA_FIELDS = [['message', 'msgAt'], ['hobby', 'hobbyAt'], ['color', 'colorAt']];
+function putExtras(r, ex, at) { for (const [f, a] of EXTRA_FIELDS) if (ex[f]) { r[f] = ex[f]; r[a] = at; } }
 // コメントで書いたプロフィールを、もう住んでいる村人に入れる（道具・仕事は変えない。住んでいない人は何もしない）。
 // 値ごとに「前に入れたコメントの時刻」（v.profileAt）より新しいコメントだけを使う。
 // こうすると、毎回同じコメントを読み直しても、ログインのプロフィールで直した値を古いコメントで戻さない
@@ -353,7 +364,7 @@ function applyCommentProfiles(villagers, comments, { word = null, startTools = n
     const v = findVillager(villagers, r);
     if (!v) continue;
     const cur = latest.get(v) || {};
-    for (const [f, at] of [['birthday', 'bdAt'], ['food', 'foodAt'], ['mbti', 'mbtiAt'], ['gender', 'genderAt']]) {
+    for (const [f, at] of [['birthday', 'bdAt'], ['food', 'foodAt'], ['mbti', 'mbtiAt'], ['gender', 'genderAt'], ...EXTRA_FIELDS]) {
       if (r[f] && r[at] && (!cur[at] || Date.parse(r[at]) >= Date.parse(cur[at]))) { cur[f] = r[f]; cur[at] = r[at]; if (f === 'mbti') cur.mbtiAT = r.mbtiAT; }
     }
     latest.set(v, cur);
@@ -373,6 +384,11 @@ function applyCommentProfiles(villagers, comments, { word = null, startTools = n
       if (v.gender !== s.gender) { v.gender = s.gender; ch = true; }
       if (fitGenderSkin(v)) ch = true;
       newest = Math.max(newest, Date.parse(s.genderAt));
+    }
+    for (const [f, a] of EXTRA_FIELDS) { // ひとこと・趣味・好きな色はプロフィールの項目（message・hobby・color）に入れる
+      if (!fresh(s[a])) continue;
+      if (!v.profile || v.profile[f] !== s[f]) { v.profile = { ...(v.profile || {}), [f]: s[f] }; ch = true; }
+      newest = Math.max(newest, Date.parse(s[a]));
     }
     if (newest > since) { v.profileAt = new Date(newest).toISOString(); ch = true; } // 時刻も書き残す（次から古いコメントを使わない）
     if (ch) changed++;

@@ -5,6 +5,7 @@ import { armorLook, gearNames } from './smithing.js';
 import { initAuth } from './auth.js';
 import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, JOB, ACTION, RES, fmtDate, homeName, buildingLabel, showError, KIND, KIND_COLOR, MBTI, LETTER, mdText, villagerUrl, faceCanvas, emptyNote, lookDataUrl, loadImage, drawFigure, gaugeHtml, loadDiary, badgeList, badgeIcon, bestFishText, mbtiText } from './common.js';
 import { BODIES, BODY_LABEL } from './skingen.js';
+import { favColor, favEdge, colorName, genderText, hitokoto, hobbyText, zodiac, birthdayRest, livedDays, moodText, treasureOf, bestFriends } from './cardinfo.js'; // 村人カードと同じプロフィールの値
 import { decodeHours, parseCode, hourOf, hourText } from './hours.js';
 import { heldOf } from './invslots.js';
 import { badgeCount } from './combat.js';
@@ -49,10 +50,25 @@ async function main() {
       '<a class="bdgall" href="badges.html">バッジをぜんぶ見る</a>';
     nameEl.after(box);
   }
+  // 好きな色を書いた人は、名前の見出しの下の線と印をその色に（書いていない人は今までどおり）
+  const fc = favColor(v);
+  if (fc) { nameEl.classList.add('favname'); nameEl.style.setProperty('--fav', favEdge(fc)); }
+  if (genderText(v)) { const g = document.createElement('span'); g.className = 'pgtag'; g.textContent = genderText(v); nameEl.append(g); }
+  const tr = treasureOf(L, D.config), fr = bestFriends(v, D.social, D.active, 3), lived = livedDays(v, D.state);
+  // [見出し, 値, 値が HTML か]（HTML の時は、中の文字をここでエスケープしてある）
   document.getElementById('info').innerHTML = [
     ['参加した日', v.joinedAt && /^\d{2}:\d{2}$/.test(v.joinedAt) ? `${fmtDate(v.joined)} ${v.joinedAt} に島に来た（${v.joinedDay}日目）` : `${fmtDate(v.joined)}（${v.joinedDay}日目）`],
+    ...(lived ? [['住んで', `${lived} 日目`]] : []),
+    // 本人がコメント・DM で書いた値（書いていない人は出さない）
+    ...(genderText(v) ? [['性別', genderText(v)]] : []),
+    ...(hitokoto(v) ? [['ひとこと', `「${hitokoto(v)}」`]] : []),
     // 誕生日・好きな食べ物（「住みたい 誕生日3月14日 りんご」で書いた値。書いていない人は島が決めた値）。プロフィールの欄を出す時はそちらに出る
-    ...(ps && !ps.hidden ? [] : [...(v.birthday ? [['誕生日', mdText(v.birthday)]] : []), ...(v.profile && v.profile.food ? [['好きな食べ物', v.profile.food]] : []), ...(mbtiText(v, D.config) ? [['MBTI', mbtiText(v, D.config).replace('MBTI：', '')]] : [])]),
+    ...(ps && !ps.hidden ? [] : [...(v.birthday ? [['誕生日', `${mdText(v.birthday)}（${zodiac(v.birthday)}・${birthdayRest(v.birthday)}）`]] : []), ...(v.profile && v.profile.food ? [['好きな食べ物', v.profile.food]] : []), ...(mbtiText(v, D.config) ? [['MBTI', mbtiText(v, D.config).replace('MBTI：', '')]] : [])]),
+    ...(fc ? [['好きな色', `<span class="favchip" style="margin:0"><i style="background:${fc}"></i>${esc(colorName(fc) || '好きな色')}</span>`, true]] : []),
+    ...(hobbyText(v) ? [['趣味', hobbyText(v)]] : []),
+    ...(moodText(L, D.config) ? [['今日の気分', moodText(L, D.config)]] : []),
+    ...(tr ? [['宝物', `<span class="treasure${tr.legend ? ' legend' : ''}">${tr.legend ? '★' : ''}${esc(tr.name)}</span>`, true]] : []),
+    ...(fr.length ? [['仲のよい人', fr.map((f) => `<a class="vlink" href="${villagerUrl(f.v)}">${esc(f.v.display)}</a>`).join(''), true]] : []),
     ['今の作業', `${JOB[L.job] || 'まだなし'}${L.action ? '（' + ACTION[L.action] + '）' : ''}${L.smith && L.job !== 'smith' ? '・村の鍛冶職人' : ''}`],
     ['装備', gearNames(L, D.config.items).join('・') || 'なし（素手）'],
     ...hourRows(L),
@@ -63,7 +79,7 @@ async function main() {
     ['スキン', v.look ? `${esc(BODY_LABEL[v.look.body] || '')}・${v.look.seed} 番（プロフィールで選んだ見た目）` : v.skinBody ? `${esc(BODY_LABEL[v.skinBody] || '')}・${v.skin} 番` : `${v.skin} 番`],
     ['体型', v.body === 'chibi' ? '2 頭身' : '通常'],
     ...(bestFishText(L, D.config) ? [['釣り', bestFishText(L, D.config)]] : []),
-  ].map(([k, val]) => `<dt>${k}</dt><dd>${k === 'スキン' || k === '体力' || k === 'おなか' ? val : esc(val)}</dd>`).join('') + (v.hidden ? '<dt>表示</dt><dd>名前をかくしてあだ名で出しています</dd>' : '');
+  ].map(([k, val, html]) => `<dt>${k}</dt><dd>${html || k === 'スキン' || k === '体力' || k === 'おなか' ? val : esc(val)}</dd>`).join('') + (v.hidden ? '<dt>表示</dt><dd>名前をかくしてあだ名で出しています</dd>' : '');
   document.getElementById('stats').innerHTML = ['wood', 'stone', 'food'].map((r) => `<div class="stat"><b>${Math.floor(L.gathered[r])}</b><small>${RES[r]}</small></div>`).join('');
   const built = L.built.map((id) => D.world.buildings.find((b) => b.id === id)).filter(Boolean);
   document.getElementById('built').innerHTML = built.length ? built.map((b) => `<span class="tag">${esc(buildingLabel(b, D.world, D.config))}（${b.day}日目）</span>`).join(' ') : 'まだありません。';

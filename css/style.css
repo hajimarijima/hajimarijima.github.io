@@ -138,6 +138,34 @@ h2 { font-size: 17px; margin: 22px 0 10px; }
 .vcard .face { width: 48px; height: 48px; flex: none; border-radius: 6px; background: #ddd; }
 .vcard .who { flex: 1; min-width: 0; }
 .vcard .who b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* プロフィール（js/cardinfo.js）：性別・ひとこと・好きな色・宝物・仲よし */
+.vcard { max-height: calc(100% - 56px); overflow-y: auto; }
+.vcard .gtag, .pgtag { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; font-size: 11px; line-height: 1.6; font-weight: 700; vertical-align: 2px; background: #eef0f4; color: #4a5060; border: 1px solid rgba(0,0,0,.12); }
+.vcard .hitokoto { display: block; font-size: 13px; margin: 1px 0 2px; color: var(--ink); overflow-wrap: anywhere; }
+.favchip { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; white-space: nowrap; }
+.favchip i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(0,0,0,.25); }
+.treasure.legend { display: inline-block; color: #8a5a00; font-weight: 700; text-shadow: 0 0 6px rgba(255,200,60,.75); background: linear-gradient(90deg, #fff4c8, #ffe28a, #fff4c8); border: 1px solid #e6c050; border-radius: 4px; padding: 0 5px; }
+.vcard .friends { line-height: 1.9; }
+.vlink { border: 1px solid var(--line); background: #f4f1e8; color: var(--ink); border-radius: 999px; font: inherit; font-size: 12px; padding: 0 8px; margin: 0 4px 0 0; cursor: pointer; max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+.vlink:hover { background: #ebe4d0; }
+/* 好きな色を書いた人：カードの上のふちと名前の帯、名札のふち（書いていない人は今までどおり） */
+.vcard.fav { border-top: 5px solid var(--fav); }
+.vcard .cnamerow { display: flex; align-items: center; gap: 6px; min-width: 0; margin-right: 22px; }
+.vcard .cnamerow b.cname { min-width: 0; flex: 0 1 auto; }
+.vcard .cnamerow .gtag { flex: none; margin-left: 0; }
+.vcard.fav .who b.cname { background: var(--fav); color: var(--favink, #fff); padding: 2px 8px; border-radius: 6px; }
+/* ボタンはカードの下に横並び（カードは幅 360 までなので、名前とプロフィールの幅を広く取る） */
+@media all {
+  .vcard { flex-wrap: wrap; align-items: flex-start; row-gap: 8px; }
+  .vcard .who { flex: 1 1 calc(100% - 64px); }
+  .vcard .cardbtns { flex-direction: row; flex-wrap: wrap; width: 100%; }
+  .vcard .cardbtns > * { flex: 1 1 auto; }
+}
+h1.favname { border-bottom: 4px solid var(--fav); padding-bottom: 4px; }
+h1.favname::before { content: ''; display: inline-block; width: .55em; height: .55em; border-radius: 50%; background: var(--fav); margin-right: 8px; vertical-align: .1em; }
+h1 .pgtag { font-size: 13px; vertical-align: .35em; }
+dd .vlink { display: inline-block; margin: 2px 4px 2px 0; text-decoration: none; }
+.nametag.fav { box-shadow: inset 0 -2px 0 var(--fav), 0 0 0 1.5px var(--fav); }
 .vcard .close { position: absolute; top: 4px; right: 8px; border: 0; background: none; font-size: 20px; color: var(--sub); cursor: pointer; }
 .btn { display: inline-flex; align-items: center; justify-content: center; min-height: var(--ctl-h); background: var(--accent); color: #fff; border: 0; border-radius: var(--radius-pill); padding: 0 var(--pad-x); font-size: 14px; line-height: 1; text-decoration: none; cursor: pointer; white-space: nowrap; }
 .btn.sub { background: #e9e2d0; color: var(--ink); }

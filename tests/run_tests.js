@@ -3888,6 +3888,7 @@ require('./home_tests.js')({ t, at, ROOT });
 // ---------- 誰かの家に遊びに行く（tests/visit_tests.js） ----------
 require('./visit_tests.js')({ t, at, ROOT });
 require('./treasure_tests.js')({ t, at, ROOT }); // 遊ぶの宝探し（金属探知機）
+require('./cardinfo_tests.js')({ t, at, ROOT }); // 村人カードのプロフィール（性別・ひとこと・仲のよい人・好きな色…）
 
 (async () => {
   for (const [name, fn] of asyncTests) { await fn(); ok++; console.log('OK  ' + name); }

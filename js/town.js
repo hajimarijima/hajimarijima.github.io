@@ -14,6 +14,7 @@ import { makeField, makePond, animatePond, makeBobber, makeAnimal, animateAnimal
 import { bodyQuad, bodyOf, insidePen, clearOfPen, penSlot, outsidePen, penFencePoints, fleeHeading, fwd, faceOf, angDiff, toLocal, toWorld, quadsOverlap, quadDepth, sharkPos } from './animalmove.js'; // 動物が逃げる・柵の中・海のサメ
 import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote, startNote, joinText, titleBadges, bestFishText, mbtiText, mdText } from './common.js';
 import { makeSky, jstHour, parseTime, phaseName } from './daynight.js';
+import { favColor, favEdge, favInk, colorName, genderText, hitokoto, hobbyText, zodiac, birthdayRest, livedDays, moodText, treasureOf, bestFriends } from './cardinfo.js'; // 村人カードのプロフィール
 import { hourOf, hourText, isNight } from './hours.js';
 import { tagName, igUrl, searchVillagers, findExact } from './search.js';
 import { taglineOf, timelineHtml, howCommentHtml, islandRulesHtml, buildOrderHtml, latestLinesHtml, setupTabs } from './islandpanel.js'; // 上のカードと下のパネル
@@ -1266,6 +1267,7 @@ async function main() {
     tagEl.textContent = tagName(v, { video: IS_VIDEO, cfg: config });
     if ((v.titles || []).length && !IS_VIDEO) { const st = document.createElement('span'); st.className = 'tstar'; st.textContent = '★'; st.title = '称号あり'; tagEl.append(st); } // 称号のある人は名札に小さな★
     tagEl.style.pointerEvents = 'auto';
+    if (favColor(v)) { tagEl.classList.add('fav'); tagEl.style.setProperty('--fav', favEdge(favColor(v))); } // 好きな色を書いた人は、名札のふちと下の線をその色に
     tagEl.addEventListener('click', (e) => { e.stopPropagation(); openCard(v); });
     const label = new CSS2DObject(tagEl);
     label.position.set(0, 1.0, 0); // キャラの頭の上（scale 1.9 の中）
@@ -2525,7 +2527,18 @@ async function main() {
   // ---------- 村人カード ----------
   const card = document.getElementById('card');
   // プロフィール：誕生日・好きな食べ物・MBTI（くわしくのページと同じ値）
-  const profLine = (v) => [v.birthday && '誕生日 ' + mdText(v.birthday), v.profile && v.profile.food && '好きな食べ物 ' + v.profile.food, mbtiText(v, config)].filter(Boolean).join('・');
+  // 誕生日には星座と「あと何日」もそえる。趣味・好きな色（本人が書いた人だけ）
+  const profLine = (v) => [v.birthday && `誕生日 ${mdText(v.birthday)}（${zodiac(v.birthday)}・${birthdayRest(v.birthday)}）`, v.profile && v.profile.food && '好きな食べ物 ' + v.profile.food, mbtiText(v, config), hobbyText(v) && '趣味 ' + hobbyText(v)].filter(Boolean).join('・');
+  // 本人が書いた性別・ひとこと、記録から出す住んで何日目・今日の気分・宝物・仲のよい人（js/cardinfo.js。文字はぜんぶエスケープ）
+  const cardExtraHtml = (v, L) => {
+    const fc = favColor(v), tr = treasureOf(L, config), lived = livedDays(v, state), mood = moodText(L, config);
+    const fr = bestFriends(v, D.social, active, 3);
+    return (hitokoto(v) ? `<span class="hitokoto">「${esc(hitokoto(v))}」</span>` : '') +
+      `<span class="lvline">${[lived && `住んで ${lived} 日目`, mood && `気分 ${mood}`].filter(Boolean).map(esc).join('・')}` +
+      `${fc ? `<span class="favchip"><i style="background:${fc}"></i>${esc(colorName(fc) || '好きな色')}</span>` : ''}</span>` +
+      (tr ? `<span class="lvline">宝物 <span class="treasure${tr.legend ? ' legend' : ''}">${tr.legend ? '★' : ''}${esc(tr.name)}</span></span>` : '') +
+      (fr.length ? `<span class="lvline friends">仲よし ${fr.map((f) => `<button type="button" class="vlink" data-key="${esc(f.v.key)}">${esc(f.v.display)}</button>`).join('')}</span>` : '');
+  };
   async function openCard(v) {
     const L = life[v.key] || {};
     card.hidden = false; card.classList.remove('pjcard');
@@ -2536,7 +2549,10 @@ async function main() {
     who.className = 'who';
     const now = hourOf(L, curHour);
     const tb = titleBadges(v, config, L);
-    who.innerHTML = `<b>${esc(v.display)}</b>${tb ? `<span class="cardtitles">${tb}</span>` : ''}<span class="muted">${esc((now && `${curHour}時・${hourText(now)}`) || ACTION[L.action] || JOB[L.job] || '')}・${esc(homeName(L, world, config, state))}</span><span class="lvline">Lv${L.level || 1}・枠 ${L.slots || config.inventory.base}/${config.inventory.max}</span>${gearNames(L, config.items).length ? `<span class="gearline">装備：${esc(gearNames(L, config.items).join('・'))}</span>` : ''}${bestFishText(L, config) ? `<span class="lvline">${esc(bestFishText(L, config))}</span>` : ''}${profLine(v) ? `<span class="lvline">${esc(profLine(v))}</span>` : ''}<span class="gauges">${gaugeHtml('heart', L.hp, (config.needs || {}).max || 20)}${gaugeHtml('food', L.hunger, (config.needs || {}).max || 20)}</span>`;
+    const fc = favColor(v);
+    card.classList.toggle('fav', !!fc);
+    if (fc) { card.style.setProperty('--fav', favEdge(fc)); card.style.setProperty('--favink', favInk(favEdge(fc))); } else { card.style.removeProperty('--fav'); card.style.removeProperty('--favink'); }
+    who.innerHTML = `<span class="cnamerow"><b class="cname">${esc(v.display)}</b>${genderText(v) ? `<span class="gtag">${esc(genderText(v))}</span>` : ''}</span>${tb ? `<span class="cardtitles">${tb}</span>` : ''}<span class="muted">${esc((now && `${curHour}時・${hourText(now)}`) || ACTION[L.action] || JOB[L.job] || '')}・${esc(homeName(L, world, config, state))}</span><span class="lvline">Lv${L.level || 1}・枠 ${L.slots || config.inventory.base}/${config.inventory.max}</span>${gearNames(L, config.items).length ? `<span class="gearline">装備：${esc(gearNames(L, config.items).join('・'))}</span>` : ''}${bestFishText(L, config) ? `<span class="lvline">${esc(bestFishText(L, config))}</span>` : ''}${profLine(v) ? `<span class="lvline">${esc(profLine(v))}</span>` : ''}${cardExtraHtml(v, L)}<span class="gauges">${gaugeHtml('heart', L.hp, (config.needs || {}).max || 20)}${gaugeHtml('food', L.hunger, (config.needs || {}).max || 20)}</span>`;
     const a = document.createElement('a');
     a.className = 'btn'; a.href = villagerUrl(v); a.textContent = 'くわしく';
     const x = document.createElement('button');
@@ -2545,15 +2561,21 @@ async function main() {
     const btns = document.createElement('div'); btns.className = 'cardbtns'; btns.append(a);
     const ig = igUrl(v);
     if (ig) { const b = document.createElement('a'); b.className = 'btn ig'; b.href = ig; b.target = '_blank'; b.rel = 'noopener'; b.innerHTML = icon('instagram', { size: 16 }) + '<span>インスタ</span>'; btns.append(b); }
+    // 仲よしの名前：押すとその人の所へ
+    who.querySelectorAll('.vlink[data-key]').forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const o = active.find((q) => q.key === b.dataset.key);
+      if (!o || !goVillager(o)) findSay('その人は、今は島にいません', true);
+    }));
     card.append(face, who, btns, x);
   }
-  function closeCard() { card.hidden = true; card.classList.remove('pjcard'); delete card.dataset.key; }
+  function closeCard() { card.hidden = true; card.classList.remove('pjcard', 'fav'); delete card.dataset.key; }
   // 建てている物・橋の札：名前・進み・あと何個（あつまった数 / いる数）・作っている人
   function openProject(id) {
     const p = projectList(state, world, config, hourNow()).find((x) => x.id === id);
     if (!p) return closeCard();
     const nameOf = (k) => { const v = active.find((x) => x.key === k); return v ? v.display : ''; };
-    card.hidden = false; card.classList.add('pjcard');
+    card.hidden = false; card.classList.add('pjcard'); card.classList.remove('fav');
     card.innerHTML = `<div class="pj">${projectCardHtml(p, nameOf)}</div>`;
     const x = document.createElement('button');
     x.className = 'close'; x.setAttribute('aria-label', '閉じる'); x.title = '閉じる'; x.innerHTML = icon('x', { size: 20 });

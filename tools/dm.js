@@ -78,7 +78,16 @@ function dmJoins(S, dms, { config, owners = [], hidden, date, day, enemies = fal
     const last = hits[hits.length - 1];
     const u = g.msgs[g.msgs.length - 1];
     const word = last ? last.word : dc.words[0];
-    if (!last) { out.replies.push({ ids: g.ids, text: null, kind: 'ignore' }); out.skipped++; continue; } // 入居の言葉がない（返事はしないで消す）
+    if (!last) {
+      // 入居の言葉がない DM。住んでいる人の「性別 女の子」「ひとこと よろしく」「誕生日 12/11」などは、コメントと同じ決まりで変える（返事はしないで消す）
+      const knownNow = dc.readOptions && P.findVillager(S.villagers, { igId: igsid, username: u.username ? P.norm(u.username) : '' });
+      if (knownNow) {
+        const from = { id: igsid, username: (u.username && P.norm(u.username)) || knownNow.name || '' };
+        const n = P.applyCommentProfiles(S.villagers, g.msgs.map((m) => ({ text: P.norm(m.text), timestamp: m.at || new Date().toISOString(), from })), { word: '住みたい', startTools: config.startTools, mbti: config.mbtiOn !== false, enemies });
+        if (n) { out.profUpdated += n; out.replies.push({ ids: g.ids, text: null, kind: 'profile' }); continue; }
+      }
+      out.replies.push({ ids: g.ids, text: null, kind: 'ignore' }); out.skipped++; continue;
+    }
     const username = u.username ? P.norm(u.username) : '';
     if (username && owners.includes(username.toLowerCase())) { out.replies.push({ ids: g.ids, text: null, kind: 'owner' }); out.skipped++; continue; }
     // フォローしているか（受け口が User Profile API の is_user_follow_business で見た値。分からない時（null）は通す）
