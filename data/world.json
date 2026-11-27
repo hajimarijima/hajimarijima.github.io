@@ -8,7 +8,7 @@
    "name": "はじまり島",
    "x": 0,
    "z": 0,
-   "r": 50,
+   "r": 55,
    "wob": [
     [
      0.05,
@@ -74,10 +74,10 @@
   },
   {
    "id": "iwa",
-   "name": "いわ島",
-   "x": 87,
-   "z": 50,
-   "r": 27,
+   "name": "のはら島",
+   "x": 100,
+   "z": 53,
+   "r": 32,
    "wob": [
     [
      0.08,
@@ -85,20 +85,25 @@
      0.9
     ],
     [
-     0.04,
+     0.05,
      7,
      2.2
     ]
    ],
-   "look": "rocky",
+   "ring": 1,
+   "look": "meadow",
+   "traits": [
+    "farm"
+   ],
+   "safe": true,
    "open": 0
   },
   {
    "id": "minami",
    "name": "みなみ島",
-   "x": 19,
-   "z": 99,
-   "r": 28,
+   "x": 18,
+   "z": 105,
+   "r": 30,
    "wob": [
     [
      0.1,
@@ -111,39 +116,51 @@
      2.6
     ]
    ],
-   "look": "beach",
+   "ring": 1,
+   "look": "forest",
+   "traits": [
+    "wood",
+    "fish"
+   ],
+   "safe": true,
    "open": 0
   },
   {
    "id": "kame",
    "name": "かめ島",
-   "x": -62,
-   "z": 80,
-   "r": 28,
+   "x": -74,
+   "z": 88,
+   "r": 34,
    "wob": [
     [
-     0.05,
+     0.06,
      3,
      1.1
     ],
     [
-     0.03,
+     0.04,
      6,
      0.2
     ]
    ],
-   "look": "forest",
+   "ring": 1,
+   "look": "cove",
+   "traits": [
+    "fish",
+    "treasure"
+   ],
+   "safe": true,
    "open": 0
   },
   {
    "id": "kujira",
    "name": "くじら島",
-   "x": -104,
-   "z": 5,
-   "r": 29,
+   "x": -109,
+   "z": 0,
+   "r": 33,
    "wob": [
     [
-     0.18,
+     0.16,
      2,
      0
     ],
@@ -153,112 +170,144 @@
      0.6
     ]
    ],
-   "look": "long",
+   "ring": 1,
+   "look": "beach",
+   "traits": [
+    "treasure"
+   ],
+   "safe": true,
    "open": 0
   },
   {
    "id": "mori",
-   "name": "もり島",
-   "x": -70,
-   "z": -73,
-   "r": 29,
+   "name": "みさき島",
+   "x": -67,
+   "z": -74,
+   "r": 21,
    "wob": [
     [
-     0.06,
+     0.07,
      3,
      0.2
     ],
     [
-     0.04,
+     0.05,
      5,
      1.8
     ]
    ],
-   "look": "forest",
+   "ring": 1,
+   "look": "cove",
+   "traits": [
+    "fish",
+    "ore"
+   ],
+   "safe": true,
    "open": 0
   },
   {
    "id": "umineko",
    "name": "うみねこ島",
-   "x": 89,
-   "z": 128,
-   "r": 26,
+   "x": 144,
+   "z": 136,
+   "r": 38,
    "wob": [
     [
-     0.09,
+     0.08,
      3,
      0.8
     ],
     [
-     0.04,
+     0.05,
      5,
      0.1
     ]
    ],
-   "look": "rocky",
+   "ring": 2,
+   "look": "forest",
+   "traits": [
+    "wood"
+   ],
+   "safe": false,
    "open": 0
   },
   {
    "id": "takara",
    "name": "たから島",
-   "x": -38,
-   "z": 151,
-   "r": 27,
+   "x": 3,
+   "z": 192,
+   "r": 40,
    "wob": [
     [
-     0.08,
+     0.09,
      3,
      2.4
     ],
     [
-     0.04,
+     0.05,
      4,
      1
     ]
    ],
-   "look": "beach",
+   "ring": 2,
+   "look": "dark",
+   "traits": [
+    "treasure",
+    "foe"
+   ],
+   "safe": false,
    "open": 0
   },
   {
    "id": "yuuhi",
    "name": "ゆうひ島",
-   "x": -141,
-   "z": 72,
-   "r": 29,
+   "x": -155,
+   "z": 135,
+   "r": 36,
    "wob": [
     [
-     0.06,
+     0.07,
      3,
      1.5
     ],
     [
-     0.04,
+     0.05,
      5,
      0.4
     ]
    ],
+   "ring": 2,
    "look": "forest",
+   "traits": [
+    "wood"
+   ],
+   "safe": false,
    "open": 0
   },
   {
    "id": "hoshi",
    "name": "ほし島",
-   "x": -146,
-   "z": -59,
-   "r": 26,
+   "x": -131,
+   "z": -104,
+   "r": 25,
    "wob": [
     [
-     0.09,
+     0.1,
      5,
      0.3
     ],
     [
-     0.04,
+     0.05,
      3,
      1.2
     ]
    ],
-   "look": "rocky",
+   "ring": 2,
+   "look": "meadow",
+   "traits": [
+    "farm"
+   ],
+   "safe": false,
    "open": 0
   },
   {
@@ -310,8 +359,8 @@
    "to": "north",
    "name": "北の島への橋",
    "a": {
-    "x": 2.88,
-    "z": -50
+    "x": 3.19,
+    "z": -55.24
    },
    "b": {
     "x": 4.21,
@@ -324,14 +373,14 @@
    "id": "iwa",
    "to": "iwa",
    "from": "main",
-   "name": "いわ島への橋",
+   "name": "のはら島への橋",
    "a": {
-    "x": 42.18,
-    "z": 24.24
+    "x": 47.61,
+    "z": 25.23
    },
    "b": {
-    "x": 65.08,
-    "z": 37.4
+    "x": 72.4,
+    "z": 38.37
    },
    "w": 3.4,
    "built": 0
@@ -342,12 +391,12 @@
    "from": "main",
    "name": "みなみ島への橋",
    "a": {
-    "x": 8.79,
-    "z": 45.79
+    "x": 8.69,
+    "z": 50.71
    },
    "b": {
-    "x": 14.13,
-    "z": 73.65
+    "x": 13.3,
+    "z": 77.57
    },
    "w": 3.4,
    "built": 0
@@ -358,12 +407,12 @@
    "from": "main",
    "name": "かめ島への橋",
    "a": {
-    "x": -31.57,
-    "z": 40.73
+    "x": -37.02,
+    "z": 44.03
    },
    "b": {
-    "x": -46.8,
-    "z": 60.39
+    "x": -54.21,
+    "z": 64.46
    },
    "w": 3.4,
    "built": 0
@@ -374,12 +423,12 @@
    "from": "main",
    "name": "くじら島への橋",
    "a": {
-    "x": -44.95,
-    "z": 2.16
+    "x": -49.9,
+    "z": 0
    },
    "b": {
-    "x": -77.52,
-    "z": 3.73
+    "x": -77.75,
+    "z": 0
    },
    "w": 3.4,
    "built": 0
@@ -388,14 +437,14 @@
    "id": "mori",
    "to": "mori",
    "from": "main",
-   "name": "もり島への橋",
+   "name": "みさき島への橋",
    "a": {
-    "x": -33.17,
-    "z": -34.59
+    "x": -35.67,
+    "z": -39.39
    },
    "b": {
-    "x": -51.41,
-    "z": -53.61
+    "x": -54.38,
+    "z": -60.06
    },
    "w": 3.4,
    "built": 0
@@ -406,12 +455,12 @@
    "from": "iwa",
    "name": "うみねこ島への橋",
    "a": {
-    "x": 87.68,
-    "z": 76.51
+    "x": 112.51,
+    "z": 76.61
    },
    "b": {
-    "x": 88.38,
-    "z": 103.79
+    "x": 125.63,
+    "z": 101.35
    },
    "w": 3.4,
    "built": 0
@@ -422,12 +471,12 @@
    "from": "minami",
    "name": "たから島への橋",
    "a": {
-    "x": 1.34,
-    "z": 115.11
+    "x": 13.83,
+    "z": 129.21
    },
    "b": {
-    "x": -20.35,
-    "z": 134.9
+    "x": 9.11,
+    "z": 156.54
    },
    "w": 3.4,
    "built": 0
@@ -438,12 +487,12 @@
    "from": "kame",
    "name": "ゆうひ島への橋",
    "a": {
-    "x": -86.6,
-    "z": 77.51
+    "x": -101.84,
+    "z": 104.15
    },
    "b": {
-    "x": -112.04,
-    "z": 74.93
+    "x": -127.42,
+    "z": 119
    },
    "w": 3.4,
    "built": 0
@@ -454,12 +503,12 @@
    "from": "mori",
    "name": "ほし島への橋",
    "a": {
-    "x": -95.76,
-    "z": -68.26
+    "x": -83.14,
+    "z": -81.56
    },
    "b": {
-    "x": -123.59,
-    "z": -63.13
+    "x": -108.59,
+    "z": -93.5
    },
    "w": 3.4,
    "built": 0
@@ -476,15 +525,15 @@
    "id": "b0",
    "x": 35.21,
    "z": -14.65,
-   "ready": true,
-   "regrow": 0
+   "ready": false,
+   "regrow": 2
   },
   {
    "id": "b1",
    "x": 33.59,
    "z": -11.51,
-   "ready": true,
-   "regrow": 0
+   "ready": false,
+   "regrow": 2
   },
   {
    "id": "b2",
@@ -546,15 +595,15 @@
    "id": "b10",
    "x": 32.08,
    "z": 13.13,
-   "ready": true,
-   "regrow": 0
+   "ready": false,
+   "regrow": 2
   },
   {
    "id": "b11",
    "x": 31.26,
    "z": 1.54,
-   "ready": true,
-   "regrow": 0
+   "ready": false,
+   "regrow": 2
   }
  ],
  "fields": [],
@@ -771,6 +820,126 @@
    "x": 21.98,
    "z": -111.62,
    "island": "north"
+  },
+  {
+   "x": 24.18,
+   "z": 19.66
+  },
+  {
+   "x": 16.06,
+   "z": 25.52
+  },
+  {
+   "x": 6.37,
+   "z": 28.79
+  },
+  {
+   "x": -3.95,
+   "z": 29.14
+  },
+  {
+   "x": -13.88,
+   "z": 26.54
+  },
+  {
+   "x": -28.83,
+   "z": 13.78
+  },
+  {
+   "x": -32.38,
+   "z": 4.86
+  },
+  {
+   "x": -32.76,
+   "z": -4.63
+  },
+  {
+   "x": -29.94,
+   "z": -13.77
+  },
+  {
+   "x": -24.18,
+   "z": -21.66
+  },
+  {
+   "x": -16.06,
+   "z": -27.52
+  },
+  {
+   "x": -6.37,
+   "z": -30.79
+  },
+  {
+   "x": 3.95,
+   "z": -31.14
+  },
+  {
+   "x": 22.45,
+   "z": -23.25
+  },
+  {
+   "x": 28.83,
+   "z": -15.78
+  },
+  {
+   "x": 35.45,
+   "z": 16.05
+  },
+  {
+   "x": 29.44,
+   "z": 23.91
+  },
+  {
+   "x": -8.73,
+   "z": 34.91
+  },
+  {
+   "x": -27.08,
+   "z": 26.09
+  },
+  {
+   "x": -33.78,
+   "z": 18.72
+  },
+  {
+   "x": -38.17,
+   "z": 10
+  },
+  {
+   "x": -39.97,
+   "z": 0.54
+  },
+  {
+   "x": -39.04,
+   "z": -9.03
+  },
+  {
+   "x": -35.45,
+   "z": -18.05
+  },
+  {
+   "x": -29.44,
+   "z": -25.91
+  },
+  {
+   "x": -21.43,
+   "z": -32.07
+  },
+  {
+   "x": -1.67,
+   "z": -37.77
+  },
+  {
+   "x": 18.53,
+   "z": -33.61
+  },
+  {
+   "x": 33.78,
+   "z": -20.72
+  },
+  {
+   "x": 38.17,
+   "z": -12
   }
  ],
  "special": {
@@ -953,43 +1122,366 @@
   "x": 0,
   "z": -1,
   "r": 8,
-  "leveled": 0
+  "leveled": 1
  },
  "debris": [],
  "chest": {
   "x": 5.2,
   "z": 0.6,
-  "day": 0
+  "day": 1
  },
+ "treeSeq": 10,
+ "noGrow": [],
  "tiles": {
   "tile": 1.9,
   "size": 16,
   "fill": "g",
   "chunks": {
-   "-1,-1": "3gt11g2t4gt27g2t9grt53gt37gt4gr21gt3gtgr4gq13g3q12g4qgt2gt7g4q12g4q",
-   "0,-1": "7gr2gr5gt2gr76gt12gt12gt19gt13gr2gk4gt11gq6gt5gt2g3q2gt10g4q2gt7gtg4q5gt2gt3g4q12g",
-   "-1,0": "12g4qgt4gt5g4q13g3q3gr11gq16gt19g3w7gr2gtg5wgt9g5w12g3w4gr68gt2gr2gt4gt20g",
-   "0,0": "4q12g4q6gt5g3q10gt2gq7gt12gt16gt9gt36gt3gr6grgt8gr17gt3gt7gt22gt23gt3gr19g",
+   "-1,-1": "3gt11g2t4gt27g2t9grt31gp21gt37gt4gr21gt3gtgo4gq13g3q12g4qgt2gx7g4q12g4q",
+   "0,-1": "7gr2gr3gpgt2gr76gx12gt12gu19gt7gpgp3gr2gk4gu5gp5gq6gx5gt2g3q2gx10g4q2gu7gtg4q5gx2gt3g4q12g",
+   "-1,0": "12g4qgt4gx5g4q13g3q3gr11gq16gt19g3w7gr2gtg5wgu9g5w12g3w4gr68gt2gr2gt4gt20g",
+   "0,0": "4q12g4q6gt5g3q10gt2gq7gu12gt16gx9gugp34gx3gr6gogx8go17gt3gu7gt22gt23gt3gr19g",
    "1,-1": "64gt31gtgtgt29gk14gk4gt26gk14gk2gkgt32gtgt10gk12g",
-   "1,0": "k49gk32gk12gkgk45gt50gr15gt13gt30g",
-   "-1,-2": "153gt19gt22gt2gtgrt7gt10gt3gt20gr9g",
-   "0,-2": "183gt11gtgr16gt9gt7gt19gt3g",
-   "-2,-1": "61gt48gt44gt100g",
-   "-2,0": "156gt62gt36g",
-   "-2,1": "13gt242g",
-   "-1,1": "gtgt2gr4gt40gtgtgt5gt193g",
-   "0,1": "22gt6gt5gr6gt38gr174g",
-   "0,-5": "179gt34gt9gt3gr4gt9gt2gr4gt4g",
-   "-1,-5": "234gt19gtg",
+   "1,0": "k49gk32gkgp10gkgk45gt50gr15gt13gt30g",
    "-1,-4": "7gr5gt13gt18gr9gt2gr10gt17gt2gt10gt6gtgt14gr12gt13gt17gt2gt10gr5gt26gt36gt",
-   "0,-4": "16gtgt4gtgt8gt17gtgt2gt6gr11gt2gt2gt4gr12gt7gt19gt3gt4grgt18gt4gtgt4grt21gt7gt2gr9gr8gt5gt13gt7gt4g",
-   "1,-4": "145gt31gt15gt62g",
+   "-1,1": "gtgt2gr4gt40gtgtgt5gt193g",
+   "-1,-2": "153gt19gt22gt2gtgrt7gt10gt3gt20gr9g",
+   "-2,-1": "14gp46gt48gt44gt100g",
+   "-2,1": "13gt242g",
+   "-2,0": "156gt62gt36g",
+   "-1,-5": "234gt19gtg",
    "-1,-3": "8gr3gt11gtgt47gr18gt17gr13gt130g",
-   "0,-3": "4gt2gt2gt3gt3gt6gt6gt19gt2gt8gtgr31gt157g"
+   "0,-2": "183gt11gtgr16gt9gt7gt19gt3g",
+   "0,-3": "4gt2gt2gt3gt3gt6gt6gt19gt2gt8gtgr31gt157g",
+   "0,-4": "16gtgt4gtgt8gt17gtgt2gt6gr11gt2gt2gt4gr12gt7gt19gt3gt4grgt18gt4gtgt4grt21gt7gt2gr9gr8gt5gt13gt7gt4g",
+   "0,-5": "179gt34gt9gt3gr4gt9gt2gr4gt4g",
+   "0,1": "22gt6gtgp3gr6gt38gr174g",
+   "1,-4": "145gt31gt15gt62g"
   }
  },
  "objs": {
+  "-10,1": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1,
+   "gone": 1,
+   "removedDay": 1,
+   "spawned": 1
+  },
+  "-12,-2": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1,
+   "gone": 1,
+   "removedDay": 1,
+   "spawned": 1
+  },
+  "-12,-5": {
+   "appleWait": 2
+  },
+  "-7,7": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1
+  },
+  "0,-10": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1,
+   "gone": 1,
+   "removedDay": 1,
+   "spawned": 1
+  },
+  "0,6": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1,
+   "dig": 1
+  },
+  "10,-9": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1,
+   "dig": 1
+  },
+  "12,-2": {
+   "logs": 4,
+   "owner": "ac1879066f",
+   "work": 12
+  },
+  "13,10": {
+   "appleWait": 2
+  },
+  "1,11": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1
+  },
+  "2,9": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1,
+   "gone": 1,
+   "removedDay": 1,
+   "spawned": 1
+  },
+  "4,-6": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1
+  },
+  "5,-4": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1,
+   "gone": 1,
+   "removedDay": 1,
+   "spawned": 1
+  },
+  "5,8": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1,
+   "gone": 1,
+   "removedDay": 1,
+   "spawned": 1
+  },
+  "6,-3": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1
+  },
+  "6,17": {
+   "appleWait": 2
+  },
+  "6,5": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1,
+   "gone": 1,
+   "removedDay": 1,
+   "spawned": 1
+  },
+  "7,-5": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1,
+   "gone": 1,
+   "removedDay": 1,
+   "spawned": 1
+  },
+  "8,3": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1
+  },
+  "9,-2": {
+   "regrow": 3,
+   "logs": 0,
+   "cutDay": 1,
+   "gone": 1,
+   "removedDay": 1,
+   "spawned": 1
+  },
+  "-3,-11": {
+   "regrow": 3,
+   "born": 1
+  },
+  "-18,-16": {
+   "regrow": 3,
+   "born": 1
+  },
+  "2,6": {
+   "regrow": 3,
+   "born": 1
+  },
+  "14,-16": {
+   "regrow": 3,
+   "born": 1
+  },
+  "10,-6": {
+   "regrow": 3,
+   "born": 1
+  },
+  "21,5": {
+   "regrow": 3,
+   "born": 1
+  },
+  "8,-7": {
+   "regrow": 3,
+   "born": 1
+  },
+  "6,-7": {
+   "regrow": 3,
+   "born": 1
+  },
+  "15,17": {
+   "regrow": 3,
+   "born": 1
+  },
+  "-10,-17": {
+   "hp": 8,
+   "max": 8,
+   "blocks": "sssscscs"
+  },
+  "-10,16": {
+   "hp": 10,
+   "max": 10,
+   "blocks": "ssssssisss"
+  },
+  "-13,14": {
+   "hp": 7,
+   "max": 7,
+   "blocks": "sssssss"
+  },
+  "-13,3": {
+   "hp": 8,
+   "max": 8,
+   "blocks": "scssssss"
+  },
+  "-1,-42": {
+   "hp": 7,
+   "max": 7,
+   "blocks": "ssssccs"
+  },
+  "-2,-57": {
+   "hp": 9,
+   "max": 9,
+   "blocks": "sssscsssc"
+  },
+  "-2,-62": {
+   "hp": 7,
+   "max": 7,
+   "blocks": "ssssssc"
+  },
+  "-2,-7": {
+   "hp": 7,
+   "max": 7,
+   "blocks": "ccsssss"
+  },
+  "-2,6": {
+   "hp": 2,
+   "max": 9,
+   "blocks": "sssssssss",
+   "work": 4
+  },
+  "-4,-13": {
+   "hp": 10,
+   "max": 10,
+   "blocks": "sssssscssi"
+  },
+  "-5,-61": {
+   "hp": 7,
+   "max": 7,
+   "blocks": "sssssss"
+  },
+  "-5,9": {
+   "hp": 1,
+   "max": 10,
+   "blocks": "sscsscsscs",
+   "work": 0
+  },
+  "-6,-44": {
+   "hp": 9,
+   "max": 9,
+   "blocks": "ssssssccs"
+  },
+  "-6,-5": {
+   "hp": 0,
+   "max": 10,
+   "blocks": "ssssscssss",
+   "back": 7
+  },
   "-7,-20": {
+   "hp": 6,
+   "max": 6,
+   "blocks": "ssssss"
+  },
+  "-7,-53": {
+   "hp": 6,
+   "max": 6,
+   "blocks": "sssscs"
+  },
+  "-8,-48": {
+   "hp": 8,
+   "max": 8,
+   "blocks": "ssssssss"
+  },
+  "-9,-64": {
+   "hp": 10,
+   "max": 10,
+   "blocks": "ssssssssss"
+  },
+  "0,-60": {
+   "hp": 9,
+   "max": 9,
+   "blocks": "sssssisss"
+  },
+  "0,9": {
+   "hp": 0,
+   "max": 9,
+   "blocks": "ssssscsss",
+   "back": 8
+  },
+  "10,-16": {
+   "hp": 9,
+   "max": 9,
+   "blocks": "sssssssss"
+  },
+  "10,-54": {
+   "hp": 10,
+   "max": 10,
+   "blocks": "sssscssscs"
+  },
+  "11,9": {
+   "hp": 0,
+   "max": 9,
+   "blocks": "cssssssss",
+   "back": 7
+  },
+  "12,-52": {
+   "hp": 6,
+   "max": 6,
+   "blocks": "scssss"
+  },
+  "12,-7": {
+   "hp": 8,
+   "max": 8,
+   "blocks": "ccsssscs"
+  },
+  "12,14": {
+   "hp": 3,
+   "max": 6,
+   "blocks": "ssicss",
+   "work": 0
+  },
+  "19,12": {
+   "hp": 3,
+   "max": 6,
+   "blocks": "csssss",
+   "work": 0
+  },
+  "1,21": {
+   "hp": 8,
+   "max": 8,
+   "blocks": "ssscssss"
+  },
+  "2,-44": {
+   "hp": 8,
+   "max": 8,
+   "blocks": "sssscsss"
+  },
+  "3,-15": {
+   "hp": 9,
+   "max": 9,
+   "blocks": "sssssssis"
+  },
+  "3,18": {
+   "hp": 7,
+   "max": 7,
+   "blocks": "sssssss"
+  },
+  "4,-66": {
    "hp": 6,
    "max": 6,
    "blocks": "ssssss"
@@ -999,190 +1491,36 @@
    "max": 10,
    "blocks": "ssssssssss"
   },
-  "-10,-17": {
+  "6,-51": {
    "hp": 8,
    "max": 8,
-   "blocks": "sssscscs"
-  },
-  "3,-15": {
-   "hp": 9,
-   "max": 9,
-   "blocks": "sssssssis"
-  },
-  "7,-16": {
-   "hp": 8,
-   "max": 8,
-   "blocks": "sssssssi"
-  },
-  "10,-16": {
-   "hp": 9,
-   "max": 9,
-   "blocks": "sssssssss"
-  },
-  "-4,-13": {
-   "hp": 10,
-   "max": 10,
-   "blocks": "sssssscssi"
-  },
-  "-2,-7": {
-   "hp": 7,
-   "max": 7,
-   "blocks": "ccsssss"
-  },
-  "12,-7": {
-   "hp": 8,
-   "max": 8,
-   "blocks": "ccsssscs"
-  },
-  "-6,-5": {
-   "hp": 10,
-   "max": 10,
-   "blocks": "ssssscssss"
-  },
-  "-13,3": {
-   "hp": 8,
-   "max": 8,
-   "blocks": "scssssss"
-  },
-  "-2,6": {
-   "hp": 9,
-   "max": 9,
-   "blocks": "sssssssss"
-  },
-  "-5,9": {
-   "hp": 10,
-   "max": 10,
-   "blocks": "sscsscsscs"
-  },
-  "0,9": {
-   "hp": 9,
-   "max": 9,
-   "blocks": "ssssscsss"
-  },
-  "9,8": {
-   "hp": 8,
-   "max": 8,
-   "blocks": "ssscssss"
-  },
-  "11,9": {
-   "hp": 9,
-   "max": 9,
-   "blocks": "cssssssss"
-  },
-  "19,12": {
-   "hp": 6,
-   "max": 6,
-   "blocks": "csssss"
-  },
-  "-13,14": {
-   "hp": 7,
-   "max": 7,
-   "blocks": "sssssss"
-  },
-  "12,14": {
-   "hp": 6,
-   "max": 6,
-   "blocks": "ssicss"
-  },
-  "-10,16": {
-   "hp": 10,
-   "max": 10,
-   "blocks": "ssssssisss"
-  },
-  "3,18": {
-   "hp": 7,
-   "max": 7,
-   "blocks": "sssssss"
-  },
-  "1,21": {
-   "hp": 8,
-   "max": 8,
-   "blocks": "ssscssss"
-  },
-  "4,-66": {
-   "hp": 6,
-   "max": 6,
-   "blocks": "ssssss"
+   "blocks": "sssssssc"
   },
   "6,-65": {
    "hp": 8,
    "max": 8,
    "blocks": "sssssssc"
   },
-  "-9,-64": {
-   "hp": 10,
-   "max": 10,
-   "blocks": "ssssssssss"
-  },
-  "-5,-61": {
-   "hp": 7,
-   "max": 7,
-   "blocks": "sssssss"
-  },
-  "-2,-62": {
-   "hp": 7,
-   "max": 7,
-   "blocks": "ssssssc"
-  },
-  "0,-60": {
-   "hp": 9,
-   "max": 9,
-   "blocks": "sssssisss"
+  "7,-16": {
+   "hp": 8,
+   "max": 8,
+   "blocks": "sssssssi"
   },
   "7,-59": {
    "hp": 7,
    "max": 7,
    "blocks": "sscssss"
   },
-  "-2,-57": {
-   "hp": 9,
-   "max": 9,
-   "blocks": "sssscsssc"
-  },
   "9,-56": {
    "hp": 9,
    "max": 9,
    "blocks": "sssssssss"
   },
-  "-7,-53": {
-   "hp": 6,
-   "max": 6,
-   "blocks": "sssscs"
-  },
-  "10,-54": {
-   "hp": 10,
-   "max": 10,
-   "blocks": "sssscssscs"
-  },
-  "6,-51": {
-   "hp": 8,
+  "9,8": {
+   "hp": 1,
    "max": 8,
-   "blocks": "sssssssc"
-  },
-  "12,-52": {
-   "hp": 6,
-   "max": 6,
-   "blocks": "scssss"
-  },
-  "-8,-48": {
-   "hp": 8,
-   "max": 8,
-   "blocks": "ssssssss"
-  },
-  "-6,-44": {
-   "hp": 9,
-   "max": 9,
-   "blocks": "ssssssccs"
-  },
-  "2,-44": {
-   "hp": 8,
-   "max": 8,
-   "blocks": "sssscsss"
-  },
-  "-1,-42": {
-   "hp": 7,
-   "max": 7,
-   "blocks": "ssssccs"
+   "blocks": "ssscssss",
+   "work": 4
   }
  }
 }

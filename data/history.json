@@ -159,5 +159,418 @@
   "who": [
    "f513f79825"
   ]
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "event",
+  "text": "村のまん中にチェストを置いた。集めた物は、ここに入れる。"
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "first",
+  "text": "jgpdbj.331が、村ではじめて魚を釣った（ニジマス）。",
+  "who": [
+   "54ca827060"
+  ],
+  "item": "fish_masu"
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "fish",
+  "text": "jgpdbj.331が 35cm のニジマスを釣った！ 島の新記録",
+  "who": [
+   "54ca827060"
+  ],
+  "item": "fish_masu",
+  "cm": 35
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "first",
+  "text": "miiiiiiii_____m5が、島でりんごの木を見つけた。",
+  "who": [
+   "234056791e"
+  ],
+  "item": "apple"
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "first",
+  "text": "kbokn0219が海べで釣りをしていたら、沖にサメの背びれが見えた。海にはサメがいるので、村人は海に入らない（浜から釣るだけ）。",
+  "who": [
+   "23aa0db579"
+  ]
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "first",
+  "text": "peco_1019が、村ではじめてベッドを作った。",
+  "who": [
+   "dc36f7f32b"
+  ]
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "fish",
+  "text": "_mayu1030が 26cm のフナを釣った！ 島の新記録",
+  "who": [
+   "6764b0cb0a"
+  ],
+  "item": "fish_funa",
+  "cm": 26
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "fish",
+  "text": "toa.1029が 34cm のアジを釣った！ 島の新記録",
+  "who": [
+   "cef1e22a99"
+  ],
+  "item": "fish_aji",
+  "cm": 34
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "first",
+  "text": "toa.1029が海から古い金貨を釣り上げた。村ではじめての宝物。",
+  "who": [
+   "cef1e22a99"
+  ],
+  "item": "old_coin"
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "find",
+  "text": "kasu._.1111が鉄鉱石を見つけた。",
+  "who": [
+   "90b16eb3df"
+  ],
+  "item": "iron",
+  "rock": "r12_14"
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "level",
+  "text": "村のまん中の草をぬいて、石をどけて、地面をならした（整地）。"
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "first",
+  "text": "1日目の夜、ryusei01040505が海の向こうの大きな島を見ると、魔物の目がいくつも光っていた。海とサメがいるので、魔物は村には来られない。",
+  "who": [
+   "51dd020030"
+  ]
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "ryusei01040505が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "51dd020030"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "one_sunny0327が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "78d8bb424b"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "korokke5.5が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "c34edc2cfa"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "nao648074が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "876bd80b63"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "tatsuomi06080608が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "aa20ae47bb"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "kbokn0219が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "23aa0db579"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "dinosaur101007が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "e59b5baeec"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "peco_1019が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "dc36f7f32b"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "_mayu1030が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "6764b0cb0a"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "kasu._.1111が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "90b16eb3df"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "naoto68483が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "677d1a8768"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "yecha737が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "ac1879066f"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "jgpdbj.331が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "54ca827060"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "ayano.ay.0907が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "7657063664"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "chunchun_diary_01が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "fecbebe3e7"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "seiryu.0322が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "b88fde425a"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "toa.1029が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "cef1e22a99"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "hamduck.gwa98が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "4e90987092"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "zhentian852が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "65d68ad0b1"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "chocolatecookie1212が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "fcea4cfde3"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "miiiiiiii_____m5が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "234056791e"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "hayaton863が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "e590bc4458"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "arukkkkkkkkeeeeeが「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "2f10679a2e"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "yuto_0104_saikoが「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "478e2b16e6"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "kou6.15が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "0eac15b2ec"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "badge",
+  "text": "rino._.15が「はじまりの住人」のバッジをもらった（村ができて 7 日目までに住んだ）。",
+  "who": [
+   "f513f79825"
+  ],
+  "badge": "founder",
+  "tier": 0
+ },
+ {
+  "day": 1,
+  "date": "2026-11-27",
+  "type": "title",
+  "text": "kbokn0219、_mayu1030、jgpdbj.331、chunchun_diary_01、toa.1029 に称号『大物ハンター』がおくられた。",
+  "who": [
+   "23aa0db579",
+   "6764b0cb0a",
+   "54ca827060",
+   "fecbebe3e7",
+   "cef1e22a99"
+  ],
+  "title": "big_catch"
  }
 ]
