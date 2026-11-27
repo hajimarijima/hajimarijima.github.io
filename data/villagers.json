@@ -428,5 +428,23 @@
   "hidden": false,
   "display": "yuto_0104_saiko",
   "joinedAt": "12:06"
+ },
+ {
+  "key": "0eac15b2ec",
+  "igId": "65077165e01f43fb",
+  "name": "kou6.15",
+  "userHash": "0205a9f6aba78afb",
+  "skin": 139,
+  "joined": "2026-11-27",
+  "joinedDay": 0,
+  "source": "comment",
+  "startTool": "axe",
+  "birthday": "05-15",
+  "profile": {
+   "food": "りんご"
+  },
+  "hidden": false,
+  "display": "kou6.15",
+  "joinedAt": "12:19"
  }
 ]
