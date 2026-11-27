@@ -275,6 +275,22 @@ dl.info dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .sk-bar { height: 7px; border-radius: 4px; background: #eee4d2; overflow: hidden; margin: 3px 0 2px; }
 .sk-bar i { display: block; height: 100%; background: linear-gradient(90deg, #e3a64a, #c97a2a); border-radius: 4px; }
 .sk-main small { display: block; color: var(--sub); font-size: 12px; }
+.fbook { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; }
+.fbook .fb { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 2px; border-radius: 10px; background: #fffaf1; border: 1px solid var(--line); text-align: center; min-width: 0; }
+.fbook .fb img { width: 32px; height: 32px; image-rendering: pixelated; }
+.fbook .fb span { font-size: 11px; line-height: 1.2; overflow-wrap: anywhere; }
+.fbook .fb b { font-size: 12px; }
+.fbook .fb.no img { filter: brightness(0); opacity: .25; }
+.fbook .fb.no span { color: var(--sub); }
+/* バッジのページ：数のランキング・魚ごとのバッジのたたみ */
+.bdgrank { list-style: none; margin: 8px 0 4px; padding: 0; font-size: 13px; }
+.bdgrank li { display: flex; align-items: baseline; gap: 6px; padding: 2px 0; min-width: 0; }
+.bdgrank .no { width: 1.4em; font-weight: 700; color: var(--sub); text-align: right; flex: none; }
+.bdgrank li:first-child .no { color: #c58b2b; }
+.bdgrank a { min-width: 0; overflow-wrap: anywhere; }
+.bdgrank b { margin-left: auto; white-space: nowrap; }
+.bdgfold { list-style: none; grid-column: 1 / -1; }
+.bdgfold summary { cursor: pointer; font-weight: 700; padding: 10px 4px; }
 .sk-fish { margin: 10px 0 0; }
 .sk-fish summary { cursor: pointer; font-size: 13px; font-weight: 700; margin: 0 0 8px; }
 .vcard .lvline { font-size: 12px; color: var(--sub); }

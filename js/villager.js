@@ -414,11 +414,21 @@ function renderBadges(L, config, after, v) {
     const img = t < 0 ? `<img class="pixel none" src="icons/badge_${id}_0.png" alt="" width="32" height="32">` : `<img class="pixel" src="icons/badge_${id}_${t}.png" alt="" width="32" height="32">`;
     return `<li>${img}<div class="sk-main"><div class="sk-top"><b>${esc(B.name)}</b><span>${n.toLocaleString()}${esc(unit)}</span></div><div class="sk-bar"><i style="width:${Math.round(r * 100)}%"></i></div><small>${esc(goal)}</small></div></li>`;
   };
+  // 魚図鑑：釣った魚は色つきで数、まだの魚は影だけ（？）。押すと次の段までのバーが開く
+  const fishBook = (fish) => {
+    const caught = fish.filter(([, B]) => badgeCount(L2, B.stat) > 0).length;
+    const tiles = fish.map(([id, B]) => {
+      const n = badgeCount(L2, B.stat), nm = (config.items[id] || {}).name || B.name.replace(/釣り$/, '');
+      return `<li class="fb${n ? '' : ' no'}" title="${esc(nm)}"><img class="pixel" src="icons/${id}.png" alt="" width="32" height="32"><span>${n ? esc(nm) : '？？？'}</span><b>${n ? n + ' 匹' : ''}</b></li>`;
+    }).join('');
+    return `<h3 class="sk-h">魚図鑑（${caught} / ${fish.length} 種類）</h3><ul class="fbook">${tiles}</ul>` +
+      `<details class="sk-fish"><summary>魚ごとのバッジの進み具合</summary><ul class="sk-list">${fish.map(([id, B]) => row(id, B)).join('')}</ul></details>`;
+  };
   const sk = Object.entries(BG.list).filter(([, B]) => !B.founder && Array.isArray(B.tiers));
   const skMain = sk.filter(([, B]) => !B.fish), fish = sk.filter(([, B]) => B.fish);
   const wrap = document.createElement('div'); wrap.className = 'skills';
   wrap.innerHTML = `<h3 class="sk-h">熟練度の進み具合</h3><ul class="sk-list">${skMain.map(([id, B]) => row(id, B)).join('')}</ul>` +
-    (fish.length ? `<details class="sk-fish"><summary>魚ごとの釣った数（${fish.length} 種類）</summary><ul class="sk-list">${fish.map(([id, B]) => row(id, B)).join('')}</ul></details>` : '');
+    (fish.length ? fishBook(fish) : '');
   (box.children.length ? box : p).after(wrap);
 }
 
