@@ -402,6 +402,21 @@ function renderBadges(L, config, after, v) {
   p.textContent = (box.children.length ? 'バッジ。' : 'バッジはまだありません。') + (rest ? rest + '。' : '');
   after.after(p);
   if (box.children.length) p.after(box);
+  // 熟練度ごとの進み具合（見張り番・木こり・石掘り…）。いまの数と、次の段までのバー。魚ごとは たたんでおく
+  const row = (id, B) => {
+    const n = badgeCount(L, B.stat), unit = B.unit || ' 個', t = got[id] ?? -1, last = t >= B.tiers.length - 1;
+    const lo = t < 0 ? 0 : B.tiers[t], hi = last ? B.tiers[B.tiers.length - 1] : B.tiers[t + 1];
+    const r = last ? 1 : Math.max(0, Math.min(1, (n - lo) / Math.max(1, hi - lo)));
+    const goal = last ? `${BG.tierNames[t]}（いちばん上）` : `次の${BG.tierNames[t + 1]}まで あと ${hi - n}${unit}`;
+    const img = t < 0 ? `<img class="pixel none" src="icons/badge_${id}_0.png" alt="" width="32" height="32">` : `<img class="pixel" src="icons/badge_${id}_${t}.png" alt="" width="32" height="32">`;
+    return `<li>${img}<div class="sk-main"><div class="sk-top"><b>${esc(B.name)}</b><span>${n.toLocaleString()}${esc(unit)}</span></div><div class="sk-bar"><i style="width:${Math.round(r * 100)}%"></i></div><small>${esc(goal)}</small></div></li>`;
+  };
+  const sk = Object.entries(BG.list).filter(([, B]) => !B.founder && Array.isArray(B.tiers));
+  const skMain = sk.filter(([, B]) => !B.fish), fish = sk.filter(([, B]) => B.fish);
+  const wrap = document.createElement('div'); wrap.className = 'skills';
+  wrap.innerHTML = `<h3 class="sk-h">熟練度の進み具合</h3><ul class="sk-list">${skMain.map(([id, B]) => row(id, B)).join('')}</ul>` +
+    (fish.length ? `<details class="sk-fish"><summary>魚ごとの釣った数（${fish.length} 種類）</summary><ul class="sk-list">${fish.map(([id, B]) => row(id, B)).join('')}</ul></details>` : '');
+  (box.children.length ? box : p).after(wrap);
 }
 
 main().catch(showError);
