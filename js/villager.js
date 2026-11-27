@@ -74,8 +74,8 @@ async function main() {
     ...hourRows(L),
     ['住んでいる家', homeName(L, D.world, D.config, D.state)],
     ['最初の道具', startToolText(v, L, D.config)],
-    ['体力', gaugeHtml('heart', L.hp, (D.config.needs || {}).max || 20) + (L.restWhy === 'weak' ? ' <small class="muted">休んで戻している</small>' : '')],
-    ['おなか', gaugeHtml('food', L.hunger, (D.config.needs || {}).max || 20)],
+    // 体力とおなかは 1 行に並べる
+    ['体力・おなか', `<span class="pgauges">${gaugeHtml('heart', L.hp, (D.config.needs || {}).max || 20)}${gaugeHtml('food', L.hunger, (D.config.needs || {}).max || 20)}</span>` + (L.restWhy === 'weak' ? ' <small class="muted">休んで戻している</small>' : ''), true],
     ['スキン', v.look ? `${esc(BODY_LABEL[v.look.body] || '')}・${v.look.seed} 番（プロフィールで選んだ見た目）` : v.skinBody ? `${esc(BODY_LABEL[v.skinBody] || '')}・${v.skin} 番` : `${v.skin} 番`],
     ['体型', v.body === 'chibi' ? '2 頭身' : '通常'],
     ...(bestFishText(L, D.config) ? [['釣り', bestFishText(L, D.config)]] : []),
