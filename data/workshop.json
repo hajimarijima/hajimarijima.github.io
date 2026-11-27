@@ -1,7 +1,126 @@
 {
- "results": {},
- "seen": [],
- "day": 1,
- "date": "2026-11-27",
- "at": "2026-11-27T06:31:57.280Z"
+ "results": {
+  "cMUVGh8TDBB2": {
+   "ok": true,
+   "text": "原木 6 個",
+   "day": 2,
+   "who": "fcea4cfde3",
+   "t": "gain",
+   "at": "2026-11-27T21:48:14.332Z"
+  },
+  "vUk3Lf8UxrWE": {
+   "ok": true,
+   "text": "メバル",
+   "day": 2,
+   "who": "6764b0cb0a",
+   "t": "gain",
+   "at": "2026-11-27T21:48:14.332Z"
+  },
+  "iUN6baZrtTpn": {
+   "ok": true,
+   "text": "ホシアカリ",
+   "day": 2,
+   "who": "6764b0cb0a",
+   "t": "gain",
+   "at": "2026-11-27T21:48:14.332Z"
+  },
+  "ygbDmRatey9X": {
+   "ok": true,
+   "text": "メバル",
+   "day": 2,
+   "who": "6764b0cb0a",
+   "t": "gain",
+   "at": "2026-11-27T21:48:14.332Z"
+  },
+  "uh7nKcPcheWQ": {
+   "ok": true,
+   "text": "流木",
+   "day": 2,
+   "who": "6764b0cb0a",
+   "t": "gain",
+   "at": "2026-11-27T21:48:14.332Z"
+  },
+  "BdYv7vFP5ifQ": {
+   "ok": true,
+   "text": "ダイヤ",
+   "day": 2,
+   "who": "6764b0cb0a",
+   "t": "gain",
+   "at": "2026-11-27T21:48:14.332Z"
+  },
+  "CGpkPGMDEjkz": {
+   "ok": true,
+   "text": "宝箱",
+   "day": 2,
+   "who": "6764b0cb0a",
+   "t": "gain",
+   "at": "2026-11-27T21:48:14.332Z"
+  },
+  "UKXAhGnYfgwa": {
+   "ok": true,
+   "text": "ホシアカリ・メバル 2 個",
+   "day": 2,
+   "who": "6764b0cb0a",
+   "t": "send",
+   "at": "2026-11-27T21:48:14.332Z"
+  },
+  "Dpo6ciPNwNcG": {
+   "ok": true,
+   "text": "ホシアカリ",
+   "day": 2,
+   "who": "fcea4cfde3",
+   "t": "gain",
+   "at": "2026-11-27T21:48:14.332Z"
+  },
+  "pb4BpYgPcsMv": {
+   "ok": true,
+   "text": "メバル",
+   "day": 2,
+   "who": "fcea4cfde3",
+   "t": "gain",
+   "at": "2026-11-27T21:48:14.332Z"
+  },
+  "9QqWPS7zJdjR": {
+   "ok": true,
+   "text": "メバル",
+   "day": 2,
+   "who": "fcea4cfde3",
+   "t": "gain",
+   "at": "2026-11-27T21:48:14.332Z"
+  },
+  "MAiimKQMTrce": {
+   "ok": true,
+   "text": "メバル",
+   "day": 2,
+   "who": "fcea4cfde3",
+   "t": "gain",
+   "at": "2026-11-27T21:48:14.332Z"
+  },
+  "fFrTJjeaBFdh": {
+   "ok": true,
+   "text": "宝箱",
+   "day": 2,
+   "who": "fcea4cfde3",
+   "t": "gain",
+   "at": "2026-11-27T21:48:14.332Z"
+  }
+ },
+ "seen": [
+  "cMUVGh8TDBB2",
+  "vUk3Lf8UxrWE",
+  "iUN6baZrtTpn",
+  "ygbDmRatey9X",
+  "uh7nKcPcheWQ",
+  "BdYv7vFP5ifQ",
+  "CGpkPGMDEjkz",
+  "UKXAhGnYfgwa",
+  "Dpo6ciPNwNcG",
+  "pb4BpYgPcsMv",
+  "9QqWPS7zJdjR",
+  "MAiimKQMTrce",
+  "fFrTJjeaBFdh"
+ ],
+ "day": 2,
+ "date": "2026-11-28",
+ "at": "2026-11-27T21:48:14.332Z"
 }
