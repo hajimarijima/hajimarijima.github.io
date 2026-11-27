@@ -592,6 +592,7 @@ function syncLabels() {
 // パーティの間、名札が重なる時は遠い方を消す（町の本体が札をずらしたあとの位置で調べる）
 let tagF = 0, hidTags = [];
 function hideFarTags() {
+  hidTags = []; return; // 止めた：重なってもよい（消したり出したりでチカチカするため）
   if (!P.on) { hidTags = []; return; }
   if (tagF++ & 3) { for (const L of hidTags) L.style.opacity = '0'; return; } // 町の本体は毎コマ札を出し直すので、消した札は毎コマ消す
   for (const L of hidTags) L.style.opacity = '';
