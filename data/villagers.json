@@ -671,5 +671,24 @@
   "display": "hinata_cookiekun",
   "via": "dm",
   "joinedAt": "23:14"
+ },
+ {
+  "key": "7f095859b1",
+  "igId": "8508739b55519757",
+  "name": "kana_na731",
+  "userHash": "6c9c7b31c29047e3",
+  "skin": 130,
+  "joined": "2026-11-28",
+  "joinedDay": 2,
+  "source": "comment",
+  "birthday": "07-31",
+  "profile": {
+   "food": "魚"
+  },
+  "skinBody": "female",
+  "hidden": false,
+  "display": "kana_na731",
+  "via": "dm",
+  "joinedAt": "23:28"
  }
 ]
