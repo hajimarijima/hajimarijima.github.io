@@ -724,5 +724,23 @@
   "hidden": false,
   "display": "azoo3_98",
   "joinedAt": "00:08"
+ },
+ {
+  "key": "661c3a683a",
+  "igId": "e79b0b8c55e80504",
+  "name": "____mai.i",
+  "userHash": "772c523cdf1f3ebf",
+  "skin": 196,
+  "joined": "2026-11-28",
+  "joinedDay": 2,
+  "source": "comment",
+  "birthday": "08-03",
+  "profile": {
+   "food": "にんじん"
+  },
+  "skinBody": "female",
+  "hidden": false,
+  "display": "____mai.i",
+  "joinedAt": "00:14"
  }
 ]
