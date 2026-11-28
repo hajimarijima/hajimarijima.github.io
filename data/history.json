@@ -1003,5 +1003,15 @@
    "6764b0cb0a"
   ],
   "item": "diamond"
+ },
+ {
+  "day": 2,
+  "date": "2026-11-28",
+  "type": "title",
+  "text": "_mayu1030 に称号『はじめてのダイヤ』がおくられた。",
+  "who": [
+   "6764b0cb0a"
+  ],
+  "title": "first_diamond"
  }
 ]
