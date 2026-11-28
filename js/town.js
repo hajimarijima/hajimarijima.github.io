@@ -1177,7 +1177,7 @@ async function main() {
   function wanderPt(p, i) {
     let c = null;
     for (let k = 0; k < 8; k++) {
-      const s = i + ':' + k, a = ((hash(p.v.key + 'w' + curHour + ':' + s) % 628) / 100), r = 8 + (hash(p.v.key + 'wr' + s) % 120) / 10;
+      const s = i + ':' + k, a = ((hash(p.v.key + 'w' + curHour + ':' + s) % 628) / 100), r = 8 + (hash(p.v.key + 'wr' + s) % 240) / 10; // 広場から 8〜32（島のあちこちへ）
       c = { x: plaza.x + Math.cos(a) * r, z: plaza.z + Math.sin(a) * r };
       if (!onLand(world, c.x, c.z, 2)) continue;
       if (world.pond && Math.hypot(c.x - world.pond.x, c.z - world.pond.z) < world.pond.r + 2) continue;
@@ -1221,6 +1221,7 @@ async function main() {
   // 行動を人に当てはめる（init：開いた時はその場所から始める）
   function setAct(p, a, init) {
     const L = life[p.v.key] || {};
+    p.stroll = null; p.idleT = 0; p.wd = null;
     p.act = a; p.rest = false; p.stay = false; p.sleepAt = null; p.w0 = null; p.mine = null; p.bobAt = null; p.night = null;
     p.routes = p.routes || {};
     if (a.action === 'sleep') {
@@ -1972,6 +1973,54 @@ async function main() {
     }
     return false;
   }
+  // ---------- 止まったままにしない ----------
+  // ・立ったまま（idle）が 8〜12 秒続いた人は、近くの空いた所（4〜11 先）まで歩いて、少し見回してから元の所へ戻る
+  // ・歩いているのに 4 秒で 0.5 も進めない人（引っかかり）は、近くの空いた所へ回り道してから、元の行き先へ歩き直す
+  function strollPt(p, home, k) {
+    for (let i = 0; i < 8; i++) {
+      const a = (hash(p.v.key + 'st' + k + ':' + i) % 628) / 100, r = 4 + (hash(p.v.key + 'sr' + k + ':' + i) % 70) / 10;
+      const c = { x: home.x + Math.cos(a) * r, z: home.z + Math.sin(a) * r };
+      if (ISLANDS && !onLand(world, c.x, c.z, 1.5)) continue;
+      if (world.pond && Math.hypot(c.x - world.pond.x, c.z - world.pond.z) < world.pond.r + 1.5) continue;
+      if (walls.some((o) => Math.hypot(c.x - o.x, c.z - o.z) < o.r)) continue;
+      return freePt(c);
+    }
+    return null;
+  }
+  function startStroll(p, why) {
+    const n = (p.strollN = (p.strollN || 0) + 1), home = { x: p.pos.x, z: p.pos.z }, to = strollPt(p, home, n);
+    p.idleT = 0; if (p.wd) p.wd.t = 0;
+    if (!to) return false;
+    p.stroll = { home, route: safeRoute(home, to), back: false, ri0: p.ri, why, stay: 1 + (hash(p.v.key + 'sw' + n) % 30) / 10, wait: 0 };
+    p.ri = 0; p.stk = null;
+    return true;
+  }
+  function strollStep(p, dt, time) {
+    const S = p.stroll;
+    setCarry(p.ch, null); if (S.why === 'idle') setTool(p.ch, null);
+    let pose = 'walk';
+    if (S.wait > 0) { // 着いた所で少し見回す
+      pose = 'idle'; S.wait -= dt;
+      if (S.wait <= 0) { S.back = true; S.route = safeRoute(p.pos, S.home); p.ri = 0; p.stk = null; }
+    } else if (walkTo(p, S.route, dt)) {
+      if (S.why === 'stuck' || S.back) { p.stroll = null; p.ri = S.ri0 || 0; p.stk = null; p.idleT = 0; } // 引っかかりの回り道は、そのまま元の行き先へ
+      else { S.wait = S.stay; pose = 'idle'; }
+    }
+    keepApart(p);
+    p.ch.position.set(p.pos.x, 0, p.pos.z);
+    p.ch.userData.nod = pose === 'walk' && p.lod === 'full' ? passNod(p, time) : 0;
+    p.lastPose = pose;
+    if (p.lod === 'full') animate(p.ch, pose, time + (hash(p.v.key) % 100) / 10);
+  }
+  function idleWatch(p, pose, dt) {
+    if (p.stroll || p.photo || p.party || p.visit) return;
+    const walking = pose === 'walk' || pose === 'carry';
+    const W = p.wd || (p.wd = { x: p.pos.x, z: p.pos.z, t: 0 });
+    if (!walking || Math.hypot(p.pos.x - W.x, p.pos.z - W.z) > 0.5) { W.t = 0; W.x = p.pos.x; W.z = p.pos.z; }
+    else if ((W.t += dt) > 4) { startStroll(p, 'stuck'); return; }
+    p.idleT = pose === 'idle' ? (p.idleT || 0) + dt : 0;
+    if (p.idleT > 8 + (hash(p.v.key) % 40) / 10) startStroll(p, 'idle');
+  }
   // 重ならない：体（だ円）が、物の円・ほかの人の体・横になっている人に入っていたら外へ出す（ちゃんと描いている人だけ、毎こま）
   function keepApart(p, noSolid) {
     if (p.lod !== 'full') return;
@@ -2009,6 +2058,10 @@ async function main() {
       const ph = p.photo; if (ph.pose && ph.t0 == null) ph.t0 = time; // ポーズ（js/photomode.js の「はい、チーズ」）：選んだ時から数える
       if (p.lod === 'full') animate(p.ch, ph.pose || 'wave', time, ph.pose ? time - ph.t0 : 0.5);
       return;
+    }
+    if (p.stroll) { // ちょっと歩いている間（止まったままにしない）
+      if (p.mode === 'gohome' || p.mode === 'sleep' || (p.mode === 'guard' && isDown(p))) p.stroll = null;
+      else { strollStep(p, dt, time); return; }
     }
     let pose = 'idle';
     if (p.mode === 'gohome' || p.mode === 'sleep') {
@@ -2054,12 +2107,13 @@ async function main() {
         O.x += (tx - O.x) * k; O.z += (tz - O.z) * k; ox = O.x + W.x; oz = O.z + W.z;
         pose = D && D.strike !== null ? 'strike' : moving && !D ? 'walk' : (p.dodge || 0) > 0.2 ? 'walk' : 'idle';
       }
+      if (!ENEMIES_ON) idleWatch(p, pose, dt); // 敵が来ない時は、見張りも立ちっぱなしにしない
       keepApart(p);
       p.ch.position.set(p.pos.x + ox, 0, p.pos.z + oz);
       if (p.lod === 'full') animate(p.ch, pose, time + (hash(p.v.key) % 100) / 10, D && D.strike !== null ? D.strike : null);
       return;
     }
-    if (p.rest) { setTool(p.ch, null); setCarry(p.ch, null); keepApart(p); p.ch.position.set(p.pos.x, 0, p.pos.z); if (p.lod === 'full') animate(p.ch,'idle', time + (hash(p.v.key) % 100) / 10); return; }
+    if (p.rest) { idleWatch(p, 'idle', dt); if (p.stroll) return; setTool(p.ch, null); setCarry(p.ch, null); keepApart(p); p.ch.position.set(p.pos.x, 0, p.pos.z); if (p.lod === 'full') animate(p.ch,'idle', time + (hash(p.v.key) % 100) / 10); return; }
     if (p.phase === 0 || p.phase === 4) {
       setTool(p.ch, p.toolKey); setCarry(p.ch, null);
       pose = 'walk';
@@ -2101,6 +2155,7 @@ async function main() {
       setTool(p.ch, p.toolKey); pose = 'walk';
       if (walkTo(p, p.routes.back, dt)) { p.phase = 1; p.t = 0; }
     }
+    if (!(p.phase >= 5 && p.phase <= 7) && !p.chat && !p.hunt) idleWatch(p, pose, dt); // 話している間・狩りの間はそのまま
     keepApart(p);
     p.ch.position.set(p.pos.x, 0, p.pos.z);
     p.ch.userData.nod = pose === 'walk' && p.lod === 'full' ? passNod(p, time) : 0;
