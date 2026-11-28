@@ -825,7 +825,7 @@
       "cost": {
         "wood": 20
       },
-      "cap": 2,
+      "cap": 4,
       "look": {
         "kind": "house",
         "w": 3,
