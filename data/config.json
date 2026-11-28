@@ -318,42 +318,42 @@
       {
         "id": "ref_10",
         "name": "島の広報係",
-        "desc": "招待リンクで 10 人が島に来た人（ごほうび：ダイヤ 1 こ）",
+        "desc": "招待リンクで 10 人が島に来た人（ごほうび：金鉱石 10 こ）",
         "how": "自分の招待リンクから 10 人に島に住んでもらう",
         "img": "icons/title_ref_10.png",
         "auto": "referrals",
         "n": 10,
-        "gift": { "diamond": 1 }
+        "gift": { "gold": 10 }
       },
       {
         "id": "ref_20",
         "name": "島の大使",
-        "desc": "招待リンクで 20 人が島に来た人（ごほうび：ダイヤ 3 こ）",
+        "desc": "招待リンクで 20 人が島に来た人（ごほうび：金鉱石 20 こ）",
         "how": "自分の招待リンクから 20 人に島に住んでもらう",
         "img": "icons/title_ref_20.png",
         "auto": "referrals",
         "n": 20,
-        "gift": { "diamond": 3 }
+        "gift": { "gold": 20 }
       },
       {
         "id": "ref_30",
         "name": "島の英雄",
-        "desc": "招待リンクで 30 人が島に来た人（ごほうび：ダイヤ 5 こ）",
+        "desc": "招待リンクで 30 人が島に来た人（ごほうび：ダイヤ 1 こ）",
         "how": "自分の招待リンクから 30 人に島に住んでもらう",
         "img": "icons/title_ref_30.png",
         "auto": "referrals",
         "n": 30,
-        "gift": { "diamond": 5 }
+        "gift": { "diamond": 1 }
       },
       {
         "id": "ref_50",
         "name": "伝説の大使",
-        "desc": "招待リンクで 50 人が島に来た人（ごほうび：ダイヤ 10 こ）",
+        "desc": "招待リンクで 50 人が島に来た人（ごほうび：ダイヤ 3 こ）",
         "how": "自分の招待リンクから 50 人に島に住んでもらう",
         "img": "icons/title_ref_50.png",
         "auto": "referrals",
         "n": 50,
-        "gift": { "diamond": 10 }
+        "gift": { "diamond": 3 }
       },
       {
         "id": "villager_100",

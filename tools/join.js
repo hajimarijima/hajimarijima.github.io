@@ -120,6 +120,21 @@ if (bv) {
     stateChanged = before !== JSON.stringify([bv.votes, bv.voters, bv.commentCount]);
   }
 }
+// 「何を建てる？」「どこに建てる？」などの投票も、受付のたびに票を数え直す（決めるのは朝の sim.js。ここは数えて見せるだけ）。
+//   始まっていない投票は数えない。締め切りのあとのコメントは数えない
+if (inbox && inbox.voteComments) {
+  for (const v of (S.state.votes || []).filter((x) => x.kind !== 'base' && x.opensAt && Date.parse(x.opensAt) <= NOW.getTime())) {
+    const before = JSON.stringify([v.votes, v.voters, v.commentCount]);
+    const close = v.closesAt && Date.parse(v.closesAt) < NOW.getTime() ? v.closesAt : NOW.toISOString();
+    const t = P.tallyVote(inbox.voteComments, { opensAt: v.opensAt, closesAt: close, exclude: owners });
+    const manual = v.manual || {};
+    v.counted = t.votes;
+    v.votes = { A: t.votes.A + (manual.A || 0), B: t.votes.B + (manual.B || 0), C: t.votes.C + (manual.C || 0) };
+    v.voters = t.voters + (manual.A || 0) + (manual.B || 0) + (manual.C || 0);
+    v.timeline = t.timeline; v.commentCount = t.comments;
+    if (before !== JSON.stringify([v.votes, v.voters, v.commentCount])) { stateChanged = true; console.log(`投票「${v.question || v.kind}」 A ${v.votes.A}・B ${v.votes.B}・C ${v.votes.C}`); }
+  }
+}
 if (baseWorld) {
   // テントは拠点のそばへ（家はまだない）。区画も拠点のまわりに作り直したので、家の割り当てもし直す
   W.assignHomes(S.villagers.filter((v) => v.joinedDay <= day && S.life[v.key]), S.life, S.world, config);

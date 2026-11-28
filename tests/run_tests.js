@@ -1314,6 +1314,37 @@ t('町を始める日：startAt の読み方と、gate のあいだは 0 日目�
   assert.strictEqual(W.shouldAdvance(s0, {}, { gate: true, start: true, now: before }), true, 'Actions の start で始める');
   assert.strictEqual(W.shouldAdvance(s1, {}, { gate: true, now: before }), true, '1 日目より後は毎朝進む');
 });
+t('「何を建てる？」の票：15 分ごとの join.js で数え直す（始まる前・締め切りのあと・持ち主は数えない）', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-jvote-'));
+  const cfg = liveCfg(); cfg.startAt = null;
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
+  const env = { ...process.env, TOWN_DATA: dir };
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+  node('tools/init.js', '--seed', 'jv', '--start', '2026-11-01', '--fixed-base');
+  const read = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+  const st = read('state.json');
+  const opt = (k) => ({ key: k, name: k });
+  st.votes = (st.votes || []).filter((v) => v.kind === 'base').concat(
+    { kind: 'what', question: '何を建てる？', opensAt: '2026-11-28T00:00:00+09:00', closesAt: '2026-11-29T00:00:00+09:00', openedDay: 2, closesDay: 3, options: ['A', 'B', 'C'].map(opt), votes: { A: 0, B: 0, C: 0 }, voters: 0 },
+    { kind: 'where', question: 'どこに建てる？', opensAt: '2026-11-29T00:00:00+09:00', closesAt: '2026-11-30T00:00:00+09:00', openedDay: 3, closesDay: 4, options: ['A', 'B', 'C'].map(opt), votes: { A: 0, B: 0, C: 0 }, voters: 0 });
+  fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify(st));
+  fs.mkdirSync(path.join(dir, 'inbox'));
+  const cm = (id, u, text, ts) => ({ from: { id, username: u }, text, timestamp: ts });
+  fs.writeFileSync(path.join(dir, 'inbox', 'instagram.json'), JSON.stringify({ owner: 'town_owner', joinComments: [], voteComments: [
+    cm('1', 'aa', 'A', '2026-11-27T14:00:00Z'), // 11/27 23 時：始まる前
+    cm('2', 'bb', 'Bがいい', '2026-11-28T01:00:00Z'),
+    cm('3', 'cc', 'a', '2026-11-28T02:00:00Z'),
+    cm('4', 'dd', 'B', '2026-11-28T03:00:00Z'),
+    cm('5', 'town_owner', 'C', '2026-11-28T03:00:00Z'), // 持ち主
+  ] }));
+  node('tools/join.js', '--now', '2026-11-28T22:00:00+09:00');
+  const vs = read('state.json').votes;
+  const what = vs.find((v) => v.kind === 'what'), where = vs.find((v) => v.kind === 'where');
+  assert.deepStrictEqual(what.votes, { A: 1, B: 2, C: 0 }, '始まってからのコメントだけ・持ち主は数えない');
+  assert.strictEqual(what.voters, 3);
+  assert.deepStrictEqual(where.votes, { A: 0, B: 0, C: 0 }, 'まだ始まっていない投票は数えない');
+});
+
 t('すぐの入居：join.js で 0 日目に住み始め、daily（--gate）は始めるまで進まない・始めたら 1 日目', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-join-'));
   const cfg = liveCfg();
