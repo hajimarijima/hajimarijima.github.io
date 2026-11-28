@@ -66,6 +66,7 @@ jobs:
         env:
           TOWN_SALT: ${{ secrets.TOWN_SALT }}
           TOWN_HIDDEN: ${{ secrets.TOWN_HIDDEN }}
+          TOWN_STAFF: ${{ secrets.TOWN_STAFF }}
       - name: 結果をコミット
         run: |
           git config user.name "town-bot"

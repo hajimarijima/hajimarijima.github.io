@@ -57,6 +57,9 @@ const dmItems = fs.existsSync(dmFile) ? (JSON.parse(fs.readFileSync(dmFile, 'utf
 const dmRes = DM.dmJoins(S, dmItems, { config, owners, hidden, date, day, enemies, moved });
 registered += dmRes.registered.length;
 if (dmItems.length) console.log(`DM：${dmItems.length} 件・新しく住んだ人 ${dmRes.registered.length} 人・もう住んでいた人 ${dmRes.known.length} 人`);
+// 管理者用の村人（TOWN_STAFF の人）：みんなには見せない（tools/staff.js）
+const STAFF = require('./staff');
+if (STAFF.markStaff(S.villagers)) console.log('管理者用の村人に印を付けました');
 for (const v of S.villagers) P.applyPrivacy(v, hidden);
 // コメントで書いた誕生日・好きな食べ物・MBTI（「住みたい ピッケル 12/11 りんご INFP」、住んでいる人の「誕生日 12/11」「MBTI ENFP」）。
 // 見ている投稿のコメントをぜんぶ見る。あとから書いた値が勝つ。道具・仕事は変えない（config.mbtiOn が false なら MBTI は読まない）
@@ -135,6 +138,7 @@ if (inbox && inbox.voteComments) {
     if (before !== JSON.stringify([v.votes, v.voters, v.commentCount])) { stateChanged = true; console.log(`投票「${v.question || v.kind}」 A ${v.votes.A}・B ${v.votes.B}・C ${v.votes.C}`); }
   }
 }
+STAFF.scrubHistory(S.history, S.villagers); // 管理者用の村人は町の歴史に書かない
 if (baseWorld) {
   // テントは拠点のそばへ（家はまだない）。区画も拠点のまわりに作り直したので、家の割り当てもし直す
   W.assignHomes(S.villagers.filter((v) => v.joinedDay <= day && S.life[v.key]), S.life, S.world, config);
@@ -154,6 +158,7 @@ for (const id of duel.opened) console.log(`対決投票を始めました：${id
 for (const r of duel.closed) console.log(`対決投票を締めました：${r.id}（${r.winner ? r.winner + ' の勝ち' : '引き分け・票なし'}、ごほうび ${r.rewarded} 人）`);
 if (duel.changed) stateChanged = true;
 if (stateChanged) write('state.json', S.state);
+STAFF.scrubHistory(S.history, S.villagers);
 
 const changed = removed || registered || added.length || comments.length || filled || profUpdated || fitted;
 if (removed || registered || added.length || titled.length || jobChanges.length || duel.opened.length || duel.closed.length) {

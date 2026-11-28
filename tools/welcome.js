@@ -141,7 +141,8 @@ function welcomeNow(S, { now = new Date() } = {}) {
     L.diary.push({ day, date, text: '今日から村に住むことになった。よろしく。' + note + (day === 0 ? 'まだ町は始まっていない。始まる日まで、島を見て回る。' : '') });
     if (S.social) { S.social.view = S.social.view || {}; if (!S.social.view[v.key]) S.social.view[v.key] = []; }
   }
-  history.push({ day, date, time, type: 'join', text: added.map((v) => v.display).join('、') + ' が村に住むことになった。', who: added.map((v) => v.key) });
+  const shown = added.filter((v) => !v.staff); // 管理者用の村人（tools/staff.js）は町の歴史に書かない
+  if (shown.length) history.push({ day, date, time, type: 'join', text: shown.map((v) => v.display).join('、') + ' が村に住むことになった。', who: shown.map((v) => v.key) });
   let worldChanged = false;
   if (day >= 1 && world.chest && !world.chest.day) {
     world.chest.day = day; worldChanged = true;

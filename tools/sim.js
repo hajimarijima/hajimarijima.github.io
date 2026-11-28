@@ -218,7 +218,7 @@ function stepDay(S) {
   for (const v of villagers) if (!v.birthday) v.birthday = P.autoBirthday(v.key);
   // 公開しない項目（firestore_sync.js が data/inbox/ に書く）は、書き出さない形で持つ
   for (const v of villagers) if (S.priv && S.priv[v.key]) Object.defineProperty(v, '_priv', { value: S.priv[v.key], enumerable: false, configurable: true });
-  const active = villagers.filter((v) => v.joinedDay <= day);
+  const active = villagers.filter((v) => v.joinedDay <= day && !v.staff); // 管理者用の村人（tools/staff.js）は島の動きに出ない（遊ぶページだけ）
   for (const v of active) {
     if (!life[v.key]) life[v.key] = { job: null, target: null, home: null, gathered: { wood: 0, stone: 0, food: 0 }, built: [], contrib: { wood: 0, stone: 0, food: 0 }, diary: [] };
   }
@@ -1924,6 +1924,7 @@ function noteProjects(S) {
   for (const [k, n] of Object.entries(pl.need)) pl.got[k] = pl.started ? n : Math.max(0, Math.min(n, Math.floor((RES.includes(k) ? res[k] : store[k]) || 0)));
 }
 for (let i = 0; i < days; i++) { stepDay(S); noteProjects(S); if (i === 0 && S.inbox) S.inbox = { ...S.inbox, joinComments: null }; }
+require('./staff').scrubHistory(S.history, S.villagers); // 管理者用の村人は町の歴史に書かない
 write('villagers.json', S.villagers);
 ST.writeWorld(DATA, S.world, { clearR: ((S.config.terrain && S.config.terrain.clearBlocks) ?? 4) * 1.9 + 2.5 });
 write('state.json', S.state);

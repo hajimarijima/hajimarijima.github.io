@@ -19,6 +19,7 @@ function stepWorkshop(S, { day, date, play = null, hist = () => {}, now = Date.n
   const nameOf = (k) => (active.get(k) || { display: k }).display;
   const diary = (k, text) => { const L = S.life[k], d = L && L.diary && L.diary[L.diary.length - 1]; if (d && d.day === day) d.text += text; };
   const nm = (it) => WS.wsName(config, it);
+  const firstItems = new Set((((config.titles && config.titles.list) || []).filter((t) => t && t.auto === 'firstItem' && t.item).map((t) => t.item)));
   // 1 枠の上限より多く重なっている枠は、空いた枠へ分ける（前の上限 64 のまま持っていた分。消さない）
   for (const [k] of active) { const L = S.life[k]; if (L && Array.isArray(L.inv)) WS.splitOver(L.inv, L.slots || L.inv.length, config); }
   const shop = (play && play.shop) || {}, list = [];
@@ -43,6 +44,8 @@ function stepWorkshop(S, { day, date, play = null, hist = () => {}, now = Date.n
       }
       if (Array.isArray(op.stones) && op.stones.length) diary(k, `${op.src === 'fish' ? '釣りで' : op.src === 'treasure' ? '宝探しで' : ''}ストーンを見つけた。`);
       if (op.src === 'treasure' && op.items.length && op.items[0][0] !== 'treasure_box') diary(k, `宝探しで宝箱を掘り出して開けたら、${nm(op.items[0][0])}が出てきた。`); // 掘った場で開ける（中身だけが届く）
+      // 島ではじめての物（称号「はじめてのダイヤ」などの firstItem）：町の歴史に「見つけた」を書く（チェストに入った時も。tools/titles.js がこれで称号をおくる）
+      for (const [it] of op.items) if (firstItems.has(it) && !(S.history || []).some((h) => h.type === 'find' && h.item === it)) hist('find', `${who}さんが${op.src === 'treasure' ? '宝探しで' : ''}島ではじめての${nm(it)}を手に入れた！`, { who: [k], item: it });
       if (Object.keys(r.toStore || {}).length) diary(k, `持ち物がいっぱいだったので、${Object.keys(r.toStore).map(nm).join('・')}は島のチェストに入れた。`);
       continue;
     }

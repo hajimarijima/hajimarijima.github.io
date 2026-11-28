@@ -1345,6 +1345,33 @@ t('「何を建てる？」の票：15 分ごとの join.js で数え直す（�
   assert.deepStrictEqual(where.votes, { A: 0, B: 0, C: 0 }, 'まだ始まっていない投票は数えない');
 });
 
+t('管理者用の村人（TOWN_STAFF）：住めるが、町の歴史・称号・島の動き・サイトの一覧に出ない', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-staff-'));
+  const cfg = liveCfg(); cfg.startAt = null;
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
+  const env = { ...process.env, TOWN_DATA: dir, TOWN_STAFF: '@Admin_Test' };
+  const node = (f, ...a) => execFileSync(process.execPath, [path.join(ROOT, f), ...a], { env, encoding: 'utf8' });
+  node('tools/init.js', '--seed', 'sf', '--start', '2026-11-01', '--fixed-base');
+  fs.mkdirSync(path.join(dir, 'inbox'));
+  const cm = (id, u, text, ts) => ({ from: { id, username: u }, text, timestamp: ts });
+  fs.writeFileSync(path.join(dir, 'inbox', 'instagram.json'), JSON.stringify({ owner: 'town_owner', joinComments: [cm('8001', 'admin_test', '住みたい', '2026-11-27T00:30:00Z'), cm('8002', 'kaito_b', '住みたい', '2026-11-27T01:00:00Z')] }));
+  node('tools/join.js', '--now', '2026-11-27T10:00:00+09:00');
+  const read = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+  const vs = read('villagers.json'), staff = vs.find((v) => v.name === 'admin_test'), other = vs.find((v) => v.name === 'kaito_b');
+  assert.ok(staff && staff.staff === true, '印が付く');
+  assert.ok(other && !other.staff);
+  assert.ok(STORE.readLife(dir)[staff.key], '暮らしの入れ物はある（遊ぶページで遊べる）');
+  const hist = read('history.json');
+  assert.ok(!hist.some((h) => (h.who || []).includes(staff.key)), '町の歴史に出ない');
+  assert.ok(!hist.some((h) => String(h.text || '').includes('admin_test')));
+  assert.ok(hist.some((h) => h.type === 'join' && h.who.includes(other.key)), 'ほかの人の入居は残る');
+  assert.ok(!(staff.titles || []).length, '称号（はじまりの村人など）をもらわない');
+  const SF = require(path.join(ROOT, 'tools/staff.js'));
+  const H = [{ who: [staff.key] }, { who: [other.key] }, {}];
+  assert.strictEqual(SF.scrubHistory(H, vs), 1); assert.strictEqual(H.length, 2);
+  assert.ok(fs.readFileSync(path.join(ROOT, 'js/common.js'), 'utf8').includes('!(v && v.staff)'), 'サイトの一覧から外す');
+});
+
 t('すぐの入居：join.js で 0 日目に住み始め、daily（--gate）は始めるまで進まない・始めたら 1 日目', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'town-join-'));
   const cfg = liveCfg();

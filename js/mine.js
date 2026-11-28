@@ -4,7 +4,7 @@
 //   ・別の端末では、もう一度 DM すると新しい印が届き、前の印は使えなくなる。「この端末から出る」で印を忘れる。
 //   ・?demo-me=1：見本（つながった状態。何も保存しない・受け口にも送らない）。?k=村人 で見本の村人を選べる。
 // メニューの「自分の村人」は、つながっていれば顔と名前、つながっていなければ DM 版の住み方の案内（./?join=dm）へ。
-import { load, esc, skinSrc, loadImage, drawFace } from './common.js';
+import { load, loadAllVillagers, esc, skinSrc, loadImage, drawFace } from './common.js';
 import { icon } from './icons.js';
 
 const ME_KEY = 'town.me';
@@ -41,6 +41,7 @@ export function whoami() {
   cur = (async () => {
     const config = await load('config').catch(() => ({}));
     const villagers = await load('villagers').catch(() => []);
+    const everyone = await loadAllVillagers().catch(() => villagers); // 管理者用の村人（staff）も自分として見つける
     if (isDemo()) {
       const life = await load('life').catch(() => ({}));
       const v = demoVillager(villagers.filter((x) => !x.gone), life, qs().get('demo-k') || qs().get('k')); // demo-k：?k= を別の意味で使うページ（村人のページ・町の画面）での見本の村人
@@ -51,7 +52,7 @@ export function whoami() {
     if (!tok) return { mode: 'none', villager: null, config };
     try {
       const me = await api(config, '/me');
-      const v = villagers.find((x) => x.key === me.villager) || null;
+      const v = everyone.find((x) => x.key === me.villager) || null;
       return v ? { mode: 'live', villager: v, config, me } : { mode: 'none', villager: null, config, error: '村人が見つかりません（毎日の更新のあとで開き直してください）' };
     } catch (e) { return { mode: 'none', villager: null, config, error: e.message, expired: e.code === 'expired' }; }
   })();

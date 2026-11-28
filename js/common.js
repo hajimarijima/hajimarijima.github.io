@@ -17,11 +17,15 @@ export const MBTI = ['ISTJ', 'ISFJ', 'INFJ', 'INTJ', 'ISTP', 'ISFP', 'INFP', 'IN
 export const LETTER = { E: 'よくしゃべる', I: 'ひとりで働くのが好き', N: '新しいものの話が好き', S: '目の前の仕事を大事にする', T: '段取りを考える', F: '仲間思い', J: '計画どおりに進めたい', P: '気まぐれ' };
 export const mdText = (md) => { if (!md) return ''; const [m, d] = md.split('-'); return `${+m}月${+d}日`; };
 
-const cache = {};
+const cache = {}, raw = {};
+const fetchData = (name) => raw[name] || (raw[name] = fetch('data/' + name + '.json', { cache: 'no-cache' }).then((r) => { if (!r.ok) throw new Error(name + '.json を読めません'); return r.json(); }));
+// 村人の一覧は、管理者用の村人（staff。tools/staff.js）を外して渡す（一覧・町の画面・数に出さない）
 export async function load(name) {
-  if (!cache[name]) cache[name] = fetch('data/' + name + '.json', { cache: 'no-cache' }).then((r) => { if (!r.ok) throw new Error(name + '.json を読めません'); return r.json(); });
+  if (!cache[name]) cache[name] = name === 'villagers' ? fetchData(name).then((vs) => (Array.isArray(vs) ? vs.filter((v) => !(v && v.staff)) : vs)) : fetchData(name);
   return cache[name];
 }
+// 外す前の村人の一覧（js/mine.js が専用のリンクの自分を探す時だけ）
+export const loadAllVillagers = () => fetchData('villagers');
 export async function loadAll() {
   const [config, state, villagers, world, life, history, social] = await Promise.all([...['config', 'state', 'villagers', 'world', 'life', 'history'].map(load), load('social').catch(() => ({ pairs: {}, talks: [], view: {}, edges: [] }))]);
   const active = villagers.filter((v) => v.joinedDay <= state.day);

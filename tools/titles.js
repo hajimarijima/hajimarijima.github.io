@@ -139,7 +139,8 @@ function give(S, v, t, { day, date }) {
 }
 
 // 自動の称号をおくる。おくった { v, title } の一覧を返す
-function awardTitles(S, { day, date }) {
+function awardTitles(S0, { day, date }) {
+  const S = { ...S0, villagers: (S0.villagers || []).filter((v) => !v.staff) }; // 管理者用の村人（tools/staff.js）には称号をおくらない
   const list = (S.config.titles && S.config.titles.list) || [];
   const out = [];
   const cache = {};
