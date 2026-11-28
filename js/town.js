@@ -113,6 +113,9 @@ async function main() {
     const postReady = /instagram\.com\//.test(String(config.votePostUrl || ''));
     if (!(config.baseVote || {}).needPost || postReady) bands.insertAdjacentHTML('beforeend', baseBanner(baseVote, config));
   }
+  // 「何を建てる？」「どこに建てる？」なども、受付中なら同じ帯（A・B・C と今の票）を出す
+  const liveVote = openVoteOf(state);
+  if (!baseVote && liveVote) bands.insertAdjacentHTML('beforeend', baseBanner(liveVote, config));
   if (!active.length) bands.insertAdjacentHTML('beforeend', emptyNote(config));
   renderPanel(D);
 
@@ -2678,7 +2681,14 @@ function baseBanner(v, cfg) {
   // 投稿の URL が空なら、インスタのプロフィール（cfg.profileUrl）へ
   const IG = /^https:\/\/(www\.)?instagram\.com\//;
   const post = !cfg ? '' : IG.test(cfg.votePostUrl || '') ? cfg.votePostUrl : IG.test(cfg.profileUrl || '') ? cfg.profileUrl : '';
-  return `<a class="basevote" href="${post ? esc(post) + '" target="_blank" rel="noopener' : 'vote.html'}"><span class="bv-title">拠点の場所を投票中！ コメントに A・B・C のどれかを書いてね</span><span class="bv-tally">${tally}</span></a>`;
+  // スマホでも 1 行に収まる長さ（拠点のほかは「「何を建てる？」投票中！ コメントに A・B・C」）
+  const title = v.kind === 'base' ? '拠点の場所を投票中！ コメントに A・B・C のどれかを書いてね' : `「${esc(v.question || '')}」投票中！ コメントに A・B・C`;
+  return `<a class="basevote" href="${post ? esc(post) + '" target="_blank" rel="noopener' : 'vote.html'}"><span class="bv-title">${title}</span><span class="bv-tally">${tally}</span></a>`;
+}
+// いま受付中の投票（拠点のほか。始まる前・締めた後は出さない）
+function openVoteOf(state) {
+  const now = Date.now();
+  return (state.votes || []).find((v) => v.kind !== 'base' && (!v.opensAt || Date.parse(v.opensAt) <= now) && (!v.closesAt || Date.parse(v.closesAt) > now)) || null;
 }
 
 function renderPanel(D) {
@@ -2735,7 +2745,8 @@ function renderPanel(D) {
     (state.followers != null ? `<span class="chip">フォロワー <b>${esc(state.followers)}</b></span>` : ''));
   const bv = (state.votes || []).find((v) => v.kind === 'base');
   const bvOn = bv && (!(config.baseVote || {}).needPost || /instagram\.com\//.test(String(config.votePostUrl || ''))); // 地図の帯と同じ決まり
-  set('nowband', versusBand(state, config) + (bvOn ? baseBanner(bv, config) : ''));
+  const ov = !bv && openVoteOf(state);
+  set('nowband', versusBand(state, config) + (bvOn ? baseBanner(bv, config) : ov ? baseBanner(ov, config) : ''));
   set('bldlist', buildOrderHtml(world, config)); // 島の建物（建った順。前の歴史のページの「建った順」）
   const info = document.getElementById('info'); if (info) setupTabs(info);
 }
