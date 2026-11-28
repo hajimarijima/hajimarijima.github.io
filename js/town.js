@@ -13,7 +13,7 @@ const setShield = (ch, on) => { if (ch.userData.parts) setShield0(ch, on); };
 import { mat, box, hash, rnd, makeTree, makeRock, makeBush, makeBuilding, makeHouse, obstaclesFor, routeAround as routeAround0, declutter, makeRoads, setTownCenter } from './world3d.js';
 import { makeField, makePond, animatePond, makeBobber, makeAnimal, animateAnimal, animalPos, makeShark, animateShark } from './farm3d.js';
 import { bodyQuad, bodyOf, insidePen, clearOfPen, penSlot, outsidePen, penFencePoints, fleeHeading, fwd, faceOf, angDiff, toLocal, toWorld, quadsOverlap, quadDepth, sharkPos } from './animalmove.js'; // 動物が逃げる・柵の中・海のサメ
-import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, showError, emptyNote, startNote, joinText, titleBadges, bestFishText, mbtiText, mdText } from './common.js';
+import { loadAll, nav, esc, skinUrl, skinSrc, skinSlim, gaugeHtml,villagerUrl, JOB, ACTION, RES, RES_COLOR, fmtDate, faceCanvas, homeName, buildingLabel, buildingDesc, showError, emptyNote, startNote, joinText, titleBadges, bestFishText, mbtiText, mdText } from './common.js';
 import { makeSky, jstHour, parseTime, phaseName } from './daynight.js';
 import { favColor, favEdge, favInk, genderText, hitokoto, treasureOf } from './cardinfo.js'; // 村人カード（短い方。くわしくは villager.js）
 import { hourOf, hourText, isNight } from './hours.js';
@@ -465,6 +465,9 @@ async function main() {
     const tag = document.createElement('div');
     tag.className = 'btag' + (b.day === state.day ? ' new' : '');
     tag.textContent = (b.day === state.day ? '今日できた ' : '') + buildingLabel(b, world, config);
+    // 押すと「この建物でできること」と住んでいる人の札
+    tag.style.pointerEvents = 'auto'; tag.style.cursor = 'pointer';
+    tag.addEventListener('click', (e) => { e.stopPropagation(); openBuilding(b); });
     const lo = new CSS2DObject(tag);
     const top = config.buildings[b.type].look.h || 2;
     lo.position.set(b.x, Math.min(12, top + 3), b.z); scene.add(lo);
@@ -2592,7 +2595,21 @@ async function main() {
     if (!p) return closeCard();
     const nameOf = (k) => { const v = active.find((x) => x.key === k); return v ? v.display : ''; };
     card.hidden = false; card.classList.add('pjcard'); card.classList.remove('fav');
-    card.innerHTML = `<div class="pj">${projectCardHtml(p, nameOf)}</div>`;
+    const dl = p.kind === 'building' && state.plan ? buildingDesc(state.plan.build, config) : [];
+    card.innerHTML = `<div class="pj">${projectCardHtml(p, nameOf)}${dl.length ? `<p class="pj-sub">できたら できること</p><ul class="bdesc">${dl.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}</div>`;
+    const x = document.createElement('button');
+    x.className = 'close'; x.setAttribute('aria-label', '閉じる'); x.title = '閉じる'; x.innerHTML = icon('x', { size: 20 });
+    x.onclick = closeCard;
+    card.append(x);
+  }
+  // できた建物の札：名前・できること（js/common.js の buildingDesc）・住んでいる人
+  function openBuilding(b) {
+    const lines = buildingDesc(b.type, config);
+    const who = active.filter((v) => (life[v.key] || {}).home === b.id).map((v) => v.display);
+    card.hidden = false; card.classList.add('pjcard'); card.classList.remove('fav'); delete card.dataset.key;
+    card.innerHTML = `<div class="pj"><p class="pj-name"><b>${esc(buildingLabel(b, world, config))}</b></p>` +
+      `<p class="pj-sub">できること</p><ul class="bdesc">${lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` +
+      (who.length ? `<p class="pj-who muted">住んでいる人：${esc(who.slice(0, 8).join('、'))}${who.length > 8 ? ` ほか ${who.length - 8} 人` : ''}</p>` : '') + '</div>';
     const x = document.createElement('button');
     x.className = 'close'; x.setAttribute('aria-label', '閉じる'); x.title = '閉じる'; x.innerHTML = icon('x', { size: 20 });
     x.onclick = closeCard;

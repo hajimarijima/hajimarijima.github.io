@@ -235,6 +235,19 @@ export function homeName(life, world, config, state) {
   const same = world.buildings.filter((x) => x.type === b.type);
   return config.buildings[b.type].name + (same.length > 1 ? ' ' + (same.indexOf(b) + 1) + '号' : '');
 }
+// 建物で何ができるか（1 行ずつの短い文の配列）。config.buildings[type].desc（その建物だけの働き）に、
+//   住める人数（cap）・とれる量が増える割合（bonus。tools/sim.js の倍率に足される）・町の守り（敵が出る時だけ）を足す
+const BONUS_JA = { wood: '原木（木を切った時）', stone: '丸石（岩を掘った時）', food: '食べ物（畑・木の実など）' };
+export function buildingDesc(type, config) {
+  const b = (config.buildings || {})[type];
+  if (!b) return [];
+  const out = [].concat(b.desc || []);
+  if (b.cap) out.push(`${b.cap} 人が住める`);
+  for (const [k, v] of Object.entries(b.bonus || {})) if (v > 0 && BONUS_JA[k]) out.push(`とれる${BONUS_JA[k]} +${Math.round(v * 100)}%`);
+  if (b.defense && config.enemies && config.enemies.enabled) out.push(`町の守り +${b.defense}`);
+  if (!out.length) out.push('島を飾る建物');
+  return out;
+}
 export function buildingLabel(b, world, config) {
   const same = world.buildings.filter((x) => x.type === b.type);
   return config.buildings[b.type].name + (same.length > 1 ? ' ' + (same.indexOf(b) + 1) + '号' : '');

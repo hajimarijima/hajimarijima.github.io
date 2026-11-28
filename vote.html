@@ -29,7 +29,8 @@
   <p class="muted">「図書館たててほしい」「温泉ほしい」のようにコメントしてください。数えておいて、次の A・B・C の候補を選ぶ時の参考にします（投票の結果は変わりません）。</p>
 </main>
 <script type="module">
-import { loadAll, nav, esc, fmtDate, showError } from './js/common.js';
+import { loadAll, nav, esc, fmtDate, showError, buildingDesc } from './js/common.js';
+let CONFIG = null; // 建物の候補の下に「できること」を出すため
 import { bandHtml as versusBand, pastHtml as versusPast } from './js/versus.js';
 nav('vote.html');
 const JST = (iso) => { const d = new Date(Date.parse(iso) + 9 * 3600e3); return { m: d.getUTCMonth() + 1, d: d.getUTCDate(), h: d.getUTCHours() }; };
@@ -43,7 +44,7 @@ function options(vote) {
     const pct = total ? Math.round((n / total) * 1000) / 10 : 0;
     const win = vote.key ? vote.key === o.key : false;
     return `<div class="opt"><div class="k" style="background:${COL[o.key]}">${o.key}</div><div>
-      <b>${esc(o.name)}</b>${win ? ' <span class="tag">決まり</span>' : ''}<div class="muted">${esc(o.desc || '')}</div>
+      <b>${esc(o.name)}</b>${win ? ' <span class="tag">決まり</span>' : ''}<div class="muted">${o.desc ? esc(o.desc) : o.build && CONFIG ? buildingDesc(o.build, CONFIG).map(esc).join('<br>') : ''}</div>
       <div class="bar"><i style="width:${pct}%;background:${COL[o.key]}"></i></div>
       <div class="num">${n} 票（${pct}%）</div></div></div>`;
   }).join('');
@@ -65,6 +66,7 @@ function chart(timeline) {
 }
 
 loadAll().then(({ state, config }) => {
+  CONFIG = config;
   // 一週間の対決投票（config.versus）：いちばん上に赤と青の割合バー。締め切ったお題は「これまでの投票」に
   document.getElementById('duel').innerHTML = versusBand(state, config, { big: true });
   document.getElementById('duelpast').innerHTML = versusPast(state, config);
