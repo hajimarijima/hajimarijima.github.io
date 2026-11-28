@@ -742,5 +742,23 @@
   "hidden": false,
   "display": "____mai.i",
   "joinedAt": "00:14"
+ },
+ {
+  "key": "1272bce6bb",
+  "igId": "de5b7e1ab16f8353",
+  "name": "09lik.e",
+  "userHash": "7013a3268c98ecef",
+  "skin": 0,
+  "joined": "2026-11-28",
+  "joinedDay": 2,
+  "source": "comment",
+  "birthday": "12-17",
+  "profile": {
+   "food": "にんじん"
+  },
+  "hidden": false,
+  "display": "09lik.e",
+  "via": "dm",
+  "joinedAt": "00:22"
  }
 ]
