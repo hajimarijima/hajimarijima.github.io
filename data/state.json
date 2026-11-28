@@ -88,9 +88,9 @@
    "kind": "what",
    "question": "何を建てる？",
    "openedDay": 2,
-   "closesDay": 3,
+   "closesDay": 4,
    "opensAt": "2026-11-28T00:00:00+09:00",
-   "closesAt": "2026-11-29T00:00:00+09:00",
+   "closesAt": "2026-11-30T00:00:00+09:00",
    "options": [
     {
      "key": "A",
@@ -185,10 +185,10 @@
   {
    "kind": "where",
    "question": "どこに建てる？",
-   "openedDay": 3,
-   "closesDay": 4,
-   "opensAt": "2026-11-29T00:00:00+09:00",
-   "closesAt": "2026-11-30T00:00:00+09:00",
+   "openedDay": 4,
+   "closesDay": 5,
+   "opensAt": "2026-11-30T00:00:00+09:00",
+   "closesAt": "2026-12-01T00:00:00+09:00",
    "options": [
     {
      "key": "A",
