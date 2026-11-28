@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ガチャ（ためし）</title>
+<style>
+  :root { --bg: #f6f1e4; --card: #fffdf6; --ink: #2f2c26; --sub: #7a7466; --red: #b8312f; --line: #e4dccb;
+    --N: #9aa3a8; --R: #3f8fd6; --SR: #a35bd6; --SSR: #f0a020; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: "BIZ UDPGothic", "Yu Gothic", "Meiryo", sans-serif; }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 22px; margin: 6px 0 4px; white-space: nowrap; }
+  .note { font-size: 13px; color: var(--sub); margin: 0 0 12px; }
+  .wallet { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: 14px; padding: 10px 14px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  .coin { width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffe9a0, #e0a020 60%, #a86a10); box-shadow: inset 0 -2px 0 rgba(0,0,0,.2); flex: none; }
+  .wallet b { font-size: 22px; }
+  .wallet .add { margin-left: auto; font-size: 12px; padding: 6px 10px; border: 1px dashed var(--sub); background: none; border-radius: 8px; color: var(--sub); cursor: pointer; white-space: nowrap; }
+  .tabs { display: flex; gap: 8px; margin: 14px 0 10px; }
+  .tabs button { flex: 1; padding: 10px 6px; border-radius: 12px; border: 2px solid var(--line); background: var(--card); font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; white-space: nowrap; }
+  .tabs button.on { border-color: var(--red); color: var(--red); }
+  .machine { position: relative; background: var(--card); border-radius: 20px; padding: 16px; box-shadow: 0 4px 14px rgba(0,0,0,.1); text-align: center; overflow: hidden; }
+  .dome { position: relative; width: 220px; height: 200px; margin: 0 auto; border-radius: 110px 110px 24px 24px; background: linear-gradient(160deg, rgba(255,255,255,.9), rgba(200,230,255,.55)); border: 6px solid #d8d0bc; overflow: hidden; }
+  .dome i { position: absolute; width: 44px; height: 44px; border-radius: 50%; box-shadow: inset -4px -6px 0 rgba(0,0,0,.15); }
+  .dome i::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 3px; background: rgba(0,0,0,.18); }
+  .base { width: 250px; height: 90px; margin: -6px auto 0; background: var(--red); border-radius: 10px 10px 18px 18px; position: relative; }
+  .handle { position: absolute; left: 50%; top: 18px; width: 54px; height: 54px; margin-left: -27px; border-radius: 50%; background: #f3e7c6; border: 5px solid #8a3a26; transition: transform .6s cubic-bezier(.3,1.4,.5,1); }
+  .handle::before { content: ""; position: absolute; left: 50%; top: 4px; bottom: 4px; width: 10px; margin-left: -5px; background: #8a3a26; border-radius: 5px; }
+  .slot { position: absolute; right: 18px; bottom: 12px; width: 50px; height: 34px; background: #5a1e16; border-radius: 6px; }
+  .price { font-size: 13px; color: var(--sub); margin: 12px 0 8px; white-space: nowrap; }
+  .btns { display: flex; gap: 8px; }
+  .btns button { flex: 1; padding: 14px 6px; border: none; border-radius: 14px; font: inherit; font-weight: 800; font-size: 16px; color: #fff; cursor: pointer; white-space: nowrap; }
+  .free { background: #2f7a4a; } .one { background: var(--red); } .ten { background: #7a3fa8; }
+  .btns button:disabled { background: #c9c2b2; cursor: default; }
+  .rates { margin-top: 14px; background: var(--card); border-radius: 14px; padding: 10px 14px; font-size: 13px; }
+  .rates summary { cursor: pointer; font-weight: 700; }
+  .rates table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  .rates td { padding: 4px 2px; border-top: 1px solid var(--line); white-space: nowrap; }
+  .tag { display: inline-block; min-width: 40px; text-align: center; padding: 1px 6px; border-radius: 6px; color: #fff; font-weight: 800; font-size: 12px; }
+  .bag { margin-top: 14px; background: var(--card); border-radius: 14px; padding: 10px 14px; font-size: 14px; }
+  .bag h2 { font-size: 15px; margin: 0 0 6px; }
+  .bag ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; }
+  .bag li { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ico { width: 32px; height: 32px; image-rendering: pixelated; flex: none; }
+  .ico.ph { border-radius: 8px; display: grid; place-items: center; font-size: 18px; background: #efe7d3; }
+  /* 結果 */
+  .over { position: fixed; inset: 0; background: rgba(10, 14, 20, .78); display: none; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
+  .over.on { display: flex; }
+  .cap { width: 130px; height: 130px; border-radius: 50%; position: relative; animation: drop .7s cubic-bezier(.3,1.5,.5,1) both; }
+  .cap .top, .cap .bot { position: absolute; left: 0; right: 0; height: 50%; }
+  .cap .top { top: 0; border-radius: 65px 65px 0 0; } .cap .bot { bottom: 0; border-radius: 0 0 65px 65px; background: #fff; }
+  .cap.open .top { animation: lift .45s ease-out forwards; } .cap.open .bot { animation: sink .45s ease-out forwards; }
+  .cap.shake { animation: shake .5s ease-in-out 2; }
+  @keyframes drop { from { transform: translateY(-60vh) rotate(-200deg); } to { transform: none; } }
+  @keyframes shake { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-14deg); } 75% { transform: rotate(14deg); } }
+  @keyframes lift { to { transform: translateY(-90px) rotate(-25deg); opacity: 0; } }
+  @keyframes sink { to { transform: translateY(70px); opacity: 0; } }
+  .prize { display: none; text-align: center; color: #fff; }
+  .prize.on { display: block; animation: pop .45s cubic-bezier(.3,1.6,.5,1) both; }
+  @keyframes pop { from { transform: scale(.3); opacity: 0; } to { transform: none; opacity: 1; } }
+  .glow { width: 170px; height: 170px; margin: 0 auto 10px; border-radius: 50%; display: grid; place-items: center; }
+  .glow img, .glow .ph { width: 110px; height: 110px; image-rendering: pixelated; }
+  .glow .ph { display: grid; place-items: center; font-size: 64px; background: none; }
+  .prize .nm { font-size: 26px; font-weight: 800; white-space: nowrap; }
+  .prize .rk { font-size: 18px; font-weight: 800; margin-bottom: 6px; letter-spacing: .1em; }
+  .grid10 { display: none; grid-template-columns: repeat(5, 1fr); gap: 8px; width: min(480px, 100%); }
+  .grid10.on { display: grid; }
+  .grid10 div { background: rgba(255,255,255,.08); border-radius: 12px; padding: 6px 2px; text-align: center; color: #fff; font-size: 11px; animation: pop .35s both; }
+  .grid10 img, .grid10 .ph { width: 44px; height: 44px; image-rendering: pixelated; display: block; margin: 2px auto; }
+  .grid10 .ph { display: grid; place-items: center; font-size: 28px; background: none; }
+  .grid10 span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .close { margin-top: 18px; padding: 12px 28px; border: none; border-radius: 12px; background: #fff; font: inherit; font-weight: 800; font-size: 16px; cursor: pointer; }
+  .stage { display: flex; flex-direction: column; align-items: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>島のガチャ（ためし）</h1>
+  <p class="note">ためしに引くページです。引いた物は本当の持ち物には入りません。</p>
+  <div class="wallet"><span class="coin"></span>島コイン <b id="coins">0</b><button class="add" id="add">+300（ためし用）</button></div>
+  <div class="tabs"><button id="t-item" class="on">道具・素材ガチャ</button><button id="t-look">見た目ガチャ</button></div>
+  <div class="machine">
+    <div class="dome" id="dome"></div>
+    <div class="base"><div class="handle" id="handle"></div><div class="slot"></div></div>
+    <div class="price" id="price"></div>
+    <div class="btns">
+      <button class="free" id="b-free">きょうの無料</button>
+      <button class="one" id="b-one">1 回 100</button>
+      <button class="ten" id="b-ten">10 回 1000</button>
+    </div>
+  </div>
+  <details class="rates"><summary>出る物と確率</summary><table id="rates"></table></details>
+  <div class="bag"><h2>引いた物</h2><ul id="bag"></ul></div>
+</div>
+
+<div class="over" id="over">
+  <div class="stage">
+    <div class="cap" id="cap"><div class="top"></div><div class="bot"></div></div>
+    <div class="prize" id="prize"><div class="rk"></div><div class="glow"></div><div class="nm"></div></div>
+    <div class="grid10" id="grid10"></div>
+    <button class="close" id="close" style="display:none">とじる</button>
+  </div>
+</div>
+
+<script>
+// ── 景品（ためし）。img は icons/ の絵。ない物は絵文字で仮に出す（本番では絵を作る）
+const RANK = { N: 'ノーマル', R: 'レア', SR: 'スーパーレア', SSR: 'ウルトラレア' };
+const RATE = { N: 60, R: 30, SR: 8, SSR: 2 };
+const POOLS = {
+  item: [
+    { r: 'N', name: 'りんご', n: 3, img: 'apple' },
+    { r: 'N', name: '羊毛', n: 2, img: 'wool' },
+    { r: 'N', name: '革', n: 2, img: 'leather' },
+    { r: 'R', name: '鉄鉱石', n: 3, img: 'iron' },
+    { r: 'R', name: '金鉱石', n: 2, img: 'gold' },
+    { r: 'R', name: '宝箱', n: 1, img: 'treasure_box' },
+    { r: 'SR', name: 'ダイヤ', n: 1, img: 'diamond' },
+    { r: 'SR', name: '星のかけら', n: 1, img: 'star_shard' },
+    { r: 'SR', name: '虹色の貝', n: 1, img: 'rainbow_shell' },
+    { r: 'SSR', name: '黄金の魚', n: 1, img: 'golden_fish' },
+    { r: 'SSR', name: '竜のうろこ', n: 1, img: 'dragon_scale' },
+  ],
+  look: [
+    { r: 'N', name: '麦わら帽子', emo: '👒' },
+    { r: 'N', name: '青いつなぎ', emo: '👖' },
+    { r: 'N', name: '赤いマフラー', emo: '🧣' },
+    { r: 'R', name: '花かんむり', emo: '💐' },
+    { r: 'R', name: 'しましまシャツ', emo: '👕' },
+    { r: 'R', name: 'まるメガネ', emo: '👓' },
+    { r: 'SR', name: '魔法使いの帽子', emo: '🎩' },
+    { r: 'SR', name: '騎士のマント', emo: '🧥' },
+    { r: 'SSR', name: '金の王冠', emo: '👑' },
+    { r: 'SSR', name: '虹色の服', emo: '🌈' },
+  ],
+};
+const COL = { N: getCss('--N'), R: getCss('--R'), SR: getCss('--SR'), SSR: getCss('--SSR') };
+function getCss(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+// ── 保存（このブラウザだけ。ためし用）
+const KEY = 'town.gachaTest';
+const today = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); // 日本の日付
+let S = { coins: 300, free: {}, bag: {} };
+try { S = Object.assign(S, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+
+let kind = 'item';
+const $ = (id) => document.getElementById(id);
+function icon(p, cls) {
+  if (p.img) return `<img class="${cls || ''}" src="icons/${p.img}.png" alt="" onerror="this.outerHTML='<span class=&quot;ph ${cls || ''}&quot;>🎁</span>'">`;
+  return `<span class="ph ${cls || ''}">${p.emo}</span>`;
+}
+
+function pickRank(min) {
+  let x = Math.random() * 100;
+  for (const r of ['SSR', 'SR', 'R', 'N']) { if (x < RATE[r]) return r; x -= RATE[r]; }
+  return 'N';
+}
+function pull(minSR = false) {
+  let r = pickRank();
+  if (minSR && (r === 'N' || r === 'R')) r = 'SR';
+  const list = POOLS[kind].filter((p) => p.r === r);
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+function render() {
+  $('coins').textContent = S.coins;
+  const usedFree = S.free[kind] === today();
+  $('b-free').disabled = usedFree; $('b-free').textContent = usedFree ? '無料はまた明日' : 'きょうの無料';
+  $('b-one').disabled = S.coins < 100; $('b-ten').disabled = S.coins < 1000;
+  $('price').textContent = '1 日 1 回は無料・10 回はスーパーレア以上が 1 つ確定';
+  $('t-item').classList.toggle('on', kind === 'item'); $('t-look').classList.toggle('on', kind === 'look');
+  // 中のカプセル
+  const cols = ['#e85a4f', '#3f8fd6', '#f0c030', '#5cb85c', '#a35bd6', '#ff8ac0'];
+  let h = '';
+  for (let i = 0; i < 14; i++) { const x = 10 + (i * 37) % 160, y = 150 - Math.floor(i / 4) * 34 - (i % 2) * 8; h += `<i style="left:${x}px;top:${y}px;background:${cols[(i * 5 + (kind === 'look' ? 2 : 0)) % 6]}"></i>`; }
+  $('dome').innerHTML = h;
+  // 確率
+  $('rates').innerHTML = ['SSR', 'SR', 'R', 'N'].map((r) => `<tr><td><span class="tag" style="background:${COL[r]}">${r}</span> ${RATE[r]}%</td><td style="white-space:normal">${POOLS[kind].filter((p) => p.r === r).map((p) => p.name + (p.n > 1 ? ' ×' + p.n : '')).join('・')}</td></tr>`).join('');
+  // 引いた物
+  const all = [...POOLS.item, ...POOLS.look];
+  $('bag').innerHTML = Object.entries(S.bag).map(([nm, c]) => { const p = all.find((q) => q.name === nm) || { emo: '🎁' }; return `<li>${icon(p, 'ico')}${nm} ×${c}</li>`; }).join('') || '<li style="color:var(--sub)">まだありません</li>';
+}
+
+function give(p) { S.bag[p.name] = (S.bag[p.name] || 0) + (p.n || 1); }
+
+function show(results) {
+  save(); render();
+  const over = $('over'), cap = $('cap'), prize = $('prize'), g = $('grid10'), close = $('close');
+  over.classList.add('on'); prize.classList.remove('on'); g.classList.remove('on'); close.style.display = 'none';
+  const best = results.reduce((a, b) => (['N', 'R', 'SR', 'SSR'].indexOf(b.r) > ['N', 'R', 'SR', 'SSR'].indexOf(a.r) ? b : a));
+  cap.className = 'cap'; cap.style.display = '';
+  cap.querySelector('.top').style.background = COL[best.r];
+  void cap.offsetWidth; cap.classList.add('cap');
+  setTimeout(() => { cap.classList.add('shake'); }, 750);
+  setTimeout(() => { cap.classList.remove('shake'); cap.classList.add('open'); }, 1800);
+  setTimeout(() => {
+    cap.style.display = 'none';
+    if (results.length === 1) {
+      const p = results[0];
+      prize.querySelector('.rk').textContent = RANK[p.r]; prize.querySelector('.rk').style.color = COL[p.r];
+      prize.querySelector('.glow').style.background = `radial-gradient(circle, ${COL[p.r]}cc, transparent 70%)`;
+      prize.querySelector('.glow').innerHTML = icon(p);
+      prize.querySelector('.nm').textContent = p.name + (p.n > 1 ? ' ×' + p.n : '');
+      prize.classList.add('on');
+    } else {
+      g.innerHTML = results.map((p, i) => `<div style="animation-delay:${i * 0.08}s;box-shadow:inset 0 0 0 2px ${COL[p.r]}">${icon(p)}<span>${p.name}</span><span style="color:${COL[p.r]};font-weight:800">${p.r}</span></div>`).join('');
+      g.classList.add('on');
+    }
+    close.style.display = '';
+  }, 2250);
+  $('handle').style.transform = 'rotate(360deg)';
+  setTimeout(() => { $('handle').style.transition = 'none'; $('handle').style.transform = ''; void $('handle').offsetWidth; $('handle').style.transition = ''; }, 700);
+}
+
+$('b-free').onclick = () => { S.free[kind] = today(); const p = pull(); give(p); show([p]); };
+$('b-one').onclick = () => { S.coins -= 100; const p = pull(); give(p); show([p]); };
+$('b-ten').onclick = () => { S.coins -= 1000; const rs = []; for (let i = 0; i < 10; i++) rs.push(pull(i === 9 && !rs.some((p) => p.r === 'SR' || p.r === 'SSR'))); rs.forEach(give); show(rs); };
+$('close').onclick = () => $('over').classList.remove('on');
+$('add').onclick = () => { S.coins += 300; save(); render(); };
+$('t-item').onclick = () => { kind = 'item'; render(); };
+$('t-look').onclick = () => { kind = 'look'; render(); };
+render();
+</script>
+</body>
+</html>
