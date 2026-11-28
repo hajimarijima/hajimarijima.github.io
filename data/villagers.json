@@ -709,5 +709,22 @@
   "display": "kanac595",
   "via": "dm",
   "joinedAt": "23:30"
+ },
+ {
+  "key": "6cc0db3251",
+  "igId": "38056bfc51d6a09d",
+  "name": "himanano.2303",
+  "userHash": "b0e4e470c2785eb1",
+  "skin": 175,
+  "joined": "2026-11-28",
+  "joinedDay": 2,
+  "source": "comment",
+  "birthday": "03-03",
+  "profile": {
+   "food": "じゃがいも"
+  },
+  "hidden": false,
+  "display": "himanano.2303",
+  "joinedAt": "23:48"
  }
 ]
