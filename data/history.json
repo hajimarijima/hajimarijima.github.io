@@ -848,5 +848,15 @@
    "90b16eb3df"
   ],
   "title": "first_iron"
+ },
+ {
+  "day": 2,
+  "date": "2026-11-28",
+  "time": "21:15",
+  "type": "join",
+  "text": "d800.scape が村に住むことになった。",
+  "who": [
+   "4b3af2336c"
+  ]
  }
 ]
