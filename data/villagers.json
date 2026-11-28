@@ -760,5 +760,23 @@
   "display": "09lik.e",
   "via": "dm",
   "joinedAt": "00:22"
+ },
+ {
+  "key": "d7eff3d39f",
+  "igId": "f3427999045536ff",
+  "name": "king_keisuke0618",
+  "userHash": "b89540cb84746436",
+  "skin": 161,
+  "joined": "2026-11-28",
+  "joinedDay": 2,
+  "source": "comment",
+  "birthday": "06-18",
+  "profile": {
+   "food": "木の実"
+  },
+  "hidden": false,
+  "display": "king_keisuke0618",
+  "via": "dm",
+  "joinedAt": "00:24"
  }
 ]
