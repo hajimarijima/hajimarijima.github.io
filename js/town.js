@@ -635,7 +635,7 @@ async function main() {
   // 「どこに建てる？」の投票中は、A/B/C の場所に旗
   const markers = [];
   for (const v of state.votes || []) {
-    if (v.kind !== 'where') continue;
+    if (v.kind !== 'where' || (v.opensAt && Date.parse(v.opensAt) > Date.now())) continue; // まだ始まっていない時は旗を出さない
     for (const o of v.options) { const m = makeMarker(o.key); m.position.set(o.x, 0, o.z); scene.add(m); markers.push(m); }
   }
   // 拠点の場所の投票中：A/B/C の候補に旗と札（名前と今の票）。札はいつも出す（ほかの札と重なれば上へずらす）
@@ -2702,15 +2702,15 @@ function renderPanel(D) {
   if (plan) {
     nextEl.innerHTML = `<b>${esc(config.buildings[plan.build].name)}</b>` + (plan.site ? `（${esc(plan.site.label)}）` : '（場所は投票中）') + ' <a href="#chestcard">あつまり具合を見る</a>';
   } else nextEl.textContent = (state.votes || []).some((v) => v.kind === 'base') ? 'まず拠点（チェストとたき火を置く所）の場所を投票で決めます。建物は、そのまわりに建てます。' : active.length ? '投票で決めます。' : '村人が来たら、投票で決めます。';
-  const hm = (iso) => { const d = new Date(iso); return `${(d.getUTCHours() + 9) % 24}時`; };
+  const hm = (iso, end) => { const d = new Date(iso), h = (d.getUTCHours() + 9) % 24; return end && h === 0 && !d.getUTCMinutes() ? '23時59分' : `${h}時`; };
   // 拠点の投票は、needPost の間は投票の投稿の URL を貼るまで始まっていない（地図の帯と同じ決まり）ので出さない
   const baseOn = !(config.baseVote || {}).needPost || /instagram\.com\//.test(String(config.votePostUrl || ''));
-  const votes = (state.votes || []).filter((v) => v.kind !== 'base' || baseOn);
+  const votes = (state.votes || []).filter((v) => (v.kind !== 'base' || baseOn) && !(v.opensAt && Date.parse(v.opensAt) > Date.now())); // まだ始まっていない投票は出さない
   const baseWait = !votes.length && (state.votes || []).some((v) => v.kind === 'base');
   const vh = document.getElementById('votehead'); if (vh) vh.hidden = baseWait;
   document.getElementById('votebox').hidden = baseWait;
   document.getElementById('votebox').innerHTML = votes.length
-    ? votes.map((v) => `<b>${esc(v.question)}</b>（${v.kind === 'base' ? (v.closesAt ? `${((d) => `${d.getUTCMonth() + 1}月${d.getUTCDate()}日 ${d.getUTCHours()}時`)(new Date(Date.parse(v.closesAt) + 9 * 3600e3))}まで` : '町が始まる時まで') : `${hm(v.opensAt)}〜${hm(v.closesAt)}`}）<br>` + v.options.map((o) => `${esc(o.key + ' ' + o.name)} <span class="muted">${v.votes[o.key]}票</span>`).join(' / ')).join('<br>') + ' <a href="vote.html">票を見る</a>'
+    ? votes.map((v) => `<b>${esc(v.question)}</b>（${v.kind === 'base' ? (v.closesAt ? `${((d) => `${d.getUTCMonth() + 1}月${d.getUTCDate()}日 ${d.getUTCHours()}時`)(new Date(Date.parse(v.closesAt) + 9 * 3600e3))}まで` : '町が始まる時まで') : `${hm(v.opensAt)}〜${hm(v.closesAt, true)}`}）<br>` + v.options.map((o) => `${esc(o.key + ' ' + o.name)} <span class="muted">${v.votes[o.key]}票</span>`).join(' / ')).join('<br>') + ' <a href="vote.html">票を見る</a>'
     : active.length ? '次の投票は、今の建物ができたあとに開きます。<a href="vote.html">くわしく</a>' : '村人が来たら「何を建てる？」の投票が始まります。';
   // 町のチェスト
   // 町のチェスト：木材・石・食べ物の量 → 今つくっている物（あつまった数／いる数）→ 中身（材料・部品・食べ物・道具・その他）

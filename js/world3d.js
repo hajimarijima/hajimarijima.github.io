@@ -66,15 +66,15 @@ function roof(g, kind, w, d, rh, color, y) {
 function windows(g, w, d, h, floors, color = WINDOW_MAT) {
   for (let f = 0; f < floors; f++) {
     const y = (h / floors) * (f + 0.62);
-    const n = Math.max(1, Math.floor(w / 1.6));
+    // 窓は村人の大きさに合わせる（1.1 角）
+    const S = 1.1, n = Math.max(1, Math.floor(w / 2.6));
     for (let i = 0; i < n; i++) {
       const x = -w / 2 + (w / n) * (i + 0.5);
-      if (f === 0 && Math.abs(x) < 0.6) continue; // 扉の所
-      box(0.5, 0.5, 0.05, color, x, y, d / 2 + 0.02, g);
-      box(0.5, 0.5, 0.05, color, x, y, -d / 2 - 0.02, g);
+      if (!(f === 0 && Math.abs(x) < 2.3)) box(S, S, 0.06, color, x, y, d / 2 + 0.03, g); // 前は扉・たいまつの所をあける
+      box(S, S, 0.06, color, x, y, -d / 2 - 0.03, g);
     }
-    box(0.05, 0.5, 0.5, color, w / 2 + 0.02, y, 0, g);
-    box(0.05, 0.5, 0.5, color, -w / 2 - 0.02, y, 0, g);
+    box(0.06, S, S, color, w / 2 + 0.03, y, 0, g);
+    box(0.06, S, S, color, -w / 2 - 0.03, y, 0, g);
   }
 }
 const ROOF_VARIANTS = [0xb5523b, 0x3f6e8c, 0x6a8a3c, 0x8c4a7a];
@@ -84,18 +84,18 @@ export function makeHouse(L, b) {
   const floors = L.floors || 1;
   if (L.base) box(w + 0.2, 0.4, d + 0.2, L.base, 0, 0.2, 0, g);
   box(w, h, d, L.wall, 0, h / 2, 0, g);
-  if (L.log) for (let y = 0.3; y < h; y += 0.4) { box(w + 0.08, 0.08, 0.08, shade(L.wall, 0.75), 0, y, d / 2 + 0.03, g); box(0.08, 0.08, d + 0.08, shade(L.wall, 0.75), w / 2 + 0.03, y, 0, g); box(0.08, 0.08, d + 0.08, shade(L.wall, 0.75), -w / 2 - 0.03, y, 0, g); }
+  if (L.log) for (let y = 0.45; y < h; y += 0.7) { box(w + 0.14, 0.14, 0.14, shade(L.wall, 0.75), 0, y, d / 2 + 0.05, g); box(0.14, 0.14, d + 0.14, shade(L.wall, 0.75), w / 2 + 0.05, y, 0, g); box(0.14, 0.14, d + 0.14, shade(L.wall, 0.75), -w / 2 - 0.05, y, 0, g); }
   // 角の柱
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(0.18, h, 0.18, shade(L.wall, 0.7), sx * w / 2, h / 2, sz * d / 2, g);
-  box(0.8, 1.3, 0.08, 0x5a3a22, 0, 0.65, d / 2 + 0.04, g); // 扉
-  // 扉の横のたいまつ（夜に光る）
-  box(0.08, 0.4, 0.08, 0x6b4628, 0.7, 1.35, d / 2 + 0.12, g); box(0.16, 0.18, 0.16, TORCH_MAT, 0.7, 1.62, d / 2 + 0.12, g).castShadow = false;
-  (g.userData.lights = g.userData.lights || []).push({ x: 0.7, y: 1.8, z: d / 2 + 0.5 });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(0.32, h, 0.32, shade(L.wall, 0.7), sx * w / 2, h / 2, sz * d / 2, g);
+  // 扉：村人（背 約 3.8・1 ブロック 1.9）が立って入れる大きさ（はば 1 ブロック・高さ 2 ブロックくらい）
+  const DW = 1.9, DH = Math.min(3.9, h / floors - 0.3);
+  box(DW, DH, 0.1, 0x5a3a22, 0, DH / 2, d / 2 + 0.05, g);
+  box(DW + 0.3, 0.2, 0.16, shade(L.wall, 0.6), 0, DH + 0.1, d / 2 + 0.06, g); // 扉の上の横木
   windows(g, w, d, h, floors);
   if (floors > 1) for (let f = 1; f < floors; f++) box(w + 0.1, 0.12, d + 0.1, shade(L.wall, 0.8), 0, (h / floors) * f, 0, g);
   const roofColor = L.varyRoof ? ROOF_VARIANTS[(b.variant || 0) % ROOF_VARIANTS.length] : L.roof;
   roof(g, L.roofType || 'gable', w, d, Math.min(w, d) * 0.55, roofColor, h);
-  if (L.chimney) box(0.5, 1.4, 0.5, 0x7d6a5c, w * 0.28, h + 0.9, -d * 0.2, g);
+  if (L.chimney) box(0.9, 2.6, 0.9, 0x7d6a5c, w * 0.28, h + 1.5, -d * 0.2, g);
   if (L.awning) { const a = box(w * 0.8, 0.12, 1.0, L.awning, 0, 1.9, d / 2 + 0.5, g); a.rotation.x = 0.3; for (let i = 0; i < 2; i++) { const s = box(w * 0.16, 0.13, 1.0, 0xfaf6ee, -w * 0.16 + i * w * 0.32, 1.91, d / 2 + 0.5, g); s.rotation.x = 0.3; } }
   if (L.props === 'crates') { box(0.7, 0.7, 0.7, 0xa47a4a, w / 2 + 0.6, 0.35, d / 2 - 0.4, g); box(0.6, 0.6, 0.6, 0x93693c, w / 2 + 0.5, 1.0, d / 2 - 0.4, g); }
   if (L.props === 'workbench') { box(1.4, 0.7, 0.7, 0x8a5a33, -w / 2 - 0.9, 0.35, d / 2 - 0.6, g); }
@@ -112,8 +112,8 @@ export function makeHouse(L, b) {
   if (L.columns) for (let i = 0; i < 5; i++) box(0.35, h, 0.35, 0xffffff, -w / 2 + 0.6 + i * (w - 1.2) / 4, h / 2, d / 2 + 0.5, g);
   if (L.clockFront) { box(1, 1, 0.1, 0xffffff, 0, h + 0.6, d / 2 + 0.1, g); }
   if (L.steam) g.userData.steam = { x: 0, y: h + 1, z: 0 };
-  if (L.smoke) g.userData.steam = { x: w * 0.28, y: h + 1.8, z: -d * 0.2, dark: true };
-  if (L.chimney && !g.userData.steam) g.userData.steam = { x: w * 0.28, y: h + 1.8, z: -d * 0.2, dark: true, thin: true };
+  if (L.smoke) g.userData.steam = { x: w * 0.28, y: h + 3, z: -d * 0.2, dark: true };
+  if (L.chimney && !g.userData.steam) g.userData.steam = { x: w * 0.28, y: h + 3, z: -d * 0.2, dark: true, thin: true };
   return g;
 }
 export function makeTower(L) {
@@ -258,6 +258,7 @@ export function makeBuilding(b, config) {
   if (L.kind === 'house') g = makeHouse(L, b);
   else if (L.kind === 'tower') g = makeTower(L);
   else g = makeSpecial(L.kind, b);
+  if (L.kind === 'storehouse') g.scale.setScalar(STOREHOUSE_SCALE); // 村人（背 約 3.8）に合わせた大きさ
   g.position.set(b.x, 0, b.z);
   g.rotation.y = b.rot || 0;
   g.userData.building = b;
@@ -266,7 +267,8 @@ export function makeBuilding(b, config) {
 
 
 // ---------- 通れない所（建物・木・岩）をよけて歩く ----------
-const R_SPECIAL = { storehouse: 3.6, workbench: 1.8, plaza: 0, garden: 0, dock: 0, fence: 0, wall: 0, lamps: 0, watch: 1.8, well: 1.3, onsen: 3.8, windmill: 2.2, ranch: 5.6, farm: 0, canal: 0, pen: 0, market: 3.2, castle: 5.2, fountain: 3.4 };
+const STOREHOUSE_SCALE = 1.7;
+const R_SPECIAL = { storehouse: 3.6 * STOREHOUSE_SCALE, workbench: 1.8, plaza: 0, garden: 0, dock: 0, fence: 0, wall: 0, lamps: 0, watch: 1.8, well: 1.3, onsen: 3.8, windmill: 2.2, ranch: 5.6, farm: 0, canal: 0, pen: 0, market: 3.2, castle: 5.2, fountain: 3.4 };
 export function footprint(b, config) {
   const L = config.buildings[b.type].look;
   if (L.kind === 'house') return Math.hypot(L.w, L.d) / 2 + 0.35;

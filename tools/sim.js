@@ -366,13 +366,15 @@ function stepDay(S) {
     }
     return out;
   };
-  const openVote = (kind, options, h0, h1) => {
+  // later：何日あとに開くか（「どこに建てる？」は「何を建てる？」の次の日。同じ時間に開くと同じ A/B/C のコメントを両方で数えてしまうので）
+  const openVote = (kind, options, h0, h1, later = 0) => {
+    const d0 = later ? addDays(date, later) : date;
     // 拠点の投票を今日締めた時は、それより前のコメントを数えない（同じ投稿に A/B/C が続いても区別できる）
     const bc = state.base && state.base.day === day && state.base.closesAt;
-    const op = bc && Date.parse(bc) > Date.parse(jst(date, h0)) ? new Date(bc).toISOString() : jst(date, h0);
+    const op = bc && Date.parse(bc) > Date.parse(jst(d0, h0)) ? new Date(bc).toISOString() : jst(d0, h0);
     const v = {
-      kind, question: KIND_Q[kind], openedDay: day, closesDay: day + 1,
-      opensAt: op, closesAt: h1 >= 24 ? jst(addDays(date, 1), h1 - 24) : jst(date, h1),
+      kind, question: KIND_Q[kind], openedDay: day + later, closesDay: day + later + 1,
+      opensAt: op, closesAt: h1 >= 24 ? jst(addDays(d0, 1), h1 - 24) : jst(d0, h1),
       options: options.map((o, i) => ({ key: 'ABC'[i], ...o })),
       votes: { A: 0, B: 0, C: 0 }, manual: { A: 0, B: 0, C: 0 }, voters: 0, timeline: [],
     };
@@ -385,8 +387,9 @@ function stepDay(S) {
       if (what.length === 3) {
         const sites = siteOptions(world, state);
         const v1 = openVote('what', what.map((b) => ({ build: b, name: B(b).name })), BV.whatHours[0], BV.whatHours[1]);
-        const v2 = openVote('where', sites, BV.whereHours[0], BV.whereHours[1]);
-        hist('vote_open', `投票が始まった。「何を建てる？」（${v1.options.map((o) => o.key + ' ' + o.name).join(' / ')}、${BV.whatHours[0]}時〜${BV.whatHours[1]}時）と「どこに建てる？」（${v2.options.map((o) => o.key + ' ' + o.name).join(' / ')}、${BV.whereHours[0]}時〜${BV.whereHours[1]}時）。`, { kind: 'build' });
+        const later = BV.whereNextDay ? 1 : 0;
+        const v2 = openVote('where', sites, BV.whereHours[0], BV.whereHours[1], later);
+        hist('vote_open', `投票が始まった。「何を建てる？」（${v1.options.map((o) => o.key + ' ' + o.name).join(' / ')}、${BV.whatHours[0]}時〜${BV.whatHours[1]}時）と「どこに建てる？」（${v2.options.map((o) => o.key + ' ' + o.name).join(' / ')}、${later ? '次の日の ' : ''}${BV.whereHours[0]}時〜${BV.whereHours[1]}時）。`, { kind: 'build' });
       }
     } else if (state.plan.site && builtTypes.includes(config.crafting.tiers.stone.needs) && day - (state.lastToolVote || 0) >= config.crafting.toolVoteEvery) {
       // 作業台がある時だけ、ときどき「どの道具を作る？」

@@ -80,7 +80,8 @@ loadAll().then(({ state, config }) => {
   }
 
   const cur = document.getElementById('current');
-  const votes = state.votes || (state.vote ? [state.vote] : []);
+  // まだ始まっていない投票（「どこに建てる？」は次の日から）は出さない
+  const votes = (state.votes || (state.vote ? [state.vote] : [])).filter((v) => !v.opensAt || Date.parse(v.opensAt) <= Date.now());
   const what = { what: '何を建てる？', where: 'どこに建てる？', tool: 'どの道具を作る？' };
   cur.innerHTML = votes.length ? votes.map((v) => {
     // 拠点の投票は、投票の投稿の URL を貼るまで始めない（baseVote.needPost）
@@ -89,7 +90,9 @@ loadAll().then(({ state, config }) => {
     }
     const total = v.votes.A + v.votes.B + v.votes.C;
     const op = JST(v.opensAt), close = v.closesAt ? JST(v.closesAt) : null;
-    const until = close ? `${close.m}月${close.d}日 ${close.h}時` : '町が始まる時（1日目の朝）';
+    // 0 時に締める時は「その前の日の 23時59分」と書く（同じ日なら日付を書かない）
+    const c1 = close && close.h === 0 ? JST(new Date(Date.parse(v.closesAt) - 60e3).toISOString()) : null;
+    const until = c1 ? (c1.m === op.m && c1.d === op.d ? '23時59分' : `${c1.m}月${c1.d}日 23時59分`) : close ? `${close.m}月${close.d}日 ${close.h}時` : '町が始まる時（1日目の朝）';
     const how = v.kind === 'base'
       ? `町のチェストとたき火を置く「拠点」の場所を決めます。家や建物は拠点のまわりに建ちます。投票の投稿に、<b>A・B・C</b> のどれか 1 つ（「${v.options.map((o) => esc(o.name)).join('」「')}」のように場所の名前でも）をコメントしてください。1 人 1 票で、何度か書いたら最後のコメントを数えます。受け付けは <b>${op.m}月${op.d}日〜${until}</b>（日本時間）です。`
       : `投票の投稿に、<b>A・B・C</b> のどれか 1 つをコメントしてください。1 人 1 票で、何度か書いたら最後のコメントを数えます。受け付けは <b>${op.m}月${op.d}日 ${op.h}時〜${until}</b>（日本時間）です。`;

@@ -155,6 +155,11 @@ t('sim.js にコメントを入れると村人が増え、投票が数えられ�
   fs.writeFileSync(inbox, JSON.stringify({ followers: sample.followers, joinComments: sample.joinComments, voteComments: sample.voteComments }));
   node('tools/sim.js', '--inbox', inbox);
   st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
+  // 「どこに建てる？」は次の日に開くので（buildVote.whereNextDay）、決まるのはもう 1 日あと
+  assert.strictEqual(st.decisions.length, 1, '次の朝は「何を」だけ決まる');
+  assert.ok(st.plan && !st.plan.site && st.votes.some((v) => v.kind === 'where'), '場所はまだ（「どこに」の投票中）');
+  node('tools/sim.js', '--inbox', inbox);
+  st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8'));
   assert.strictEqual(st.decisions.length, 2);
   const d = st.decisions[0];
   assert.strictEqual(d.kind, 'what');
