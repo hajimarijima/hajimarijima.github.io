@@ -1205,3 +1205,14 @@ html.fs-on .townpage .vcard, html.fs-on .vcard { bottom: calc(46px + env(safe-ar
 @keyframes rlGold { 50% { box-shadow: inset 0 4px 10px rgba(0,0,0,.6), 0 0 40px #f5c518, 0 0 0 4px rgba(255,214,90,.45); } }
 @media (max-width: 600px) { .rl-win { --cw: 62px; } }
 @media (prefers-reduced-motion: reduce) { .roul.legend .rl-win { animation: none; } }
+
+/* 招待（村人ページ）・招待で開いた時の案内 */
+.refnow { margin: 0 0 8px; }
+.refnow .muted { margin-left: 4px; font-size: 13px; }
+.refurl { word-break: break-all; }
+.reftiers { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.reftiers li { display: grid; grid-template-columns: 52px 1fr auto; gap: 8px; align-items: center; padding: 6px 10px; border-radius: 10px; background: var(--card2, rgba(0,0,0,.04)); font-size: 13px; white-space: nowrap; }
+.reftiers li small { color: var(--sub); }
+.reftiers li.got { background: rgba(240, 190, 52, .22); }
+.reftiers li.got b::after { content: ' ✓'; }
+.js-ref { display: flex; align-items: center; justify-content: center; gap: 6px; margin: -4px 0 10px; font-size: 14px; white-space: nowrap; }

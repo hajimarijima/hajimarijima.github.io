@@ -2039,13 +2039,13 @@ t('称号バッジ：config の形・絵がある・自動でおくる決まり�
   const cfg = liveCfg();
   const L = cfg.titles.list, ids = L.map((x) => x.id);
   assert.strictEqual(new Set(ids).size, ids.length, 'id が重ならない');
-  const AUTO = ['first', 'nth', 'count', 'allFish', 'days', 'friends', 'fishRecord', 'bridge', 'home', 'firstItem'];
+  const AUTO = ['first', 'nth', 'count', 'allFish', 'days', 'friends', 'fishRecord', 'bridge', 'home', 'firstItem', 'referrals'];
   for (const x of L) {
     if (x.auto === 'firstItem') assert.ok(x.item && cfg.items[x.item], x.id + ' の item');
     assert.ok(/^[a-z0-9_]+$/.test(x.id) && x.name && x.desc, x.id + ' の名前と説明');
     assert.ok(!x.auto || AUTO.includes(x.auto), x.id + ' の auto');
     if (x.auto && x.auto !== 'first') assert.ok(x.how, x.id + ' のもらい方');
-    if (['count', 'days', 'friends', 'nth', 'allFish'].includes(x.auto)) assert.ok(x.n > 0, x.id + ' の n');
+    if (['count', 'days', 'friends', 'nth', 'allFish', 'referrals'].includes(x.auto)) assert.ok(x.n > 0, x.id + ' の n');
     if (x.auto === 'count') assert.ok(x.stat, x.id + ' の stat');
     if (x.img) assert.ok(fs.existsSync(path.join(ROOT, x.img)), x.id + ' の絵 ' + x.img);
   }
@@ -3974,6 +3974,40 @@ require('./visit_tests.js')({ t, at, ROOT });
 require('./treasure_tests.js')({ t, at, ROOT }); // 遊ぶの宝探し（金属探知機）
 require('./workshop_tests.js')({ t, at, ROOT }); // 工房（チェストへ送る・作る・交換所・宝箱・熟練度・激レア・1 枠の上限）
 require('./cardinfo_tests.js')({ t, at, ROOT }); // 村人カードのプロフィール（性別・ひとこと・仲のよい人・好きな色…）
+
+t('招待リンク：DM の「紹介 key」で招待した人が付き、人数で称号とごほうび', () => {
+  const REF = require('../tools/referral');
+  const DM = require('../tools/dm');
+  const TT = require('../tools/titles');
+  const P = require('../tools/people');
+  assert.deepStrictEqual(REF.parseRef('住みたい 紹介 abc_1 りんご'), { ref: 'abc_1', rest: '住みたい りんご' });
+  assert.strictEqual(REF.parseRef('住みたい 招待:xy').ref, 'xy');
+  assert.strictEqual(REF.parseRef('住みたい').ref, null);
+  const cfg = liveCfg();
+  const S = { villagers: [] };
+  const host = P.upsertVillager(S.villagers, { igId: '9100', username: 'host_a', joined: '2026-11-27', joinedDay: 0, source: 'comment' }, new Set());
+  const id = (n) => String(n).repeat(32).slice(0, 32);
+  const r = DM.dmJoins(S, [
+    { id: id(1), igsid: '9101', username: 'guest_b', follows: true, text: `住みたい 紹介 ${host.key} りんご`, at: '2026-11-27T01:00:00Z' },
+    { id: id(2), igsid: '9102', username: 'guest_c', follows: true, text: '住みたい 紹介 nobody', at: '2026-11-27T01:01:00Z' },
+  ], { config: cfg, hidden: new Set(), date: '2026-11-27', day: 0 });
+  const b = S.villagers.find((v) => v.name === 'guest_b'), c = S.villagers.find((v) => v.name === 'guest_c');
+  assert.strictEqual(b.referredBy, host.key, '招待した人が付く');
+  assert.strictEqual(b.profile.food, 'りんご', '紹介の印は好きな食べ物にまぎれない');
+  assert.ok(!c.referredBy, 'いない人の key は付けない');
+  assert.strictEqual((r.referred || []).length, 1);
+  assert.strictEqual(REF.referralCount(S.villagers, host.key), 1);
+  // もう住んでいる人が紹介つきで送っても、あとから付けない
+  host.referredBy = undefined;
+  assert.strictEqual(REF.setReferrer(S.villagers, host, host.key), null, '自分自身は付けない');
+  // 称号とごほうび（持ち物に入る）
+  const life = { [host.key]: { diary: [], inv: [], slots: 5 }, [b.key]: { diary: [] }, [c.key]: { diary: [] } };
+  const got = TT.awardTitles({ config: cfg, villagers: S.villagers, life, history: [] }, { day: 1, date: 'x' }).filter((g) => g.title.auto === 'referrals');
+  assert.deepStrictEqual(got.map((g) => g.title.id), ['ref_1']);
+  assert.ok(life[host.key].inv.some((s) => s && s.item === 'apple' && s.n === 10), 'ごほうびのりんご');
+  assert.ok(/ごほうび/.test(life[host.key].diary[0].text));
+  for (const t of cfg.titles.list.filter((x) => x.auto === 'referrals')) for (const k of Object.keys(t.gift || {})) assert.ok(cfg.items[k], t.id + ' のごほうび ' + k);
+});
 
 (async () => {
   for (const [name, fn] of asyncTests) { await fn(); ok++; console.log('OK  ' + name); }

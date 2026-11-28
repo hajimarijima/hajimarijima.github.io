@@ -16,6 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const P = require('./people');
+const REF = require('./referral');
 
 const DEFAULT_SITE = 'https://hajimarijima.github.io/';
 const DEFAULT_WORDS = ['住みたい', 'すみたい', '入居', '入村'];
@@ -97,13 +98,16 @@ function dmJoins(S, dms, { config, owners = [], hidden, date, day, enemies = fal
     // コメントと同じ書き方（住みたい ピッケル 12/11 りんご INFP）を読む。readOptions が false なら言葉だけ
     //   続けて送った DM もまとめて読む（あとの値が勝つ）。DM の言葉（入居・入村）は「住みたい」に読みかえる（食べ物などとまちがえないように）
     const JW = '住みたい';
-    const asJoin = (s) => dc.words.reduce((a, w) => a.split(w).join(` ${JW} `), P.norm(s));
+    // 招待リンクから来た人の印（「紹介 村人の key」）。好きな食べ物などとまちがえないよう、読む前に文から消す
+    let ref = null;
+    for (const x of hits) { const pr = REF.parseRef(x.m.text); if (pr.ref) ref = pr.ref; }
+    const asJoin = (s) => dc.words.reduce((a, w) => a.split(w).join(` ${JW} `), P.norm(REF.parseRef(s).rest));
     const from = { id: igsid, username: username || (known && known.name) || '' };
     const fake = (dc.readOptions ? hits : [last]).map((x) => ({ text: dc.readOptions ? asJoin(x.m.text) : JW, timestamp: x.m.at || new Date().toISOString(), from }));
     const r = P.registrationsFrom(fake, JW, config.startTools, { enemies, mbti: config.mbtiOn !== false })[0] || {};
     if (!known && P.movedBefore(moved, r)) { out.replies.push({ ids: g.ids, text: null, kind: 'ignore' }); out.skipped++; continue; } // 引っ越す前の DM（tools/moveout.js）
     const v = P.upsertVillager(S.villagers, { igId: igsid, username: username || (known && known.name), joined: date, joinedDay: day, source: 'comment', startTool: r.startTool, birthday: r.birthday, food: r.food }, hidden);
-    if (v) { v.via = 'dm'; out.registered.push(v); }
+    if (v) { v.via = 'dm'; out.registered.push(v); const by = REF.setReferrer(S.villagers, v, ref); if (by) (out.referred = out.referred || []).push({ v, by }); }
     const who = v || P.findVillager(S.villagers, { igId: igsid, username });
     if (!who) { out.replies.push({ ids: g.ids, text: fill(dc.messages.retry, { word }), kind: 'retry' }); continue; }
     if (!v) out.known.push(who);

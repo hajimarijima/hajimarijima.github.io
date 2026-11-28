@@ -190,7 +190,23 @@ const ingot = (H, M, D) => [
   M.repeat(10) + D.repeat(6),
   '.' + D.repeat(14) + '.',
 ];
-EMB.first_iron = ['................', '................', '................', ...ingot('S', 's', 'x'), '................', '................', '................'];
+// 招待（ref_1〜ref_50）：ハートの封がついた手紙。人数が増えるほど、ふちが銅 → 銀 → 金
+const LETTER = [
+  '................',
+  '.WWWWWWWWWWWWWs.',
+  '.WsWWWWWWWWWWss.',
+  '.WWsWWWWWWWWsWs.',
+  '.WWWsWWWWWWsWWs.',
+  '.WWWWsRRrRsWWWs.',
+  '.WWWWRRRRrrWWWs.',
+  '.WWWWrRRRrrWWWs.',
+  '.WWWWWrrrrWWWWs.',
+  '.WWWWWWrrWWWWWs.',
+  '.sssssssssssssx.',
+  '................',
+];
+for (const n of [1, 3, 5, 10, 20, 30, 50]) EMB['ref_' + n] = LETTER;
+EMB.first_iron =['................', '................', '................', ...ingot('S', 's', 'x'), '................', '................', '................'];
 EMB.first_gold = ['................', '................', '................', ...ingot('A', 'a', 'e'), '................', '................', '................'];
 
 // メダルのふちの色・リボンの色
@@ -206,6 +222,13 @@ const STYLE = {
   homeowner: { rim: [184, 112, 58], ribbon: [214, 120, 48] },
   old_timer: { rim: [196, 204, 216], ribbon: [70, 150, 70] },
   popular: { rim: [240, 190, 52], ribbon: [220, 90, 150] },
+  ref_1: { rim: [184, 112, 58], ribbon: [220, 90, 150] },
+  ref_3: { rim: [184, 112, 58], ribbon: [214, 64, 64] },
+  ref_5: { rim: [196, 204, 216], ribbon: [220, 90, 150] },
+  ref_10: { rim: [196, 204, 216], ribbon: [58, 120, 210] },
+  ref_20: { rim: [240, 190, 52], ribbon: [220, 90, 150] },
+  ref_30: { rim: [240, 190, 52], ribbon: [204, 52, 58], sparkle: true },
+  ref_50: { rim: [240, 190, 52], ribbon: [130, 70, 190], sparkle: true },
   first_iron: { rim: [196, 204, 216], ribbon: [90, 100, 120] },
   first_gold: { rim: [240, 190, 52], ribbon: [204, 52, 58] },
   first_diamond: { rim: [240, 190, 52], ribbon: [40, 160, 200], sparkle: true },

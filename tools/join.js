@@ -86,6 +86,14 @@ for (const x of jobChanges) {
   const d = L.diary[L.diary.length - 1];
   if (note && d && d.day === day) d.text += note;
 }
+// 招待リンクから来た人（DM の「紹介 村人の key」）：町の歴史と、招待した人の日記に書く（tools/referral.js）
+for (const x of dmRes.referred || []) {
+  const nm = (v) => v.display || v.name || '';
+  S.history.push({ day, date, type: 'event', text: `${nm(x.v)}が、${nm(x.by)}の招待で島に来た。`, who: [x.v.key, x.by.key], referral: true });
+  const L = S.life[x.by.key];
+  if (L) { L.diary = L.diary || []; const d = L.diary[L.diary.length - 1], t = `招待した${nm(x.v)}が島に来てくれた。`; if (d && d.day === day) d.text += t; else L.diary.push({ day, date, text: t }); }
+  console.log(`${nm(x.v)} は ${nm(x.by)} の招待`);
+}
 // 称号：いちばん最初に島に住んだ人に「はじまりの村人」（1 回だけ。tools/titles.js）
 const titled = require('./titles').awardTitles(S, { day, date });
 for (const x of titled) console.log(`${x.v.display} に称号『${x.title.name}』`);

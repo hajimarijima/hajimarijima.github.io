@@ -7,9 +7,13 @@
 //   count … 村人の記録 stat の数が n に届いた（items.apple、items.fish_* のように * で終わると前が同じ物を全部足す）
 //   days … 住んで n 日 / friends … 友だち・親友・家族が n 人 / fishRecord … 釣りランキングで島の 1 位
 //   bridge … 橋づくりの係になった / home … 自分の家ができた
+//   firstItem … 島ではじめて item を手に入れた 1 人だけ / referrals … 招待リンクから住んだ人が n 人（tools/referral.js）
+//   gift: { 物: 数 } があると、称号といっしょにごほうびを持ち物に入れる
 // おくった時は町の歴史と本人の日記に 1 回だけ書く。
 // join.js（15 分ごとの受付）と sim.js（毎日）から呼ぶ。S = { config, villagers, life, history, state?, social? }
 // state・social がない時（受付の時など）は、それを使う称号は飛ばす（次の日の sim でおくる）
+const REF = require('./referral');
+let INV = null;
 let SO = null;
 const social = () => SO || (SO = require('./social'));
 
@@ -85,6 +89,8 @@ function meets(t, v, L, S, day, cache) {
     case 'friends': return S.social ? friendCount(S.social, v.key) >= (t.n || 1) : null;
     case 'fishRecord': if (!S.state) return null; return (cache.fish || (cache.fish = fishLeaders(S.state))).has(v.key);
     case 'bridge': if (!S.state) return null; return (cache.bridge || (cache.bridge = bridgeCrew(S.state))).has(v.key);
+    // 招待リンクから住んだ人が n 人（町を出た人は数えない。tools/referral.js）
+    case 'referrals': return REF.referralCount(S.villagers, v.key) >= (t.n || 1);
     default: return null;
   }
 }
@@ -111,7 +117,21 @@ function give(S, v, t, { day, date }) {
   v.titles = [...(v.titles || []), t.id];
   const L = S.life[v.key];
   if (L) {
-    const note = `称号「${t.name}」をもらった（${t.desc || ''}）。`;
+    let note = `称号「${t.name}」をもらった（${t.desc || ''}）。`;
+    // ごほうび（t.gift = { 物: 数 }）：持ち物に入れる。入りきらない分は町のチェストへ
+    if (t.gift && typeof t.gift === 'object') {
+      const IC = (S.config && S.config.inventory) || {}, ITEMS = (S.config && S.config.items) || {};
+      const got = [];
+      for (const [it, n0] of Object.entries(t.gift)) {
+        const n = Math.floor(Number(n0) || 0); if (n <= 0 || !ITEMS[it]) continue;
+        let left = n;
+        if (Array.isArray(L.inv)) { INV = INV || require('./inventory'); left = INV.addItem(L.inv, L.slots || IC.base || 3, it, n, IC.stack); }
+        const ch = S.state && S.state.chest;
+        if (left > 0 && ch && ch.items && typeof ch.items === 'object' && !Array.isArray(ch.items)) ch.items[it] = (ch.items[it] || 0) + left;
+        got.push(`${ITEMS[it].name || it} ${n} こ`);
+      }
+      if (got.length) note += `ごほうびに ${got.join('・')} をもらった。`;
+    }
     L.diary = L.diary || [];
     const d = L.diary[L.diary.length - 1];
     if (d && d.day === day) d.text += note; else L.diary.push({ day, date, text: note });

@@ -15,10 +15,15 @@ export function joinMode(config, qs) {
   if (q === 'comment') return 'comment';
   return config && config.dm && config.dm.enabled === true ? 'dm' : 'comment';
 }
-export function joinSheetHtml(config, mode) {
+// 招待リンク（?ref=村人の key）から来た人：DM に送る言葉に「紹介 key」を付ける（tools/referral.js が読む）
+export const REF_KEY = /^[A-Za-z0-9_-]{1,40}$/;
+export const dmWord = (word, ref) => (ref && REF_KEY.test(ref) ? `${word} 紹介 ${ref}` : word);
+export function joinSheetHtml(config, mode, refBy) {
   const C = config || {};
   const acct = String(C.account || '').replace(/^@+/, '') || 'comment_de_sodatsu';
-  const word = C.joinWord || '住みたい';
+  const word0 = C.joinWord || '住みたい';
+  const ref = refBy && REF_KEY.test(refBy.key || '') ? refBy : null;
+  const word = mode === 'dm' && ref ? dmWord(word0, ref.key) : word0;
   const prof = /^https:\/\//.test(String(C.profileUrl || '')) ? C.profileUrl : `https://www.instagram.com/${acct}/`;
   const dmUrl = `https://ig.me/m/${encodeURIComponent(acct)}`;
   const dm = mode === 'dm';
@@ -29,19 +34,22 @@ export function joinSheetHtml(config, mode) {
     : [['user-plus', `インスタで <b>@${esc(acct)}</b> をフォローします。`],
       ['message-circle', `最新のリールに「<b>${esc(word)}</b>」とコメントします。`],
       ['clock', '15 分ほどで家が建ちます。上の欄で @ユーザー名 をさがすと、あなたの家へ行けます。']];
-  const opt = `道具・誕生日・好きな食べ物もいっしょに書けます（例「${esc(word)} ピッケル 12/11 りんご」）。`;
+  const opt = ref && mode === 'dm'
+    ? `「紹介 ${esc(ref.key)}」は消さずに送ってね（${esc(ref.name || ref.key)}さんの招待になります）。`
+    : `道具・誕生日・好きな食べ物もいっしょに書けます（例「${esc(word0)} ピッケル 12/11 りんご」）。`;
   const main = dm
     ? `<a class="js-main" id="js-dm" href="${esc(dmUrl)}" target="_blank" rel="noopener">${icon('copy', { size: 20 })}<span>コピーして DM を開く</span></a>` +
       `<a class="js-sub" href="${esc(prof)}" target="_blank" rel="noopener">${icon('instagram', { size: 20 })}<span>インスタのアカウントを開く</span></a>`
     : `<a class="js-main" href="${esc(prof)}" target="_blank" rel="noopener">${icon('instagram', { size: 20 })}<span>インスタのアカウントを開く</span></a>` +
       `<button type="button" class="js-sub" id="js-copy">${icon('copy', { size: 20 })}<span>『${esc(word)}』をコピー</span></button>`;
   const already = dm
-    ? `同じように DM で「${esc(word)}」と送ると、新しい家ではなく<b>元の家のリンク</b>と、新しい専用のリンクが届きます（前の専用のリンクは使えなくなります）。家はインスタのアカウントにひもづいているので、別のスマホからでも戻れます。`
+    ? `同じように DM で「${esc(word0)}」と送ると、新しい家ではなく<b>元の家のリンク</b>と、新しい専用のリンクが届きます（前の専用のリンクは使えなくなります）。家はインスタのアカウントにひもづいているので、別のスマホからでも戻れます。`
     : `もう一度コメントしても、新しい家は建たず<b>元の家</b>のままです。家はインスタのアカウントにひもづいているので、別のスマホからでも上の欄で @ユーザー名 をさがせば戻れます。`;
   return `<div class="js-grab" aria-hidden="true"></div>` +
     `<button type="button" class="js-x" aria-label="閉じる" title="閉じる">${icon('x', { size: 22 })}</button>` +
     `<div class="js-badge" aria-hidden="true">${icon('house', { size: 30 })}</div>` +
     `<h2 class="js-title" id="js-title">インスタで住む</h2>` +
+    (ref ? `<p class="js-ref">${icon('mail', { size: 18 })}<span><b>${esc(ref.name || ref.key)}</b>さんからの招待</span></p>` : '') +
     `<ol class="js-steps">${steps.map(([ic, t], i) => `<li><span class="js-n">${i + 1}</span><span class="js-t">${t}</span>${icon(ic, { size: 20, cls: 'js-ic' })}</li>`).join('')}</ol>` +
     `<p class="js-opt">${opt}</p>` +
     `<div class="js-btns">${main}</div>` +
@@ -68,10 +76,19 @@ async function setup() {
   try { config = await load('config'); } catch (e) { /* 読めなくても案内は出す */ }
   const qs = new URLSearchParams(location.search);
   const mode = joinMode(config, qs);
-  const word = config.joinWord || '住みたい';
+  // 招待リンク（?ref=村人の key）：このブラウザで覚えておく（あとで開き直しても招待のまま）
+  const REFS = 'town.refBy';
+  let refKey = qs.get('ref');
+  if (refKey && REF_KEY.test(refKey)) { try { localStorage.setItem(REFS, refKey); } catch (e) { /* 覚えられなくてもよい */ } }
+  else { refKey = null; try { const s = localStorage.getItem(REFS); if (s && REF_KEY.test(s)) refKey = s; } catch (e) { /* なし */ } }
+  let refBy = null;
+  if (refKey) {
+    try { const vs = await load('villagers'); const v = (vs || []).find((x) => x.key === refKey && !x.left); if (v) refBy = { key: v.key, name: v.display || v.name || '' }; } catch (e) { /* 名前が出せなくても招待は付ける */ }
+  }
+  const word = mode === 'dm' && refBy ? dmWord(config.joinWord || '住みたい', refBy.key) : (config.joinWord || '住みたい');
   const wrap = document.createElement('div');
   wrap.className = 'joinsheet'; wrap.hidden = true;
-  wrap.innerHTML = `<div class="js-back" data-close></div><section class="js-card" role="dialog" aria-modal="true" aria-labelledby="js-title" tabindex="-1">${joinSheetHtml(config, mode)}</section>`;
+  wrap.innerHTML = `<div class="js-back" data-close></div><section class="js-card" role="dialog" aria-modal="true" aria-labelledby="js-title" tabindex="-1">${joinSheetHtml(config, mode, refBy)}</section>`;
   document.body.append(wrap);
   const card = wrap.querySelector('.js-card');
   let back = null;
@@ -100,7 +117,7 @@ async function setup() {
   document.getElementById('joinbtn')?.addEventListener('click', open);
   window.TOWN_JOIN = { open, close, mode }; // 確かめ用
   // 最初に開いた人だけ。DM の返事のリンク（?v=）・人さがし（?who=）で来た人には出さない。?join= の時はいつも出す
-  if (qs.get('join') || (!getSeen() && !qs.get('v') && !qs.get('who') && !qs.has('me'))) setTimeout(open, 600);
+  if (qs.get('join') || (qs.get('ref') && refBy) || (!getSeen() && !qs.get('v') && !qs.get('who') && !qs.has('me'))) setTimeout(open, 600);
 }
 if (typeof document !== 'undefined') {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setup); else setup();

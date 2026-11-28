@@ -51,6 +51,7 @@ async function main() {
       '<a class="bdgall" href="badges.html">バッジをぜんぶ見る</a>';
     nameEl.after(box);
   }
+  renderReferral(v, D);
   // 好きな色を書いた人は、名前の見出しの下の線と印をその色に（書いていない人は今までどおり）
   const fc = favColor(v);
   if (fc) { nameEl.classList.add('favname'); nameEl.style.setProperty('--fav', favEdge(fc)); }
@@ -141,6 +142,24 @@ async function main() {
   hint.className = 'hint'; hint.textContent = 'タップで作業の動き'; el.appendChild(hint);
 }
 // 関係の一覧と最近の立ち話
+// 招待：この村人の招待リンク（?ref=key）と、招待で住んだ人の数・次のごほうび（config.titles の auto: "referrals"。tools/referral.js）
+function renderReferral(v, D) {
+  const box = document.getElementById('refcard'); if (!box) return;
+  const tiers = ((D.config.titles || {}).list || []).filter((t) => t.auto === 'referrals').sort((a, b) => a.n - b.n);
+  const n = (D.villagers || []).filter((x) => x.referredBy === v.key && !x.left).length;
+  const url = new URL('./?ref=' + encodeURIComponent(v.key), location.href).href;
+  const ITEMS = D.config.items || {};
+  const gift = (t) => Object.entries(t.gift || {}).map(([k, c]) => `${(ITEMS[k] || {}).name || k} ${c} こ`).join('・');
+  const next = tiers.find((t) => t.n > n);
+  box.innerHTML = `<p class="refnow">招待で島に来た人：<b>${n}</b> 人${next ? `<span class="muted">（あと ${next.n - n} 人で「${esc(next.name)}」）</span>` : ''}</p>` +
+    `<div class="profout"><code class="refurl">${esc(url)}</code><button type="button" id="refcopy">コピー</button></div><p class="muted" id="refmsg">このリンクから DM で「住みたい」と送った人が住むと、${esc(v.display)}さんの招待になります。</p>` +
+    (tiers.length ? `<ul class="reftiers">${tiers.map((t) => `<li class="${n >= t.n ? 'got' : ''}"><b>${t.n} 人</b><span>${esc(t.name)}</span><small>${esc(gift(t))}</small></li>`).join('')}</ul>` : '');
+  box.querySelector('#refcopy').onclick = () => {
+    const done = (ok) => { document.getElementById('refmsg').textContent = ok ? '招待リンクをコピーしました。友だちに送ってね' : 'コピーできませんでした。上のリンクを長押しでコピーしてね'; };
+    try { navigator.clipboard.writeText(url).then(() => done(true), () => done(false)); } catch (e) { done(false); }
+  };
+}
+
 function renderSocial(v, D) {
   const byKey = Object.fromEntries(D.villagers.map((x) => [x.key, x]));
   const rels = ((D.social.view || {})[v.key] || []).filter((r) => byKey[r.other]);
