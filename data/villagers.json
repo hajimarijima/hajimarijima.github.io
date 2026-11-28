@@ -600,5 +600,22 @@
   "hidden": false,
   "display": "unaoto1105",
   "joinedAt": "21:32"
+ },
+ {
+  "key": "5c253a10c4",
+  "igId": "a7a845a8f96bfcec",
+  "name": "haoto_run",
+  "userHash": "3503e592f81ec43d",
+  "skin": 93,
+  "joined": "2026-11-28",
+  "joinedDay": 2,
+  "source": "comment",
+  "birthday": "03-12",
+  "profile": {
+   "food": "ミルク"
+  },
+  "hidden": false,
+  "display": "haoto_run",
+  "joinedAt": "22:03"
  }
 ]
