@@ -617,5 +617,23 @@
   "hidden": false,
   "display": "haoto_run",
   "joinedAt": "22:03"
+ },
+ {
+  "key": "ce4a151f67",
+  "igId": "84e788064642952c",
+  "name": "yakumo_take06.23",
+  "userHash": "8a04ec9de4ef26f3",
+  "skin": 159,
+  "joined": "2026-11-28",
+  "joinedDay": 2,
+  "source": "comment",
+  "birthday": "09-12",
+  "profile": {
+   "food": "りんご"
+  },
+  "hidden": false,
+  "display": "yakumo_take06.23",
+  "via": "dm",
+  "joinedAt": "22:47"
  }
 ]
