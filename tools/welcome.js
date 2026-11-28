@@ -148,7 +148,7 @@ function welcomeNow(S, { now = new Date() } = {}) {
     world.chest.day = day; worldChanged = true;
     history.push({ day, date, type: 'event', text: '村のまん中にチェストを置いた。集めた物は、ここに入れる。' });
   }
-  const active = villagers.filter((v) => v.joinedDay <= day && life[v.key]);
+  const active = villagers.filter((v) => v.joinedDay <= day && life[v.key] && !v.staff); // 管理者用の村人は地図に家を置かない
   assignHomes(active, life, world, config);
   return { added, worldChanged };
 }

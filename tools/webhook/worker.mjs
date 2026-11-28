@@ -433,6 +433,16 @@ export async function playApi(request, env, nowMs = Date.now()) {
     await pullShop(kv, dates, out, each); // 工房（8)）
     return jsonRes(out);
   }
+  // 管理者用の村人（tools/staff.js）：公開のファイルには書かないので、毎日の更新・受付がここに置く。本人の /me だけが受け取る
+  //   POST /staff/put（合言葉 DM_QUEUE_TOKEN）… { items: { 村人: { villager, life, results } } }
+  if (path === '/staff/put') {
+    if (!dmAuth(request, env)) return jsonRes({ error: 'forbidden' }, 403);
+    let body = null;
+    try { body = await request.json(); } catch (e) { return jsonRes({ error: 'bad json' }, 400); }
+    let n = 0;
+    for (const [k, d] of Object.entries((body && body.items) || {}).slice(0, 5)) if (validKey(k) && d && typeof d === 'object') { await kv.put('staff:' + k, JSON.stringify(d)); n++; }
+    return jsonRes({ put: n });
+  }
   const v = await whoIs(request, env);
   if (!v) return cors(env, jsonRes({ error: 'unknown link' }, 401));
   const date = jstDate(nowMs), cfg = await siteConfig(env, nowMs), L = limitsOf(cfg);
@@ -445,7 +455,8 @@ export async function playApi(request, env, nowMs = Date.now()) {
   if (path.startsWith('/visit/')) return visitApi(path, request, body, { kv, v, date, cfg, nowMs, res }); // 遊びに行く（7)）
   if (path.startsWith('/mail/') || path === '/me/decor') return homeApi(path, request, body, { kv, v, date, cfg, nowMs, res }); // 手紙と家の飾り（6)）
   if (path === '/me' && request.method === 'GET') {
-    return res({ villager: v, date, day: { fish: day.fish, chores: day.chores, treasure: !!day.treasure, box: day.box || 0, legend: day.legend || [] }, catches: day.catches || [], settings: await readJ(kv, 'set:' + v, {}), choreTotal: (await readJ(kv, 'chore:' + date, {})).total || 0, treasure: await readJ(kv, 'trs:' + date, null), limits: L });
+    const staff = await readJ(kv, 'staff:' + v, null); // 管理者用の村人だけ：自分の村人の行・暮らし（公開のファイルにはいない）
+    return res({ ...(staff ? { staff } : {}), villager: v, date, day: { fish: day.fish, chores: day.chores, treasure: !!day.treasure, box: day.box || 0, legend: day.legend || [] }, catches: day.catches || [], settings: await readJ(kv, 'set:' + v, {}), choreTotal: (await readJ(kv, 'chore:' + date, {})).total || 0, treasure: await readJ(kv, 'trs:' + date, null), limits: L });
   }
   if (request.method !== 'POST') return res({ error: 'method' }, 405);
   if (path === '/me/settings') {
@@ -1056,7 +1067,8 @@ const wsRnd = (env) => (typeof env._rnd === 'function' ? env._rnd : () => crypto
 // まだ毎日の更新に入っていない頼みと、もらった物（ops）。3 日分（/play/pull と同じ）・時刻の順
 async function wsPending(kv, env, v, nowMs) {
   const life = (await siteFile(env, 'life', nowMs)) || {}, ws = (await siteFile(env, 'workshop', nowMs)) || {};
-  const L0 = life[v] && typeof life[v] === 'object' ? life[v] : { inv: [], slots: 3 };
+  const sf = life[v] ? null : await readJ(kv, 'staff:' + v, null); // 管理者用の村人は公開の life.json にいない（/staff/put）
+  const L0 = life[v] && typeof life[v] === 'object' ? life[v] : sf && sf.life && typeof sf.life === 'object' ? sf.life : { inv: [], slots: 3 };
   const seen = new Set(Array.isArray(ws.seen) ? ws.seen : []), ops = [];
   for (let i = 2; i >= 0; i--) for (const op of (await readJ(kv, `wk:${jstDate(nowMs - i * 86400e3)}:${v}`, { ops: [] })).ops || []) if (op && !seen.has(op.id)) ops.push(op);
   return { L0, gains: [], ops };
@@ -1140,7 +1152,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     // 自分の村人と遊び（サイトから。印で確かめる）
-    const playPath = url.pathname === '/me' || url.pathname === '/me/settings' || url.pathname.startsWith('/play/') || url.pathname.startsWith('/mail/') || url.pathname === '/me/decor' || url.pathname.startsWith('/visit/') || url.pathname.startsWith('/shop/') || url.pathname.startsWith('/box/');
+    const playPath = url.pathname === '/me' || url.pathname === '/staff/put' || url.pathname === '/me/settings' || url.pathname.startsWith('/play/') || url.pathname.startsWith('/mail/') || url.pathname === '/me/decor' || url.pathname.startsWith('/visit/') || url.pathname.startsWith('/shop/') || url.pathname.startsWith('/box/');
     if (playPath && request.method === 'OPTIONS') return cors(env, new Response(null, { status: 204 }));
     if (playPath) return playApi(request, env);
     // Meta の確かめ（Webhook を登録した時に 1 回来る）

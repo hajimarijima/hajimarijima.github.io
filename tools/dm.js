@@ -141,6 +141,8 @@ function replyTexts(res, config) {
     const key = typeof r.v.key === 'string' && VKEY.test(r.v.key) ? r.v.key : null;
     const house = key ? houseUrl(dc, key) : (dc.site.endsWith('/') ? dc.site : dc.site + '/');
     if (!key) return { ids: r.ids, text: noLeft(fill(tpl, { name, url: house }), false), kind: r.kind };
+    // 管理者用の村人（tools/staff.js）は公開の villagers.json に出ないので、島への反映を待たない（kind を welcome にしない）
+    if (r.v.staff) return { ids: r.ids, text: noLeft(fill(tpl, { name, url: '{me}' }), true), kind: 'staff', villager: key, house: dc.site.endsWith('/') ? dc.site : dc.site + '/' };
     return { ids: r.ids, text: noLeft(fill(tpl, { name, url: '{me}' }), true), kind: r.kind, villager: key, house };
   });
 }

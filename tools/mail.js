@@ -46,7 +46,7 @@ function stepMail(S, { day, play = null, since = 0, R = Math.random, built = '' 
   if (play && play.reports) S.mail.reports = { ...(S.mail.reports || {}), ...play.reports };
   S.mail.banned = Array.isArray(S.mail.banned) ? S.mail.banned : [];
   const banned = new Set(S.mail.banned), needTerms = new Set();
-  const seen = new Set(S.mail.seen), active = S.villagers.filter((v) => v.joinedDay <= day && !v.gone), byKey = Object.fromEntries(active.map((v) => [v.key, v]));
+  const seen = new Set(S.mail.seen), active = S.villagers.filter((v) => v.joinedDay <= day && !v.gone && !v.staff), byKey = Object.fromEntries(active.map((v) => [v.key, v]));
   const sentToday = {}, letters = [];
   const send = (L) => {
     if (!byKey[L.from] || !byKey[L.to] || L.from === L.to || banned.has(L.from)) return false;

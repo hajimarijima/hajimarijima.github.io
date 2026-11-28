@@ -21,7 +21,7 @@ function stepVisit(S, { day, play = null, R = Math.random, hist = null }) {
   S.visits = S.visits && Array.isArray(S.visits.notes) ? S.visits : { notes: [], seen: [] };
   S.visits.seen = S.visits.seen || [];
   S.mail = S.mail && Array.isArray(S.mail.letters) ? S.mail : { letters: [], seen: [] };
-  const seen = new Set(S.visits.seen), active = S.villagers.filter((v) => v.joinedDay <= day && !v.gone), byKey = Object.fromEntries(active.map((v) => [v.key, v]));
+  const seen = new Set(S.visits.seen), active = S.villagers.filter((v) => v.joinedDay <= day && !v.gone && !v.staff), byKey = Object.fromEntries(active.map((v) => [v.key, v]));
   const residents = (home) => active.filter((v) => (S.life[v.key] || {}).home === home).map((v) => v.key);
   const notes = [], count = {}, letters = [];
   for (const n of S.visits.notes) if (n.day === day && n.kind === 'web') count[n.from] = (count[n.from] || 0) + 1; // 同じ日にもう一度回しても、数え直さない

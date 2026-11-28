@@ -1889,6 +1889,8 @@ const S = {
   visits: read('visits.json', null), // 遊びに行った・来た人ノート（tools/visit.js）
   workshop: read('workshop.json', null), // 工房の当てた分（tools/workshop.js。受け口が二重に数えないように読む）
 };
+const STAFF = require('./staff'); // 管理者用の村人：暗号の箱から足す（書く時は STAFF.pub でぬく）
+STAFF.load(S, DATA);
 S.demo = args.includes('--demo') || S.state.demo;
 const inboxFile = opt('--inbox', path.join(DATA, 'inbox', 'instagram.json'));
 S.inbox = fs.existsSync(inboxFile) ? JSON.parse(fs.readFileSync(inboxFile, 'utf8')) : null;
@@ -1924,17 +1926,20 @@ function noteProjects(S) {
   for (const [k, n] of Object.entries(pl.need)) pl.got[k] = pl.started ? n : Math.max(0, Math.min(n, Math.floor((RES.includes(k) ? res[k] : store[k]) || 0)));
 }
 for (let i = 0; i < days; i++) { stepDay(S); noteProjects(S); if (i === 0 && S.inbox) S.inbox = { ...S.inbox, joinComments: null }; }
-require('./staff').scrubHistory(S.history, S.villagers); // 管理者用の村人は町の歴史に書かない
-write('villagers.json', S.villagers);
+STAFF.scrubHistory(S.history, S.villagers); // 管理者用の村人は町の歴史に書かない
+const PUB = STAFF.pub(S); // 公開のファイルには管理者用の村人を書かない
+write('villagers.json', PUB.villagers);
 ST.writeWorld(DATA, S.world, { clearR: ((S.config.terrain && S.config.terrain.clearBlocks) ?? 4) * 1.9 + 2.5 });
 write('state.json', S.state);
-ST.writeLife(DATA, S.life);
+ST.writeLife(DATA, PUB.life);
 write('history.json', S.history);
-write('social.json', S.social);
+write('social.json', PUB.social);
+if (STAFF.save(S, DATA)) console.log('管理者用の村人の箱を書きました');
+STAFF.push(S).then((n) => { if (n) console.log('管理者用の村人を受け口に送りました'); });
 if (S.mail) write('mail.json', S.mail);
 if (S.decor) write('decor.json', S.decor);
 if (S.visits) write('visits.json', S.visits);
-if (S.workshop) write('workshop.json', S.workshop);
+if (S.workshop) write('workshop.json', PUB.workshop);
 require('./requests').updateFiles( // コメントがない日もファイルは作る（daily.yml の git add で使う）
 DATA, reqComments, S.config, S.state.day);
-console.log(`${S.state.day} 日目まで進めました（村人 ${S.villagers.filter((v) => v.joinedDay <= S.state.day).length} 人・建物 ${S.world.buildings.length}・フォロワー ${S.state.followers}）`);
+console.log(`${S.state.day} 日目まで進めました（村人 ${PUB.villagers.filter((v) => v.joinedDay <= S.state.day).length} 人・建物 ${S.world.buildings.length}・フォロワー ${S.state.followers}）`);

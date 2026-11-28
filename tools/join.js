@@ -31,6 +31,9 @@ const S = {
   life: ST.readLife(DATA), history: readJ('history.json', []), social: readJ('social.json', { pairs: {}, talks: [] }),
 };
 const hidden = P.loadHidden(DATA);
+// 管理者用の村人（TOWN_STAFF の人）：公開のファイルにはいないので、暗号の箱から足す。書く時は STAFF.pub でぬく（tools/staff.js）
+const STAFF = require('./staff');
+STAFF.load(S, DATA);
 const day = S.state.day;
 const date = day >= 1 ? S.state.date : W.jstToday(NOW);
 const enemies = !!(config.enemies && config.enemies.enabled);
@@ -58,7 +61,6 @@ const dmRes = DM.dmJoins(S, dmItems, { config, owners, hidden, date, day, enemie
 registered += dmRes.registered.length;
 if (dmItems.length) console.log(`DM：${dmItems.length} 件・新しく住んだ人 ${dmRes.registered.length} 人・もう住んでいた人 ${dmRes.known.length} 人`);
 // 管理者用の村人（TOWN_STAFF の人）：みんなには見せない（tools/staff.js）
-const STAFF = require('./staff');
 if (STAFF.markStaff(S.villagers)) console.log('管理者用の村人に印を付けました');
 for (const v of S.villagers) P.applyPrivacy(v, hidden);
 // コメントで書いた誕生日・好きな食べ物・MBTI（「住みたい ピッケル 12/11 りんご INFP」、住んでいる人の「誕生日 12/11」「MBTI ENFP」）。
@@ -141,9 +143,9 @@ if (inbox && inbox.voteComments) {
 STAFF.scrubHistory(S.history, S.villagers); // 管理者用の村人は町の歴史に書かない
 if (baseWorld) {
   // テントは拠点のそばへ（家はまだない）。区画も拠点のまわりに作り直したので、家の割り当てもし直す
-  W.assignHomes(S.villagers.filter((v) => v.joinedDay <= day && S.life[v.key]), S.life, S.world, config);
+  W.assignHomes(S.villagers.filter((v) => v.joinedDay <= day && S.life[v.key] && !v.staff), S.life, S.world, config);
   ST.writeWorld(DATA, S.world, { clearR: ((config.terrain && config.terrain.clearBlocks) ?? 4) * 1.9 + 2.5 });
-  ST.writeLife(DATA, S.life);
+  ST.writeLife(DATA, STAFF.pub(S).life);
   write('history.json', S.history);
 }
 // フォロワー数：受付のたびに新しくする（サイトの数が 15 分ごとに変わる。変わった時だけ state.json を書く＝コミットされる）
@@ -162,12 +164,16 @@ STAFF.scrubHistory(S.history, S.villagers);
 
 const changed = removed || registered || added.length || comments.length || filled || profUpdated || fitted;
 if (removed || registered || added.length || titled.length || jobChanges.length || duel.opened.length || duel.closed.length) {
-  write('villagers.json', S.villagers);
-  ST.writeLife(DATA, S.life);
+  const PUB = STAFF.pub(S); // 管理者用の村人はぬく
+  write('villagers.json', PUB.villagers);
+  ST.writeLife(DATA, PUB.life);
   write('history.json', S.history);
-  write('social.json', S.social);
+  write('social.json', PUB.social);
   if (worldChanged) ST.writeWorld(DATA, S.world, { clearR: ((config.terrain && config.terrain.clearBlocks) ?? 4) * 1.9 + 2.5 });
-} else if (changed) write('villagers.json', S.villagers); // 名前が変わった人だけ
+} else if (changed) write('villagers.json', STAFF.pub(S).villagers); // 名前が変わった人だけ
+// 管理者用の村人の箱（変わった時だけ書く）と、受け口へ（自分の端末の /me が受け取る）
+if (STAFF.save(S, DATA)) console.log('管理者用の村人の箱を書きました');
+STAFF.push(S).then((n) => { if (n) console.log('管理者用の村人を受け口に送りました'); });
 // DM の返事（町に迎えて表示名が決まったあとで作る）。コミットのあと tools/dm.js done が受け口に渡す（公開しない inbox/ に置く）
 if (dmItems.length) {
   fs.writeFileSync(dmRepliesFile, JSON.stringify({ items: DM.replyTexts(dmRes, config) }) + '\n');

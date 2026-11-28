@@ -44,7 +44,7 @@ function give(S, from, to, id, day) {
 function stepDecor(S, { day, play }) {
   S.decor = S.decor || {};
   if (!DC.decorOn(S.config)) return; // 「近日公開」の間は何もしない（data/decor.json はそのまま残す。true にすれば続きから）
-  const C = DC.decorCfg(S.config), active = new Set(S.villagers.filter((v) => v.joinedDay <= day).map((v) => v.key));
+  const C = DC.decorCfg(S.config), active = new Set(S.villagers.filter((v) => v.joinedDay <= day && !v.staff).map((v) => v.key)); // 管理者用の村人（tools/staff.js）は飾りをもらわない
   // 遊びのページの釣り・おてつだい・宝探し（何日分か来るので、日付とわけで 1 回だけ）
   for (const [date, m] of Object.entries((play && play.days) || {})) {
     for (const [k, r] of Object.entries(m || {})) {

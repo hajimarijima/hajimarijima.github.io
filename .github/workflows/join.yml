@@ -67,12 +67,15 @@ jobs:
           TOWN_SALT: ${{ secrets.TOWN_SALT }}
           TOWN_HIDDEN: ${{ secrets.TOWN_HIDDEN }}
           TOWN_STAFF: ${{ secrets.TOWN_STAFF }}
+          # 管理者用の村人を受け口に送る（tools/staff.js。自分の端末の /me だけが受け取る）
+          DM_QUEUE_URL: ${{ secrets.DM_QUEUE_URL }}
+          DM_QUEUE_TOKEN: ${{ secrets.DM_QUEUE_TOKEN }}
       - name: 結果をコミット
         run: |
           git config user.name "town-bot"
           git config user.email "town-bot@users.noreply.github.com"
           # 入居で変わるファイル（村人・暮らし・日記・歴史・関係・地図のチェスト）。data/inbox/ は .gitignore で除外
-          for f in data/villagers.json data/world.json data/state.json data/life.json data/history.json data/social.json data/diary; do
+          for f in data/villagers.json data/world.json data/state.json data/life.json data/history.json data/social.json data/diary data/.k.json; do
             if [ -e "$f" ]; then git add "$f"; fi
           done
           git diff --cached --quiet || (git commit -m "住む人の受付・入居" && git push)

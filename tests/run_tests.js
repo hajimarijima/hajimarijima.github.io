@@ -1357,19 +1357,32 @@ t('管理者用の村人（TOWN_STAFF）：住めるが、町の歴史・称号�
   fs.writeFileSync(path.join(dir, 'inbox', 'instagram.json'), JSON.stringify({ owner: 'town_owner', joinComments: [cm('8001', 'admin_test', '住みたい', '2026-11-27T00:30:00Z'), cm('8002', 'kaito_b', '住みたい', '2026-11-27T01:00:00Z')] }));
   node('tools/join.js', '--now', '2026-11-27T10:00:00+09:00');
   const read = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
-  const vs = read('villagers.json'), staff = vs.find((v) => v.name === 'admin_test'), other = vs.find((v) => v.name === 'kaito_b');
-  assert.ok(staff && staff.staff === true, '印が付く');
-  assert.ok(other && !other.staff);
-  assert.ok(STORE.readLife(dir)[staff.key], '暮らしの入れ物はある（遊ぶページで遊べる）');
+  // 公開のファイル（data/ のどこにも）名前も key も出ない
+  const vs = read('villagers.json'), other = vs.find((v) => v.name === 'kaito_b');
+  assert.ok(other && !other.staff, 'ほかの人は住む');
+  assert.ok(!vs.some((v) => v.name === 'admin_test' || v.staff), '村人の一覧に出ない');
+  const SF = require(path.join(ROOT, 'tools/staff.js'));
+  const box = SF.unseal(read('.k.json'));
+  const staff = box.villagers[0];
+  assert.ok(staff && staff.staff === true && staff.name === 'admin_test', '暗号の箱に入る');
+  assert.ok(box.life[staff.key] && box.life[staff.key].inv, '暮らしも箱に入る（遊ぶページで遊べる）');
+  const scan = (d) => { for (const f of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, f.name); if (f.isDirectory()) { if (f.name !== 'inbox') scan(p); } else if (f.name !== '.k.json' && f.name.endsWith('.json')) { const s = fs.readFileSync(p, 'utf8'); assert.ok(!s.includes(staff.key) && !s.includes('admin_test'), '公開のファイルに出ない：' + f.name); } } };
+  scan(dir);
   const hist = read('history.json');
-  assert.ok(!hist.some((h) => (h.who || []).includes(staff.key)), '町の歴史に出ない');
-  assert.ok(!hist.some((h) => String(h.text || '').includes('admin_test')));
   assert.ok(hist.some((h) => h.type === 'join' && h.who.includes(other.key)), 'ほかの人の入居は残る');
   assert.ok(!(staff.titles || []).length, '称号（はじまりの村人など）をもらわない');
-  const SF = require(path.join(ROOT, 'tools/staff.js'));
+  // もう一度受付を動かしても、箱から読んで二重にならない・公開のファイルには出ない・箱は書き直さない（中身が同じ）
+  const before = fs.readFileSync(path.join(dir, '.k.json'), 'utf8');
+  node('tools/join.js', '--now', '2026-11-27T10:15:00+09:00');
+  assert.strictEqual(fs.readFileSync(path.join(dir, '.k.json'), 'utf8'), before, '中身が同じなら箱は書き直さない');
+  scan(dir);
+  // 毎日の更新でも出ない（島の動きに出ない）
+  node('tools/sim.js', '--days', '1');
+  scan(dir);
+  assert.strictEqual(SF.unseal(read('.k.json')).villagers.length, 1, '箱に残る');
   const H = [{ who: [staff.key] }, { who: [other.key] }, {}];
-  assert.strictEqual(SF.scrubHistory(H, vs), 1); assert.strictEqual(H.length, 2);
-  assert.ok(fs.readFileSync(path.join(ROOT, 'js/common.js'), 'utf8').includes('!(v && v.staff)'), 'サイトの一覧から外す');
+  assert.strictEqual(SF.scrubHistory(H, [staff, other]), 1); assert.strictEqual(H.length, 2);
+  global.__staffForPush = { staff, life: box.life }; // 受け口に送る形は下の at で見る
 });
 
 t('すぐの入居：join.js で 0 日目に住み始め、daily（--gate）は始めるまで進まない・始めたら 1 日目', () => {
@@ -4065,6 +4078,27 @@ t('招待リンク：DM の「紹介 key」で招待した人が付き、人数�
   assert.ok(life[host.key].inv.some((s) => s && s.item === 'apple' && s.n === 10), 'ごほうびのりんご');
   assert.ok(/ごほうび/.test(life[host.key].diary[0].text));
   for (const t of cfg.titles.list.filter((x) => x.auto === 'referrals')) for (const k of Object.keys(t.gift || {})) assert.ok(cfg.items[k], t.id + ' のごほうび ' + k);
+});
+
+at('管理者用の村人：受け口の /staff/put に送る・/me で本人にだけ返す', async () => {
+  const SF = require('../tools/staff');
+  const { staff, life } = global.__staffForPush;
+  let sent = null;
+  const n = await SF.push({ villagers: [staff], life, workshop: null }, { env: { DM_QUEUE_URL: 'https://q.example', DM_QUEUE_TOKEN: 't' }, fetchFn: async (u, o) => { sent = { u, body: JSON.parse(o.body) }; return { ok: true }; } });
+  assert.strictEqual(n, 1); assert.strictEqual(sent.u, 'https://q.example/staff/put'); assert.ok(sent.body.items[staff.key].life);
+  const W = await import('../tools/webhook/worker.mjs');
+  const kvm = new Map(), kv = { get: async (k) => (kvm.has(k) ? kvm.get(k) : null), put: async (k, v) => { kvm.set(k, v); }, delete: async (k) => { kvm.delete(k); }, list: async () => ({ keys: [], list_complete: true }) };
+  const env = { TOWN_KV: kv, DM_QUEUE_TOKEN: 'secret-q-0123456789', SITE_ORIGIN: 'https://site.example' };
+  const bad = await W.playApi(new Request('https://w.example/staff/put', { method: 'POST', headers: { Authorization: 'Bearer nope' }, body: JSON.stringify(sent.body) }), env);
+  assert.strictEqual(bad.status, 403, '合言葉がないと置けない');
+  const ok = await W.playApi(new Request('https://w.example/staff/put', { method: 'POST', headers: { Authorization: 'Bearer secret-q-0123456789' }, body: JSON.stringify(sent.body) }), env);
+  assert.strictEqual((await ok.json()).put, 1);
+  const tok = await W.issueMe(env, staff.key);
+  const me = await (await W.playApi(new Request('https://w.example/me', { headers: { Authorization: 'Bearer ' + tok } }), env)).json();
+  assert.strictEqual(me.villager, staff.key); assert.ok(me.staff && me.staff.villager.key === staff.key && me.staff.life, '本人の /me に入る');
+  const tok2 = await W.issueMe(env, 'someone');
+  const me2 = await (await W.playApi(new Request('https://w.example/me', { headers: { Authorization: 'Bearer ' + tok2 } }), env)).json();
+  assert.ok(!me2.staff, 'ほかの人の /me には入らない');
 });
 
 (async () => {

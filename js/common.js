@@ -19,13 +19,30 @@ export const mdText = (md) => { if (!md) return ''; const [m, d] = md.split('-')
 
 const cache = {}, raw = {};
 const fetchData = (name) => raw[name] || (raw[name] = fetch('data/' + name + '.json', { cache: 'no-cache' }).then((r) => { if (!r.ok) throw new Error(name + '.json を読めません'); return r.json(); }));
-// 村人の一覧は、管理者用の村人（staff。tools/staff.js）を外して渡す（一覧・町の画面・数に出さない）
+// 受け口の /me を 1 回だけ聞く（専用のリンクの印がある端末だけ。js/mine.js の whoami と共通）。{ status, body } か null
+let meP = null;
+export function meOnce() {
+  if (meP) return meP;
+  meP = (async () => {
+    let tok = null;
+    try { tok = new URLSearchParams(location.search).get('me') || localStorage.getItem('town.me'); } catch (e) { tok = null; }
+    if (!tok || !/^[A-Za-z0-9]{32}$/.test(tok)) return null;
+    const cfg = await fetchData('config').catch(() => ({}));
+    const base = String((cfg && cfg.play && cfg.play.apiUrl) || '').trim().replace(/\/+$/, '');
+    if (!base) return null;
+    try { const r = await fetch(base + '/me', { headers: { Authorization: 'Bearer ' + tok } }); return { status: r.status, body: await r.json().catch(() => ({})) }; } catch (e) { return { status: 0, body: {} }; }
+  })();
+  return meP;
+}
+export function resetMe() { meP = null; }
+// 管理者用の村人（tools/staff.js）は公開のファイルにいない。自分の端末だけ /me が中身を返すので、暮らしと「自分を探す一覧」に足す
+const staffSelf = async () => { const m = await meOnce(); const s = m && m.status === 200 && m.body && m.body.staff; return s && s.villager && s.villager.key ? s : null; };
 export async function load(name) {
-  if (!cache[name]) cache[name] = name === 'villagers' ? fetchData(name).then((vs) => (Array.isArray(vs) ? vs.filter((v) => !(v && v.staff)) : vs)) : fetchData(name);
+  if (!cache[name]) cache[name] = name === 'life' ? Promise.all([fetchData(name), staffSelf()]).then(([L, s]) => (s && s.life ? { ...L, [s.villager.key]: s.life } : L)) : fetchData(name);
   return cache[name];
 }
-// 外す前の村人の一覧（js/mine.js が専用のリンクの自分を探す時だけ）
-export const loadAllVillagers = () => fetchData('villagers');
+// 自分を探す時の村人の一覧（管理者用の村人なら自分を足す。js/mine.js）
+export const loadAllVillagers = () => Promise.all([fetchData('villagers'), staffSelf()]).then(([vs, s]) => (s && Array.isArray(vs) && !vs.some((v) => v.key === s.villager.key) ? [...vs, s.villager] : vs));
 export async function loadAll() {
   const [config, state, villagers, world, life, history, social] = await Promise.all([...['config', 'state', 'villagers', 'world', 'life', 'history'].map(load), load('social').catch(() => ({ pairs: {}, talks: [], view: {}, edges: [] }))]);
   const active = villagers.filter((v) => v.joinedDay <= state.day);
