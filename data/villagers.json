@@ -652,5 +652,24 @@
   "hidden": false,
   "display": "otter.4957139",
   "joinedAt": "22:51"
+ },
+ {
+  "key": "40d0f308e8",
+  "igId": "c193e2c89b8b41f7",
+  "name": "hinata_cookiekun",
+  "userHash": "ef0f16f103d74e69",
+  "skin": 188,
+  "joined": "2026-11-28",
+  "joinedDay": 2,
+  "source": "comment",
+  "startTool": "axe",
+  "birthday": "08-30",
+  "profile": {
+   "food": "きのこ"
+  },
+  "hidden": false,
+  "display": "hinata_cookiekun",
+  "via": "dm",
+  "joinedAt": "23:14"
  }
 ]
