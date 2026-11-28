@@ -201,8 +201,11 @@ export function dmMessages(payload) {
 }
 // 住んでいる人がプロフィールを書き直す DM（「性別 女の子」「ひとこと よろしく」「趣味 釣り」「色 水色」「誕生日 12/11」「MBTI ENFP」「好きな食べ物 りんご」）。
 // 名札で始まる DM だけ（どの村人かは join.js の tools/dm.js が決める。住んでいない人の DM は消すだけ）
+//   名札なしでも「女の子」「男の子です」（性別の言葉だけ。tools/gender.js の strict と同じ）と「INFP」（MBTI だけ）は積む
 const DM_PROFILE_RE = /^\s*(性別|せいべつ|ひとこと|一言|自己紹介|趣味|しゅみ|好きな色|すきな色|色|いろ|カラー|誕生日|たんじょうび|mbti|好きな食べ物|好物)/i;
-export const dmProfileHit = (text) => DM_PROFILE_RE.test(nfkc(text));
+const DM_GENDER_ONLY = /^\s*(?:(?:私|わたし|僕|ぼく|俺|おれ)は)?\s*(女の子|女のこ|おんなのこ|女性|女子|女|♀|男の子|男のこ|おとこのこ|男性|男子|男|♂)\s*(です|だよ|でーす)?[!！。]*\s*$/;
+const DM_MBTI_ONLY = /^\s*[EI][NS][TF][JP](?:-?[AT])?\s*$/i;
+export const dmProfileHit = (text) => { const t = nfkc(text); return DM_PROFILE_RE.test(t) || DM_GENDER_ONLY.test(t) || DM_MBTI_ONLY.test(t); };
 export const dmWordHit = (text, words) => { const t = nfkc(text); return (words && words.length ? words : DM_WORDS).some((w) => nfkc(w) && t.includes(nfkc(w))); };
 
 // サイトの data/config.json の dm（enabled・words）。5 分おぼえておく。読めない時は「積んでおく」（入居するかは join.js が config で決め直す）

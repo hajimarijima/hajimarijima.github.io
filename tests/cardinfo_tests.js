@@ -64,6 +64,8 @@ module.exports = ({ t, at, ROOT }) => {
     const W = await imp('tools/webhook/worker.mjs');
     assert.ok(W.dmProfileHit('性別 女の子') && W.dmProfileHit('ひとこと よろしく') && W.dmProfileHit('色 水色') && W.dmProfileHit('MBTI ENFP'));
     assert.ok(!W.dmProfileHit('こんにちは') && !W.dmProfileHit('今日の色がきれい'));
+    assert.ok(W.dmProfileHit('女の子') && W.dmProfileHit('男の子です') && W.dmProfileHit('性別女の子') && W.dmProfileHit('誕生日1018') && W.dmProfileHit('INFP'));
+    assert.ok(!W.dmProfileHit('女の子と遊んだ') && !W.dmProfileHit('INFPです？教えて'));
     const C = await imp('js/common.js');
     const j = C.joinText(cfg);
     assert.ok(/性別/.test(j) && /ひとこと/.test(j) && /趣味/.test(j) && /色 水色/.test(j));
