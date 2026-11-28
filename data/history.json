@@ -828,5 +828,25 @@
    "f4d33a7e3d"
   ],
   "title": "big_catch"
+ },
+ {
+  "day": 2,
+  "date": "2026-11-28",
+  "time": "21:02",
+  "type": "join",
+  "text": "aka.shi1456 が村に住むことになった。",
+  "who": [
+   "7c51c0a177"
+  ]
+ },
+ {
+  "day": 2,
+  "date": "2026-11-28",
+  "type": "title",
+  "text": "kasu._.1111 に称号『はじめての鉄』がおくられた。",
+  "who": [
+   "90b16eb3df"
+  ],
+  "title": "first_iron"
  }
 ]
