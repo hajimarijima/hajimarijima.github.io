@@ -690,5 +690,24 @@
   "display": "kana_na731",
   "via": "dm",
   "joinedAt": "23:28"
+ },
+ {
+  "key": "486848d5b1",
+  "igId": "389a69392989fbd6",
+  "name": "kanac595",
+  "userHash": "01655442dd3fa8a3",
+  "skin": 39,
+  "joined": "2026-11-28",
+  "joinedDay": 2,
+  "source": "comment",
+  "birthday": "10-31",
+  "profile": {
+   "food": "魚"
+  },
+  "skinBody": "female",
+  "hidden": false,
+  "display": "kanac595",
+  "via": "dm",
+  "joinedAt": "23:30"
  }
 ]
