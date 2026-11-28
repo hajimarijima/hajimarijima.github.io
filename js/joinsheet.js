@@ -31,7 +31,7 @@ export function joinSheetHtml(config, mode) {
       ['clock', '15 分ほどで家が建ちます。上の欄で @ユーザー名 をさがすと、あなたの家へ行けます。']];
   const opt = `道具・誕生日・好きな食べ物もいっしょに書けます（例「${esc(word)} ピッケル 12/11 りんご」）。`;
   const main = dm
-    ? `<a class="js-main" id="js-dm" href="${esc(dmUrl)}" target="_blank" rel="noopener">${icon('copy', { size: 20 })}<span>『${esc(word)}』をコピーして DM を開く</span></a>` +
+    ? `<a class="js-main" id="js-dm" href="${esc(dmUrl)}" target="_blank" rel="noopener">${icon('copy', { size: 20 })}<span>コピーして DM を開く</span></a>` +
       `<a class="js-sub" href="${esc(prof)}" target="_blank" rel="noopener">${icon('instagram', { size: 20 })}<span>インスタのアカウントを開く</span></a>`
     : `<a class="js-main" href="${esc(prof)}" target="_blank" rel="noopener">${icon('instagram', { size: 20 })}<span>インスタのアカウントを開く</span></a>` +
       `<button type="button" class="js-sub" id="js-copy">${icon('copy', { size: 20 })}<span>『${esc(word)}』をコピー</span></button>`;
