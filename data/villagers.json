@@ -779,5 +779,23 @@
   "display": "king_keisuke0618",
   "via": "dm",
   "joinedAt": "00:24"
+ },
+ {
+  "key": "df69c3dfa3",
+  "igId": "ef9e96dfd757a465",
+  "name": "_winter0203",
+  "userHash": "13ac314b93485348",
+  "skin": 77,
+  "joined": "2026-11-28",
+  "joinedDay": 2,
+  "source": "comment",
+  "birthday": "02-03",
+  "profile": {
+   "food": "木の実"
+  },
+  "hidden": false,
+  "display": "_winter0203",
+  "via": "dm",
+  "joinedAt": "00:46"
  }
 ]

@@ -1013,5 +1013,15 @@
    "6764b0cb0a"
   ],
   "title": "first_diamond"
+ },
+ {
+  "day": 2,
+  "date": "2026-11-28",
+  "time": "00:46",
+  "type": "join",
+  "text": "_winter0203 が村に住むことになった。",
+  "who": [
+   "df69c3dfa3"
+  ]
  }
 ]
