@@ -23,3 +23,6 @@ tools/poster/app/tmp/
 
 # 引っ越した人の保管（暗号化ずみ。tools/vault.js。Actions では artifact に 30 日だけ置く）
 .vault/
+
+# ガチャのためし（ローカルだけ。サイトには出さない）
+gacha_test.html
