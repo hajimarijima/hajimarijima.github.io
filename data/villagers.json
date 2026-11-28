@@ -583,5 +583,22 @@
   "display": "yoko19810101",
   "via": "dm",
   "joinedAt": "21:31"
+ },
+ {
+  "key": "7d0b219cda",
+  "igId": "e20763d0eed376b6",
+  "name": "unaoto1105",
+  "userHash": "8da601d8da92cc69",
+  "skin": 101,
+  "joined": "2026-11-28",
+  "joinedDay": 2,
+  "source": "comment",
+  "birthday": "11-05",
+  "profile": {
+   "food": "木の実"
+  },
+  "hidden": false,
+  "display": "unaoto1105",
+  "joinedAt": "21:32"
  }
 ]
