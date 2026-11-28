@@ -635,5 +635,22 @@
   "display": "yakumo_take06.23",
   "via": "dm",
   "joinedAt": "22:47"
+ },
+ {
+  "key": "24feda5354",
+  "igId": "aa46564025dd931d",
+  "name": "otter.4957139",
+  "userHash": "8de8be48b83d834c",
+  "skin": 119,
+  "joined": "2026-11-28",
+  "joinedDay": 2,
+  "source": "comment",
+  "birthday": "01-04",
+  "profile": {
+   "food": "じゃがいも"
+  },
+  "hidden": false,
+  "display": "otter.4957139",
+  "joinedAt": "22:51"
  }
 ]
