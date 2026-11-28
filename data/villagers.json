@@ -707,5 +707,22 @@
   "hidden": false,
   "display": "himanano.2303",
   "joinedAt": "23:48"
+ },
+ {
+  "key": "4265731a82",
+  "igId": "65f4afa92bdfb9bf",
+  "name": "azoo3_98",
+  "userHash": "9225d1cac0d87241",
+  "skin": 167,
+  "joined": "2026-11-28",
+  "joinedDay": 2,
+  "source": "comment",
+  "birthday": "01-28",
+  "profile": {
+   "food": "じゃがいも"
+  },
+  "hidden": false,
+  "display": "azoo3_98",
+  "joinedAt": "00:08"
  }
 ]
