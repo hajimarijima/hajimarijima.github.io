@@ -167,6 +167,32 @@ EMB.villager_100 = word(['1w', '0w', '0w']);
 EMB.villager_1000 = word(['1', '0', '0', '0']);
 EMB.villager_10000 = word(['1', '万']);
 
+// はじめての鉄・金・ダイヤ：宝石と延べ棒（光は左上から）
+EMB.first_diamond = [
+  '....WBBBBBBb....',
+  '...WBBBBBBBbb...',
+  '..BBWBBBBBbbbn..',
+  '.BBBBBBBBbbbbnn.',
+  'bbbbbbbbbbnnnnnn',
+  '.bBBBBBbbbbbnnn.',
+  '..bBBBBbbbbnnn..',
+  '...bBBBbbbnnn...',
+  '....bBBbbnnn....',
+  '.....bBbnnn.....',
+  '......bbnn......',
+  '.......nn.......',
+];
+const ingot = (H, M, D) => [
+  '...' + H + 'W' + 'W' + H.repeat(6) + M + '...',
+  '..' + H + 'W' + H.repeat(7) + M + M + '..',
+  '.' + H.repeat(10) + M.repeat(3) + '.',
+  M.repeat(11) + D.repeat(5),
+  M.repeat(10) + D.repeat(6),
+  '.' + D.repeat(14) + '.',
+];
+EMB.first_iron = ['................', '................', '................', ...ingot('S', 's', 'x'), '................', '................', '................'];
+EMB.first_gold = ['................', '................', '................', ...ingot('A', 'a', 'e'), '................', '................', '................'];
+
 // メダルのふちの色・リボンの色
 const STYLE = {
   villager_100: { rim: [184, 112, 58], ribbon: [70, 150, 70] },
@@ -180,6 +206,9 @@ const STYLE = {
   homeowner: { rim: [184, 112, 58], ribbon: [214, 120, 48] },
   old_timer: { rim: [196, 204, 216], ribbon: [70, 150, 70] },
   popular: { rim: [240, 190, 52], ribbon: [220, 90, 150] },
+  first_iron: { rim: [196, 204, 216], ribbon: [90, 100, 120] },
+  first_gold: { rim: [240, 190, 52], ribbon: [204, 52, 58] },
+  first_diamond: { rim: [240, 190, 52], ribbon: [40, 160, 200], sparkle: true },
 };
 
 const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));

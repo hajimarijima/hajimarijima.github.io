@@ -559,6 +559,27 @@ async function main() {
     }
   }
   anim.torches = torchFlames;
+  // 夜に村人が地面に立てるたいまつ（その夜だけ。光る。NIGHT_TORCH_MAX 本まで。朝に片づける）。明かりは sky ができてから足す
+  const NIGHT_TORCH_MAX = 10, nightTorches = [];
+  function addNightTorch(x, z) {
+    if (nightTorches.length >= NIGHT_TORCH_MAX) return;
+    if (nightTorches.some((t) => Math.hypot(t.x - x, t.z - z) < 4)) return; // 近くにもう立っていれば立てない
+    const t = new THREE.Group(); t.position.set(x, 0, z);
+    box(0.12, 1.1, 0.12, 0x7a5232, 0, 0.55, 0, t); box(0.18, 0.16, 0.18, 0x2a2624, 0, 1.18, 0, t);
+    const f1 = box(0.16, 0.24, 0.16, 0xffb03a, 0, 1.38, 0, t), f2 = box(0.09, 0.13, 0.09, 0xfff0a0, 0, 1.55, 0, t);
+    for (const f of [f1, f2]) { f.castShadow = false; f.material = new THREE.MeshBasicMaterial({ color: f.material.color }); }
+    scene.add(t); torchFlames.push(f1, f2);
+    const la = { x, y: 1.7, z }; sky.anchors.push(la); // 呼ばれるのは夜の動きの中だけ（sky はもうある）
+    nightTorches.push({ g: t, la, f: [f1, f2], x, z });
+  }
+  function clearNightTorches() {
+    for (const t of nightTorches) {
+      scene.remove(t.g);
+      for (const f of t.f) { const i = torchFlames.indexOf(f); if (i >= 0) torchFlames.splice(i, 1); }
+      const j = sky.anchors.indexOf(t.la); if (j >= 0) sky.anchors.splice(j, 1);
+    }
+    nightTorches.length = 0;
+  }
   // 整地する前の村のまん中（草と小石）
   const debrisObj = !world.square || !world.square.leveled ? makeDebris(world.debris || []) : null;
   if (debrisObj) scene.add(debrisObj);
@@ -1197,7 +1218,7 @@ async function main() {
   // 行動を人に当てはめる（init：開いた時はその場所から始める）
   function setAct(p, a, init) {
     const L = life[p.v.key] || {};
-    p.act = a; p.rest = false; p.stay = false; p.sleepAt = null; p.w0 = null; p.mine = null; p.bobAt = null;
+    p.act = a; p.rest = false; p.stay = false; p.sleepAt = null; p.w0 = null; p.mine = null; p.bobAt = null; p.night = null;
     p.routes = p.routes || {};
     if (a.action === 'sleep') {
       const sp = sleepSpot(p, a);
@@ -1238,6 +1259,22 @@ async function main() {
       if (an) { p.stay = true; work = { x: an.stand.x, z: an.stand.z, fx: an.x, fz: an.z }; }
     } else if (act === 'fish' && a.target === 'sea') {
       work = { ...seaSpotOf(p.v.key) }; // 海べの釣り場：岸に立って海を向く
+    } else if (act === 'guard' && !ENEMIES_ON && camp) {
+      // 敵の出ない夜に起きている人（棒立ちにしない）。人と時刻で 3 つに分ける：
+      //   たき火にあたる（座ってたき火を向く）・見回る（たいまつを持って村のまわりを歩く）・たいまつを立てに行く（しゃがんで立てたら見回りへ）
+      const r = hash(p.v.key + 'nt' + curHour) % 100;
+      p.stay = true;
+      if (r < 40) {
+        const fa = ang + curHour * 0.7, fr = 3.0 + (hash(p.v.key + 'fr') % 15) / 10;
+        work = { x: camp.x + Math.cos(fa) * fr, z: camp.z + Math.sin(fa) * fr, fx: camp.x, fz: camp.z };
+        p.night = 'fire';
+      } else if (r < 72 || nightTorches.length >= NIGHT_TORCH_MAX) {
+        work = { ...wanderPt(p, 0), fx: null }; p.night = 'patrol'; p.wander = true; p.wi = 0; p.routes.w = null;
+      } else {
+        const ta = ((hash(p.v.key + 'ta' + curHour) % 628) / 100), tr = 11 + (hash(p.v.key + 'tr' + curHour) % 70) / 10;
+        work = { x: camp.x + Math.cos(ta) * tr, z: camp.z + Math.sin(ta) * tr, fx: null };
+        p.night = 'torch';
+      }
     } else if (act === 'rest' || act === 'eat' || act === 'craft' || act === 'guard') {
       // 休む・食べる：家（テント）の前。道具を作る：チェストのそば。見張り：村のはずれ
       p.stay = true;
@@ -1254,6 +1291,8 @@ async function main() {
     p.pose = { level: 'dig', chop: 'chop', dig: 'dig', dig_last: 'dig', berry: 'gather', apple: 'gather', harvest: 'gather', tend: 'gather', till: 'dig', forage: 'gather', fish: 'fish', ranch: 'gather', craft: 'gather', smith: 'smith', walk: 'walk', chat: 'talk', view: 'sit', water: 'water', pet: 'gather', hunt: 'idle' }[act] || (p.stay ? 'idle' : 'gather');
     let tool = { level: 'hoe', chop: 'axe', dig: 'pick', dig_last: 'pick', till: 'hoe', berry: 'basket', apple: 'basket', harvest: 'basket', tend: 'hoe', forage: 'basket', fish: 'rod', ranch: 'basket', guard: 'torch', water: 'basket', smith: 'hammer' }[act] || null;
     if (act === 'walk') { p.wander = true; p.wi = 0; p.routes.w = null; }
+    if (p.night === 'fire') { p.pose = 'sit'; tool = null; }
+    else if (p.night === 'torch') { p.pose = 'gather'; } // しゃがんで、たいまつを地面に立てる（道具は torch のまま）
     // 持っている道具の素材（木・石・鉄・金・ダイヤ）で色と形を変える。素手で切る・掘る人は何も持たない
     const tier = L.toolTier || 'hand';
     if ((tool === 'axe' || tool === 'pick') && tier === 'hand') tool = null;
@@ -1783,7 +1822,7 @@ async function main() {
     for (const p of people) { if (p.talk) { p.talk = null; p.bubble.hidden = true; if (p.mode === 'day' && (p.phase === 5 || p.phase === 6 || p.phase === 7)) { p.phase = 0; p.ri = 0; p.routes[0] = routeAround(p.pos, p.work, walls); } } }
     for (const tk of talks) tk.on = false;
     for (const p of people) endChat(p);
-    void night;
+    if (!night) clearNightTorches(); // 朝になったら、夜に立てたたいまつは片づける
   }
   function changeHour(h) {
     for (const p of people) {
@@ -2027,7 +2066,7 @@ async function main() {
       pose = huntStep(p, dt, time);
     } else if (p.phase === 1 && p.wander) {
       // 散歩：村のまわりの点を順に歩く（前を向いて歩く。着いたら次の点）
-      setTool(p.ch, null); setCarry(p.ch, null); pose = 'walk';
+      setTool(p.ch, p.night === 'patrol' ? 'torch' : null); setCarry(p.ch, null); pose = 'walk'; // 夜の見回りは、たいまつを持って歩く
       if (!p.routes.w) { p.ri = 0; for (let k = 0; k < 4 && !(p.routes.w && !p.routes.w.blocked); k++) p.routes.w = safeRoute(p.pos, wanderPt(p, ++p.wi)); } // 行けない所なら別の行き先
       if (walkTo(p, p.routes.w, dt)) p.routes.w = null;
     } else if (p.phase === 1) {
@@ -2035,6 +2074,11 @@ async function main() {
       pose = p.chat ? talkPose(p) : p.pose;
       if (pose === 'fish') { const sf = fishShowOf(p, time); p.ch.userData.showFish = sf; if (sf) pose = 'showfish'; } // 釣った魚を持ち上げて見せる
       if (p.work.fx !== null) turnTo(p.ch, Math.atan2(p.work.fx - p.pos.x, p.work.fz - p.pos.z), dt); // 作業中だけ、木や岩の方を向く
+      if (p.night === 'torch' && p.t > 2.4) { // しゃがんで 2.4 秒：足もとの少し前にたいまつを立てて、見回りへ
+        const yaw = p.ch.rotation.y;
+        addNightTorch(p.pos.x + Math.sin(yaw) * 0.9, p.pos.z + Math.cos(yaw) * 0.9);
+        p.night = 'patrol'; p.wander = true; p.wi = 0; p.routes.w = null; p.pose = 'walk';
+      }
       if (p.stay) setCarry(p.ch, null); // 休む・食べる・作る・見張りは、その時間のあいだその場で
       else if (p.mine ? workU(p, time) > workLen(p) : p.t > workLen(p)) { p.phase = 2; p.t = 0; p.w0 = null; }
     } else if (p.phase === 2) {
@@ -2390,6 +2434,13 @@ async function main() {
       }
       const hi = Math.floor(h) % 24;
       if (hi !== curHour) { curHour = hi; changeHour(hi); renderClock(h); }
+      // 手に持ったたいまつも明かりにする（夜だけ。近い順に使うので、カメラの近くの人が照らす）
+      for (const p of people) {
+        const P = p.ch.userData.parts;
+        if (!p.la) { p.la = { x: 0, y: 2.4, z: 0, off: true }; sky.anchors.push(p.la); }
+        p.la.off = !(sky.n > 0.3 && p.ch.visible && P && P.toolKind === 'torch');
+        if (!p.la.off) { p.la.x = p.ch.position.x; p.la.z = p.ch.position.z; }
+      }
       sky.placeLights(camera.position);
       moon.intensity = Math.max(0, sky.n) * 0.55;
       moon.position.set(controls.target.x - 25, 55, controls.target.z - 35); moon.target.position.copy(controls.target);
@@ -2417,7 +2468,7 @@ async function main() {
     for (const b of anim.boats) { b.position.y = 0.05 + Math.sin(time * 1.5) * 0.06; b.rotation.z = Math.sin(time * 1.2) * 0.04; }
     anim.cows.forEach((c, i) => { c.rotation.y += Math.sin(time * 0.3 + i) * 0.004; });
     for (const h of anim.hands) h.rotation.z = -time * 0.2;
-    for (const p of guards) { const f = p.ch.userData.parts && p.ch.userData.parts.tool && p.ch.userData.parts.tool.userData.flame; if (f) f[0].scale.y = 0.8 + Math.sin(time * 14 + p.t) * 0.25; }
+    for (const p of people) { if (!p.la || p.la.off) continue; const f = p.ch.userData.parts && p.ch.userData.parts.tool && p.ch.userData.parts.tool.userData.flame; if (f) f[0].scale.y = 0.8 + Math.sin(time * 14 + p.t) * 0.25; }
     if (anim.flame) { anim.flame.scale.y = 0.8 + Math.sin(time * 12) * 0.2; }
     if (pondObj) animatePond(pondObj, time);
     updateAnimals(time, dt);

@@ -89,6 +89,17 @@ function meets(t, v, L, S, day, cache) {
   }
 }
 
+// 島ではじめて item（diamond など）を手に入れた人。町の歴史の「見つけた」（type:'find'、出てきた順）でいちばん前の人。
+// 歴史にない時（贈り物などで手に入れた）は、持っている人（L.items[item] が 1 以上）のうち先に住んだ人
+function firstFinder(S, item, day) {
+  if (!item) return null;
+  const alive = (k) => S.villagers.find((v) => v.key === k && !v.left && S.life[k] && v.joinedDay <= day);
+  for (const h of S.history || []) if (h.type === 'find' && h.item === item) for (const k of h.who || []) { const v = alive(k); if (v) return v; }
+  const has = S.villagers.filter((v) => !v.left && S.life[v.key] && v.joinedDay <= day && statCount(S.life[v.key], 'items.' + item) >= 1);
+  has.sort((a, b) => a.joinedDay - b.joinedDay || String(a.joined || '').localeCompare(String(b.joined || '')));
+  return has[0] || null;
+}
+
 // 町の歴史は称号ごとに 1 行（同じ日に何人ももらった時は「A、B、C ほか 4 人」とまとめる）
 function historyLine(S, t, vs, { day, date }) {
   if (!vs.length) return;
@@ -114,10 +125,10 @@ function awardTitles(S, { day, date }) {
   const cache = {};
   for (const t of list) {
     if (!t || !t.id || !t.auto) continue;
-    if (t.auto === 'first' || t.auto === 'nth') {
+    if (t.auto === 'first' || t.auto === 'nth' || t.auto === 'firstItem') {
       if (S.villagers.some((v) => (v.titles || []).includes(t.id))) continue; // もうだれかが持っている（1 人だけ）
       if ((S.history || []).some((h) => h.type === 'title' && h.title === t.id)) continue; // 前におくった（持っていた人が町を出ても、ほかの人にはおくらない）
-      const v = t.auto === 'first' ? firstVillager(S.villagers, S.life, day) : nthVillager(S.villagers, S.life, day, t.n || 100);
+      const v = t.auto === 'first' ? firstVillager(S.villagers, S.life, day) : t.auto === 'firstItem' ? firstFinder(S, t.item, day) : nthVillager(S.villagers, S.life, day, t.n || 100);
       if (!v) continue;
       give(S, v, t, { day, date });
       historyLine(S, t, [v], { day, date });

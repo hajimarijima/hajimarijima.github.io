@@ -185,7 +185,7 @@
     "autoNote": "道具の言葉がない人は、その日までに選ばれた数がいちばん少ない仕事の道具（つるはし・斧・釣りざお・くわ）になる"
   },
   "titles": {
-    "note": "村人の称号バッジ（リボンつきのメダルの絵）。村人の titles（id の配列）に入り、村人ページ・町のカード・住人一覧・バッジのページ（badges.html）に絵で出る。町の名札には小さな★。1 人 1 回だけもらえて、なくならない（おくった時は町の歴史と本人の日記に 1 回だけ書く。tools/titles.js）。持ち主が足す時は list に { id（英数字・変えない）, name（名前）, desc（説明）, how（もらい方。まだの人に見せる）, img（絵。icons/title_<id>.png。絵は tools/gen_title_badges.js で作る。なければ icon の文字）, auto, n } を足す。auto の種類：\"first\"＝いちばん最初に島に住んだ 1 人だけ／\"nth\"＝n 人目に住んだ 1 人だけ（町を出た人も数に入れる）／\"count\"＝村人の記録 stat の数が n に届いた（stat は items.apple のように書く。items.fish_* のように * で終わると、その名前で始まる物を全部足す）／\"days\"＝住んで n 日たった／\"friends\"＝友だち・親友・家族が n 人／\"fishRecord\"＝釣りランキングで島の 1 位（どれかの魚）になった／\"bridge\"＝橋づくりを手伝った／\"home\"＝自分の家ができた。auto のない称号は、villagers.json の titles に手で id を足すとおくれる。live: true の称号は、条件からはずれると外れる（大物ハンター＝いまの 1 位。毎日の sim で入れかえる。取りもどした時は歴史に書かない）。町の名札の★は、はじまりの村人だけ",
+    "note": "村人の称号バッジ（リボンつきのメダルの絵）。村人の titles（id の配列）に入り、村人ページ・町のカード・住人一覧・バッジのページ（badges.html）に絵で出る。町の名札には小さな★。1 人 1 回だけもらえて、なくならない（おくった時は町の歴史と本人の日記に 1 回だけ書く。tools/titles.js）。持ち主が足す時は list に { id（英数字・変えない）, name（名前）, desc（説明）, how（もらい方。まだの人に見せる）, img（絵。icons/title_<id>.png。絵は tools/gen_title_badges.js で作る。なければ icon の文字）, auto, n } を足す。auto の種類：\"first\"＝いちばん最初に島に住んだ 1 人だけ／\"nth\"＝n 人目に住んだ 1 人だけ（町を出た人も数に入れる）／\"count\"＝村人の記録 stat の数が n に届いた（stat は items.apple のように書く。items.fish_* のように * で終わると、その名前で始まる物を全部足す）／\"days\"＝住んで n 日たった／\"friends\"＝友だち・親友・家族が n 人／\"fishRecord\"＝釣りランキングで島の 1 位（どれかの魚）になった／\"bridge\"＝橋づくりを手伝った／\"home\"＝自分の家ができた／\"firstItem\"＝島ではじめて item（iron・gold・diamond など）を手に入れた 1 人だけ（町の歴史の「見つけた」の順）。auto のない称号は、villagers.json の titles に手で id を足すとおくれる。live: true の称号は、条件からはずれると外れる（大物ハンター＝いまの 1 位。毎日の sim で入れかえる。取りもどした時は歴史に書かない）。町の名札の★は、はじまりの村人だけ",
     "list": [
       {
         "id": "first_villager",
@@ -257,6 +257,33 @@
         "img": "icons/title_popular.png",
         "auto": "friends",
         "n": 5
+      },
+      {
+        "id": "first_iron",
+        "name": "はじめての鉄",
+        "desc": "島ではじめて鉄を手に入れた人",
+        "how": "島でいちばん最初に鉄を見つけた 1 人だけ",
+        "img": "icons/title_first_iron.png",
+        "auto": "firstItem",
+        "item": "iron"
+      },
+      {
+        "id": "first_gold",
+        "name": "はじめての金",
+        "desc": "島ではじめて金を手に入れた人",
+        "how": "島でいちばん最初に金を見つけた 1 人だけ",
+        "img": "icons/title_first_gold.png",
+        "auto": "firstItem",
+        "item": "gold"
+      },
+      {
+        "id": "first_diamond",
+        "name": "はじめてのダイヤ",
+        "desc": "島ではじめてダイヤを手に入れた人",
+        "how": "島でいちばん最初にダイヤを見つけた 1 人だけ",
+        "img": "icons/title_first_diamond.png",
+        "auto": "firstItem",
+        "item": "diamond"
       },
       {
         "id": "villager_100",

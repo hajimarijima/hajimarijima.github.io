@@ -2034,8 +2034,9 @@ t('称号バッジ：config の形・絵がある・自動でおくる決まり�
   const cfg = liveCfg();
   const L = cfg.titles.list, ids = L.map((x) => x.id);
   assert.strictEqual(new Set(ids).size, ids.length, 'id が重ならない');
-  const AUTO = ['first', 'nth', 'count', 'allFish', 'days', 'friends', 'fishRecord', 'bridge', 'home'];
+  const AUTO = ['first', 'nth', 'count', 'allFish', 'days', 'friends', 'fishRecord', 'bridge', 'home', 'firstItem'];
   for (const x of L) {
+    if (x.auto === 'firstItem') assert.ok(x.item && cfg.items[x.item], x.id + ' の item');
     assert.ok(/^[a-z0-9_]+$/.test(x.id) && x.name && x.desc, x.id + ' の名前と説明');
     assert.ok(!x.auto || AUTO.includes(x.auto), x.id + ' の auto');
     if (x.auto && x.auto !== 'first') assert.ok(x.how, x.id + ' のもらい方');
@@ -2047,6 +2048,17 @@ t('称号バッジ：config の形・絵がある・自動でおくる決まり�
   // 古い形（img・how・n がない称号）でも動く
   assert.strictEqual(TT.awardTitles({ config: { titles: { list: [{ id: 'z', name: 'Z', auto: 'first' }] } }, villagers: [{ key: 'a', display: 'A', joinedDay: 0 }], life: { a: { diary: [] } }, history: [] }, { day: 1, date: 'x' }).length, 1);
   assert.strictEqual(TT.awardTitles({ config: {}, villagers: [], life: {}, history: [] }, { day: 1, date: 'x' }).length, 0, 'titles がない config');
+  // はじめてのダイヤ：町の歴史の「見つけた」でいちばん前の人。2 回目はおくらない
+  {
+    const S = { config: { titles: { list: [{ id: 'fd', name: 'FD', auto: 'firstItem', item: 'diamond' }] } }, villagers: [{ key: 'a', display: 'A', joinedDay: 0 }, { key: 'b', display: 'B', joinedDay: 0 }], life: { a: { diary: [], items: { diamond: 3 } }, b: { diary: [] } }, history: [{ type: 'find', who: ['b'], item: 'diamond' }] };
+    const got = TT.awardTitles(S, { day: 2, date: 'x' });
+    assert.deepStrictEqual(got.map((g) => g.v.key), ['b'], '歴史で先に見つけた人');
+    assert.strictEqual(TT.awardTitles(S, { day: 3, date: 'x' }).length, 0, '1 人だけ');
+    const S2 = { config: S.config, villagers: [{ key: 'a', display: 'A', joinedDay: 0 }], life: { a: { diary: [], items: { diamond: 1 } } }, history: [] };
+    assert.strictEqual(TT.awardTitles(S2, { day: 1, date: 'x' }).length, 1, '歴史にない時は持っている人');
+    const S3 = { config: S.config, villagers: [{ key: 'a', display: 'A', joinedDay: 0 }], life: { a: { diary: [] } }, history: [] };
+    assert.strictEqual(TT.awardTitles(S3, { day: 1, date: 'x' }).length, 0, 'まだだれも持っていない');
+  }
   // 数え方
   assert.strictEqual(TT.statCount({ items: { fish_funa: 3, fish_koi: 2, apple: 9, old_boot: 4 } }, 'items.fish_*'), 5, '* は前が同じ物を足す');
   assert.strictEqual(TT.statCount({ items: { apple: 9 } }, 'items.apple'), 9);

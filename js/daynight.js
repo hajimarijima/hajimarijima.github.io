@@ -100,7 +100,8 @@ export function makeSky(scene, { hemi, sun, sunDist = 60, radius = 190, lightAnc
   const api = { n: 0, h: 12, sunMesh, moonMesh, stars, dome: domeMesh, anchors: lightAnchors.slice(), sunDir: new THREE.Vector3(0, 1, 0), horizon: new THREE.Color() };
   // カメラに近い明かりから使う
   api.placeLights = (camPos) => {
-    const list = api.anchors.slice().sort((p, q) => (p.x - camPos.x) ** 2 + (p.z - camPos.z) ** 2 - ((q.x - camPos.x) ** 2 + (q.z - camPos.z) ** 2));
+    // off：今は消えている明かり（手に持っていないたいまつなど）
+    const list = api.anchors.filter((p) => !p.off).sort((p, q) => (p.x - camPos.x) ** 2 + (p.z - camPos.z) ** 2 - ((q.x - camPos.x) ** 2 + (q.z - camPos.z) ** 2));
     lamps.forEach((l, i) => { const p = list[i]; if (p) l.position.set(p.x, p.y, p.z); l.visible = !!p; });
   };
   // 空の丸天井と太陽・月の板をカメラに合わせる（毎フレーム）
